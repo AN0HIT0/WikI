@@ -3848,8 +3848,12 @@ const NationProfileView = ({ setView, nation: initialNation, nations, entries, s
     );
 };
 
-// --- MainMenu コンポーネント (修正版: 保存・読込ボタンを上部へ移動) ---
-const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, convertFileInputRef }) => {
+// --- MainMenu コンポーネント (修正版: ログイン制限対応) ---
+const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, convertFileInputRef, currentUser, isAuthorized, handleLogin, handleLogout }) => {
+    
+    // 権限がない場合の無効化スタイルクラス
+    const disabledClass = !isAuthorized ? "opacity-40 grayscale pointer-events-none select-none" : "";
+
     const MenuBtn = ({ onClick, icon: Icon, label, subLabel, color }) => (
         <button onClick={onClick} className="group relative flex flex-col items-center justify-center p-4 bg-white border-2 border-gray-200 rounded-xl shadow-sm hover:shadow-lg hover:border-yellow-400 hover:-translate-y-1 transition-all duration-200 h-32 w-full">
             <div className={`p-3 rounded-full mb-2 transition-colors ${color || 'bg-gray-100 text-gray-500 group-hover:bg-yellow-100 group-hover:text-yellow-700'}`}>
@@ -3860,8 +3864,8 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
         </button>
     );
 
-    const ActionBtn = ({ onClick, icon: Icon, label }) => (
-        <button onClick={onClick} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors shadow-sm">
+    const ActionBtn = ({ onClick, icon: Icon, label, className = "" }) => (
+        <button onClick={onClick} className={`flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors shadow-sm ${className}`}>
             <Icon size={16}/> {label}
         </button>
     );
@@ -3879,16 +3883,43 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
 
             <div className="w-full max-w-5xl space-y-8">
                 
-                {/* ★修正: DATA / HELP ボタン群をここに移動 (一番上) */}
-                <div className="flex flex-wrap justify-center gap-4">
+                {/* 上部アクションボタン群 (ログイン・保存・読込) */}
+                <div className="flex flex-wrap justify-center gap-4 items-center">
+                    {/* ログイン/ログアウトボタン */}
+                    {!currentUser ? (
+                        <ActionBtn onClick={handleLogin} icon={Icons.Users} label="管理者ログイン" className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" />
+                    ) : (
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-gray-400 mr-2">
+                                {isAuthorized ? "管理者としてログイン中" : "ゲスト閲覧モード"}
+                            </span>
+                            <ActionBtn onClick={handleLogout} icon={Icons.X} label="ログアウト" className="bg-gray-100 text-gray-600 hover:bg-gray-200" />
+                        </div>
+                    )}
+
+                    <div className="h-8 w-px bg-gray-300 mx-2 hidden sm:block"></div>
+
+                    {/* 保存は誰でも可能 */}
                     <ActionBtn onClick={handleExport} icon={Icons.Upload} label="データ保存 (Export)" />
-                    <ActionBtn onClick={() => fileInputRef.current.click()} icon={Icons.Download} label="データ読込 (Import)" />
-                    <ActionBtn onClick={() => convertFileInputRef.current.click()} icon={Icons.RefreshCw} label="データ統合 (Convert)" />
+                    
+                    {/* 読込・統合は管理者のみ (divでラップして無効化クラスを適用) */}
+                    <div className={`flex gap-4 ${disabledClass}`}>
+                        <ActionBtn onClick={() => fileInputRef.current.click()} icon={Icons.Download} label="データ読込 (Import)" />
+                        <ActionBtn onClick={() => convertFileInputRef.current.click()} icon={Icons.RefreshCw} label="データ統合 (Convert)" />
+                    </div>
+                    
                     <ActionBtn onClick={() => setView('help')} icon={Icons.HelpCircle} label="使い方 (Help)" />
                 </div>
 
-                {/* MANAGE セクション */}
-                <div className="bg-gray-50/50 p-6 rounded-2xl border border-dashed border-gray-300">
+                {/* MANAGE セクション (管理者のみ操作可能) */}
+                <div className={`bg-gray-50/50 p-6 rounded-2xl border border-dashed border-gray-300 relative transition-all ${disabledClass}`}>
+                    {!isAuthorized && (
+                        <div className="absolute inset-0 z-10 flex items-center justify-center">
+                            <div className="bg-white/80 backdrop-blur-sm px-6 py-3 rounded-full border border-gray-200 shadow-sm font-bold text-gray-500 flex items-center gap-2">
+                                <Icons.Lock size={16}/> 編集機能はロックされています
+                            </div>
+                        </div>
+                    )}
                     <div className="flex items-center gap-3 mb-4">
                         <span className="bg-yellow-500 text-white text-xs font-bold px-3 py-1 rounded-full tracking-widest">MANAGE</span>
                         <span className="text-sm text-gray-500 font-bold">情報の編集・記録</span>
@@ -3909,7 +3940,7 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                     </div>
                 </div>
 
-                {/* VIEW セクション */}
+                {/* VIEW セクション (全員可能) */}
                 <div className="bg-gray-50/50 p-6 rounded-2xl border border-dashed border-gray-300">
                     <div className="flex items-center gap-3 mb-4">
                         <span className="bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded-full tracking-widest">VIEW</span>
@@ -3938,7 +3969,6 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
         </div>
     );
 };
-
 
 
         // --- TimelineWiki メインコンポーネント (Auth対応・完全版) ---

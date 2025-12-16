@@ -4,7 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>英覇歴代記 Timeline Wiki</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -23,7 +29,26 @@ body { font-family: 'Helvetica Neue', Arial, sans-serif; }
 <body class="bg-[#f0f2f5] text-gray-800">
 <div id="root"></div>
 <script type="text/babel">
+
 const { useState, useEffect, useMemo, useRef } = React;
+
+// ★ Firebase設定 (ここをご自身のプロジェクトの設定に書き換えてください)
+const firebaseConfig = {
+  apiKey: "AIzaSyCjj_GvIPi-voXia6ilCQ4ZFNvG8sD3Qmc",
+  authDomain: "hellmenea-wiki.firebaseapp.com",
+  projectId: "hellmenea-wiki",
+  storageBucket: "hellmenea-wiki.firebasestorage.app",
+  messagingSenderId: "787258620406",
+  appId: "1:787258620406:web:380d00c99618400727efd7"
+};
+
+
+// Firebase初期化
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+const googleProvider = new firebase.auth.GoogleAuthProvider();
+const ADMIN_EMAIL = "anohitodayoanohito@gmail.com"; 
 
 const DEFAULT_YEAR = 1825;
 const AD_OFFSET = 110;
@@ -544,7 +569,7 @@ const HelpView = ({ setView }) => {
     );
 };
 
-// --- NationListView コンポーネント (修正版: 存続期間の表示を追加) ---
+// --- NationListView コンポーネント (スマホ2列表示・レイアウト調整版) ---
 const NationListView = ({ setView, nations, onSelectNation }) => {
     // 地域ごとにグループ化
     const groupedNations = useMemo(() => {
@@ -560,6 +585,7 @@ const NationListView = ({ setView, nations, onSelectNation }) => {
 
     return (
         <div className="space-y-8 animate-fade-in pb-20">
+            {/* 年表へ戻るボタンは削除済みのためヘッダーのみ */}
             <SectionHeader icon={Icons.LayoutGrid} title="国家一覧" desc="登録されている全国家のリストです。詳細を確認したい国家を選択してください。" />
             
             {Object.entries(LOCATIONS).sort((a, b) => a[1].order - b[1].order).map(([locKey, locInfo]) => {
@@ -578,35 +604,37 @@ const NationListView = ({ setView, nations, onSelectNation }) => {
                         <h3 className="text-lg font-bold text-gray-700 mb-4 border-l-4 pl-3 flex items-center gap-2" style={{borderColor: locInfo.color}}>
                             <span className="opacity-70"><Icons.MapPin size={18}/></span> {locInfo.label}
                         </h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                        {/* ★修正: grid-cols-2 (スマホ) -> md:grid-cols-3 -> lg:grid-cols-4 */}
+                        {/* gapもスマホでは狭く(gap-3)、PCでは広く(gap-6)調整 */}
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-6">
                             {locNations.map(nation => {
-                                // 期間情報の取得 (getNationInfoを利用)
-                                const info = getNationInfo(nation, 2000); // 年引数は期間計算には影響しないためダミー
+                                // 期間情報の取得
+                                const info = getNationInfo(nation, 2000);
                                 const startYear = info.nationStartYear || '????';
                                 const endYear = info.nationEndYear;
                                 
                                 return (
                                     <div key={nation.id} onClick={() => onSelectNation(nation)} 
-                                         className="bg-white cursor-pointer group hover:-translate-y-1 transition-transform duration-200 shadow-md hover:shadow-xl overflow-hidden border-4 border-black relative">
+                                         className="bg-white cursor-pointer group hover:-translate-y-1 transition-transform duration-200 shadow-md hover:shadow-xl overflow-hidden border-2 md:border-4 border-black relative rounded-sm">
                                         {/* 国旗部分 (アスペクト比固定) */}
-                                        <div className="w-full aspect-[3/2] bg-gray-100 border-b-4 border-black relative">
+                                        <div className="w-full aspect-[3/2] bg-gray-100 border-b-2 md:border-b-4 border-black relative">
                                             {nation.flag ? (
                                                 <img src={nation.flag} className="w-full h-full object-cover" alt={nation.name} />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center text-gray-300 bg-gray-50 font-bold text-xs">No Flag</div>
                                             )}
                                             {/* 国力ランクバッジ */}
-                                            <div className="absolute top-2 right-2">
-                                                <span className="px-2 py-1 text-[10px] font-bold border-2 border-black bg-white text-black shadow-sm">
+                                            <div className="absolute top-1 right-1 md:top-2 md:right-2">
+                                                <span className="px-1.5 py-0.5 md:px-2 md:py-1 text-[8px] md:text-[10px] font-bold border md:border-2 border-black bg-white text-black shadow-sm">
                                                     {NATION_RANKS[nation.rank || 'minor_power']?.label}
                                                 </span>
                                             </div>
                                         </div>
-                                        {/* 国名・期間部分 */}
-                                        <div className="p-4 text-center bg-white group-hover:bg-yellow-50 transition-colors">
-                                            <h4 className="font-black text-lg leading-tight text-gray-900 mb-2">{nation.name}</h4>
-                                            <div className="inline-flex items-center gap-1.5 bg-gray-100 px-3 py-1 rounded-full text-xs font-mono font-bold text-gray-600 border border-gray-200">
-                                                <span className="opacity-50"><Icons.History size={10} /></span>
+                                        {/* 国名・期間部分 (スマホ用にpaddingと文字サイズを調整) */}
+                                        <div className="p-2 md:p-4 text-center bg-white group-hover:bg-yellow-50 transition-colors">
+                                            <h4 className="font-black text-xs md:text-lg leading-tight text-gray-900 mb-1 md:mb-2 line-clamp-2 min-h-[1.5em] md:min-h-[auto]">{nation.name}</h4>
+                                            <div className="inline-flex items-center gap-1 bg-gray-100 px-2 py-0.5 md:px-3 md:py-1 rounded-full text-[8px] md:text-xs font-mono font-bold text-gray-600 border border-gray-200">
+                                                <span className="opacity-50"><Icons.History size={10} className="w-2.5 h-2.5 md:w-3 md:h-3" /></span>
                                                 <span>{startYear}</span>
                                                 <span className="text-gray-400">～</span>
                                                 <span className={endYear ? "" : "text-gray-400"}>{endYear || ''}</span>
@@ -622,209 +650,6 @@ const NationListView = ({ setView, nations, onSelectNation }) => {
         </div>
     );
 };
-
-// ↓↓↓ [手順2] ここに追加: 統計データ編集ビュー ↓↓↓
-        const StatsEditView = ({ setView, nations, stats, setStats }) => {
-            const [mode, setMode] = useState('year'); // 'year' | 'nation'
-            
-            // 年代別モード用ステート
-            const [targetYear, setTargetYear] = useState(DEFAULT_YEAR);
-            const [yearInputData, setYearInputData] = useState({});
-
-            // 国家別モード(補完)用ステート
-            const [targetNationId, setTargetNationId] = useState(nations.length > 0 ? nations[0].id : '');
-            const [interpStartYear, setInterpStartYear] = useState('');
-            const [interpEndYear, setInterpEndYear] = useState('');
-            const [interpStartVal, setInterpStartVal] = useState('');
-            const [interpEndVal, setInterpEndVal] = useState('');
-            const [interpFunc, setInterpFunc] = useState('linear');
-            const [interpTarget, setInterpTarget] = useState('population'); // 'population' | 'gdp'
-
-            // 初期化: 年代別データのロード
-            useEffect(() => {
-                if (mode === 'year') {
-                    const existingStats = stats.filter(s => s.year === parseInt(targetYear));
-                    const map = {};
-                    existingStats.forEach(s => { map[s.nationId] = { population: s.population, gdp: s.gdp }; });
-                    setYearInputData(map);
-                }
-            }, [mode, targetYear, stats]);
-
-            // 年代別: 入力ハンドラ
-            const handleYearInputChange = (nationId, field, value) => {
-                setYearInputData(prev => ({ ...prev, [nationId]: { ...prev[nationId], [field]: value } }));
-            };
-
-            // 年代別: 保存処理
-            const saveYearStats = () => {
-                const newStats = stats.filter(s => s.year !== parseInt(targetYear));
-                Object.entries(yearInputData).forEach(([nationId, data]) => {
-                    if (data && (data.population || data.gdp)) {
-                        newStats.push({ 
-                            id: `stats_${targetYear}_${nationId}`, 
-                            year: parseInt(targetYear), 
-                            nationId, 
-                            population: parseFloat(data.population) || 0, 
-                            gdp: parseFloat(data.gdp) || 0 
-                        });
-                    }
-                });
-                setStats(newStats);
-                alert(`${targetYear}年のデータを保存しました。`);
-            };
-
-            // 国家別: 補完実行処理
-            const applyInterpolation = () => {
-                const startY = parseInt(interpStartYear);
-                const endY = parseInt(interpEndYear);
-                const startV = parseFloat(interpStartVal);
-                const endV = parseFloat(interpEndVal);
-
-                if (isNaN(startY) || isNaN(endY) || isNaN(startV) || isNaN(endV) || startY >= endY) {
-                    alert("入力値が不正です。開始年は終了年より前である必要があります。");
-                    return;
-                }
-
-                const func = EASING_FUNCTIONS[interpFunc].func;
-                const steps = endY - startY;
-                
-                // 既存データを一度コピー（重複期間は削除して上書き準備）
-                let newStats = stats.filter(s => !(s.nationId === targetNationId && s.year >= startY && s.year <= endY));
-
-                for (let i = 0; i <= steps; i++) {
-                    const currentYear = startY + i;
-                    const t = i / steps; // 0.0 ～ 1.0
-                    const easedT = func(t);
-                    const val = Math.round(startV + (endV - startV) * easedT);
-
-                    // その年の既存データを検索（補完対象外のパラメータ(GDP/人口)を維持するため）
-                    const existing = stats.find(s => s.nationId === targetNationId && s.year === currentYear);
-                    
-                    newStats.push({
-                        id: `stats_${currentYear}_${targetNationId}`,
-                        year: currentYear,
-                        nationId: targetNationId,
-                        population: interpTarget === 'population' ? val : (existing?.population || 0),
-                        gdp: interpTarget === 'gdp' ? val : (existing?.gdp || 0)
-                    });
-                }
-                
-                setStats(newStats);
-                alert(`${nations.find(n=>n.id===targetNationId)?.name} のデータを生成・保存しました。`);
-            };
-
-            // 国家別: 既存データリスト取得
-            const nationStatsList = useMemo(() => {
-                return stats.filter(s => s.nationId === targetNationId).sort((a,b) => a.year - b.year);
-            }, [stats, targetNationId]);
-
-            const deleteStat = (id) => setStats(stats.filter(s => s.id !== id));
-
-            return (
-                <div className="space-y-6 animate-fade-in pb-20">
-                    <SectionHeader icon={Icons.BarChart2} title="統計データ編集" desc="人口やGDPのデータを入力・編集します。年代ごとの一括入力や、関数を用いた自動補完が可能です。" />
-
-                    <div className="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
-                        {/* タブ切り替え */}
-                        <div className="flex border-b border-gray-200 bg-gray-50">
-                            <button onClick={() => setMode('year')} className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-colors ${mode === 'year' ? 'bg-white text-blue-700 border-t-4 border-blue-500 shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}><Icons.Calendar size={18}/> 年代別入力 (全国家)</button>
-                            <button onClick={() => setMode('nation')} className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-colors ${mode === 'nation' ? 'bg-white text-green-700 border-t-4 border-green-500 shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}><Icons.TrendingUp size={18}/> 国家別入力 (自動補完)</button>
-                        </div>
-
-                        <div className="p-6 min-h-[500px]">
-                            {mode === 'year' ? (
-                                <div className="space-y-6 animate-fade-in">
-                                    <div className="flex items-center gap-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
-                                        <label className="font-bold text-blue-800 flex items-center gap-2"><Icons.Calendar size={20}/> 対象年:</label>
-                                        <input type="number" value={targetYear} onChange={e => setTargetYear(e.target.value)} className="p-2 border border-blue-300 rounded w-32 font-bold text-lg text-center text-blue-900" />
-                                    </div>
-                                    <div className="overflow-x-auto border rounded-lg">
-                                        <table className="w-full text-sm text-left">
-                                            <thead className="text-xs uppercase bg-gray-100 text-gray-600 font-bold"><tr><th className="px-4 py-3">国家</th><th className="px-4 py-3 w-40">人口 (人)</th><th className="px-4 py-3 w-40">GDP (円)</th></tr></thead>
-                                            <tbody className="divide-y divide-gray-100">
-                                                {nations.map(n => {
-                                                    const info = getNationInfo(n, parseInt(targetYear));
-                                                    if(info.isCollapsed || info.isFuture) return null;
-                                                    return (
-                                                        <tr key={n.id} className="hover:bg-gray-50 transition-colors">
-                                                            <td className="px-4 py-3 font-bold flex gap-2 items-center">{info.flag && <img src={info.flag} className="w-6 h-4 object-cover border border-gray-300" />}<div className="w-3 h-3 rounded-full" style={{backgroundColor: info.color}}></div>{info.name}</td>
-                                                            <td className="px-4 py-2"><input type="number" value={yearInputData[n.id]?.population || ''} onChange={e => handleYearInputChange(n.id, 'population', e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-200 outline-none font-mono text-right" placeholder="-" /></td>
-                                                            <td className="px-4 py-2"><input type="number" value={yearInputData[n.id]?.gdp || ''} onChange={e => handleYearInputChange(n.id, 'gdp', e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-green-200 outline-none font-mono text-right" placeholder="-" /></td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <div className="text-right"><button onClick={saveYearStats} className="bg-blue-900 text-white px-8 py-3 rounded-lg font-bold shadow hover:bg-blue-800 transition-colors flex items-center gap-2 ml-auto"><Icons.Save size={18} /> この年のデータを保存</button></div>
-                                </div>
-                            ) : (
-                                <div className="flex flex-col lg:flex-row gap-8 animate-fade-in">
-                                    {/* 左側: 設定エリア */}
-                                    <div className="w-full lg:w-1/2 space-y-6">
-                                        <div>
-                                            <label className="block text-sm font-bold text-gray-700 mb-2">編集する国家</label>
-                                            <select value={targetNationId} onChange={e => setTargetNationId(e.target.value)} className="w-full p-3 border rounded-lg bg-gray-50 font-bold border-gray-300">
-                                                {nations.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
-                                            </select>
-                                        </div>
-
-                                        <div className="bg-green-50 p-6 rounded-xl border border-green-200 shadow-sm space-y-4">
-                                            <h3 className="font-bold text-green-800 flex items-center gap-2 border-b border-green-200 pb-2"><Icons.TrendingUp size={20}/> 補完生成ツール</h3>
-                                            
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div><label className="block text-xs font-bold text-green-700 mb-1">対象パラメータ</label><select value={interpTarget} onChange={e => setInterpTarget(e.target.value)} className="w-full p-2 border rounded text-sm"><option value="population">人口</option><option value="gdp">GDP</option></select></div>
-                                                <div><label className="block text-xs font-bold text-green-700 mb-1">補完関数 (変化の仕方)</label><select value={interpFunc} onChange={e => setInterpFunc(e.target.value)} className="w-full p-2 border rounded text-sm">{Object.entries(EASING_FUNCTIONS).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}</select></div>
-                                            </div>
-
-                                            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                                                <div className="text-center text-xs font-bold text-gray-500">始点 (Start)</div>
-                                                <div className="text-center text-xs font-bold text-gray-500">終点 (End)</div>
-                                                
-                                                <div className="flex items-center gap-1"><input type="number" placeholder="開始年" value={interpStartYear} onChange={e => setInterpStartYear(e.target.value)} className="w-full p-2 border rounded text-right" /><span className="text-xs">年</span></div>
-                                                <div className="flex items-center gap-1"><input type="number" placeholder="終了年" value={interpEndYear} onChange={e => setInterpEndYear(e.target.value)} className="w-full p-2 border rounded text-right" /><span className="text-xs">年</span></div>
-                                                
-                                                <div className="flex items-center gap-1"><input type="number" placeholder="開始値" value={interpStartVal} onChange={e => setInterpStartVal(e.target.value)} className="w-full p-2 border rounded text-right font-mono" /><span className="text-xs">値</span></div>
-                                                <div className="flex items-center gap-1"><input type="number" placeholder="終了値" value={interpEndVal} onChange={e => setInterpEndVal(e.target.value)} className="w-full p-2 border rounded text-right font-mono" /><span className="text-xs">値</span></div>
-                                            </div>
-
-                                            <button onClick={applyInterpolation} className="w-full bg-green-700 text-white py-3 rounded-lg font-bold hover:bg-green-800 shadow transition-colors mt-2 flex justify-center items-center gap-2">
-                                                <Icons.RefreshCw size={18}/> データを生成・上書き
-                                            </button>
-                                            <p className="text-[10px] text-green-800 text-center">※ 指定期間の既存データは上書きされます。</p>
-                                        </div>
-                                    </div>
-
-                                    {/* 右側: リスト */}
-                                    <div className="w-full lg:w-1/2 bg-white rounded-lg border border-gray-200 flex flex-col h-[500px]">
-                                        <div className="p-3 bg-gray-50 border-b font-bold text-xs text-gray-500 flex justify-between">
-                                            <span>登録済みデータ ({nationStatsList.length}件)</span>
-                                            <span>{nations.find(n=>n.id===targetNationId)?.name}</span>
-                                        </div>
-                                        <div className="overflow-y-auto custom-scrollbar flex-grow p-0">
-                                            <table className="w-full text-xs text-left">
-                                                <thead className="bg-gray-100 text-gray-600 sticky top-0"><tr><th className="px-4 py-2">年</th><th className="px-4 py-2 text-right">人口</th><th className="px-4 py-2 text-right">GDP</th><th className="w-8"></th></tr></thead>
-                                                <tbody className="divide-y">
-                                                    {nationStatsList.length > 0 ? nationStatsList.map(s => (
-                                                        <tr key={s.id} className="hover:bg-yellow-50">
-                                                            <td className="px-4 py-2 font-bold">{s.year}</td>
-                                                            <td className="px-4 py-2 text-right font-mono">{formatJapaneseNumber(s.population, '', true)}</td>
-                                                            <td className="px-4 py-2 text-right font-mono">{formatJapaneseNumber(s.gdp, '', true)}</td>
-                                                            <td className="px-2 py-2 text-center"><button onClick={() => deleteStat(s.id)} className="text-red-400 hover:text-red-600 p-1"><Icons.Trash2 size={14}/></button></td>
-                                                        </tr>
-                                                    )) : <tr><td colSpan="4" className="text-center py-10 text-gray-400">データがありません</td></tr>}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-        // ↑↑↑ 追加ここまで ↑↑↑
 
 // --- NationTableView コンポーネント (修正版: 従属国の過去情報表示対応) ---
 const NationTableView = ({ setView, nations, stats, onEditNation, onAddNation }) => { 
@@ -1907,229 +1732,329 @@ const QuillEditor = ({ initialContent, onSave, nationName, nationFlag }) => {
     );
 };
 
-// --- 権力構造図ビュー (三権分立・複数ツリー並列対応版) ---
-        const PowerStructureView = ({ setView, nations, setNations, organizations, characters }) => {
-            const [targetNationId, setTargetNationId] = useState(nations.length > 0 ? nations[0].id : '');
-            const [zoom, setZoom] = useState(1.0);
-            const [pan, setPan] = useState({ x: 0, y: 0 });
-            const [isDragging, setIsDragging] = useState(false);
-            const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-            const containerRef = useRef(null);
+// --- 権力構造図ビュー (修正版: パネル開閉機能付き) ---
+const PowerStructureView = ({ setView, nations, setNations, organizations, characters }) => {
+    // 選択中の国ID
+    const [targetNationId, setTargetNationId] = useState(nations.length > 0 ? nations[0].id : '');
+    
+    // --- パネル開閉用ステート (追加) ---
+    const [isPanelOpen, setIsPanelOpen] = useState(true);
 
-            const targetNation = nations.find(n => n.id === targetNationId);
-            
-            // データ構造の正規化 (配列化)
-            const structure = useMemo(() => {
-                let raw = targetNation?.powerStructure;
-                if (!raw) {
-                    // デフォルト：三権分立のテンプレート
-                    return [
-                        { id: 'legis', name: '立法府', title: '議会', type: 'root', children: [] },
-                        { id: 'exec', name: '行政府', title: '内閣/大統領府', type: 'root', children: [] },
-                        { id: 'judic', name: '司法府', title: '最高裁判所', type: 'root', children: [] }
-                    ];
-                }
-                // 旧データ(オブジェクト)なら配列にラップ
-                return Array.isArray(raw) ? raw : [raw];
-            }, [targetNation]);
+    // --- ビューポート操作用ステート ---
+    const [zoom, setZoom] = useState(1.0);
+    const [pan, setPan] = useState({ x: 0, y: 0 });
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-            const updateStructure = (newStructure) => {
-                const newNations = nations.map(n => n.id === targetNationId ? { ...n, powerStructure: newStructure } : n);
-                setNations(newNations);
-            };
+    // ピンチズーム用ステート
+    const [isPinching, setIsPinching] = useState(false);
+    const [pinchStartDist, setPinchStartDist] = useState(0);
+    const [pinchStartZoom, setPinchStartZoom] = useState(1.0);
 
-            // 再帰探索 (配列対応)
-            const findNode = (nodes, id) => {
+    const containerRef = useRef(null);
+    const targetNation = nations.find(n => n.id === targetNationId);
+
+    // データ構造の正規化
+    const structure = useMemo(() => {
+        let raw = targetNation?.powerStructure;
+        if (!raw) {
+            return [
+                { id: 'legis', name: '立法府', title: '議会', type: 'root', children: [] },
+                { id: 'exec', name: '行政府', title: '内閣/大統領府', type: 'root', children: [] },
+                { id: 'judic', name: '司法府', title: '最高裁判所', type: 'root', children: [] }
+            ];
+        }
+        return Array.isArray(raw) ? raw : [raw];
+    }, [targetNation]);
+
+    const updateStructure = (newStructure) => {
+        const newNations = nations.map(n => n.id === targetNationId ? { ...n, powerStructure: newStructure } : n);
+        setNations(newNations);
+    };
+
+    // 再帰探索・更新用関数
+    const findNode = (nodes, id) => {
+        for (let node of nodes) {
+            if (node.id === id) return node;
+            if (node.children) {
+                const found = findNode(node.children, id);
+                if (found) return found;
+            }
+        }
+        return null;
+    };
+    
+    const updateNodeField = (id, field, value) => {
+        const newRoots = JSON.parse(JSON.stringify(structure));
+        const node = findNode(newRoots, id);
+        if (node) { node[field] = value; updateStructure(newRoots); }
+    };
+
+    const addChild = (parentId) => {
+        const newRoots = JSON.parse(JSON.stringify(structure));
+        const parent = findNode(newRoots, parentId);
+        if (parent) {
+            parent.isCollapsed = false; 
+            parent.children.push({ id: 'u-' + Math.random().toString(36).substr(2, 9), name: '新規役職', title: '', type: 'sub', linkType: '', linkId: '', children: [] });
+            updateStructure(newRoots);
+        }
+    };
+
+    const addRootTree = () => {
+        const newRoots = JSON.parse(JSON.stringify(structure));
+        newRoots.push({ id: 'root-' + Math.random().toString(36).substr(2, 9), name: '新規独立組織', title: '権力機関', type: 'root', children: [] });
+        updateStructure(newRoots);
+    };
+
+    const deleteNode = (id) => {
+        if (!window.confirm("削除しますか？配下の組織も消えます。")) return;
+        let newRoots = JSON.parse(JSON.stringify(structure));
+        if (newRoots.some(r => r.id === id)) {
+            if (newRoots.length <= 1) { alert("最後の1つは削除できません"); return; }
+            newRoots = newRoots.filter(r => r.id !== id);
+        } else {
+            const removeRecursive = (nodes) => {
                 for (let node of nodes) {
-                    if (node.id === id) return node;
                     if (node.children) {
-                        const found = findNode(node.children, id);
-                        if (found) return found;
+                        node.children = node.children.filter(c => c.id !== id);
+                        removeRecursive(node.children);
                     }
                 }
-                return null;
             };
-            
-            const updateNodeField = (id, field, value) => {
-                const newRoots = JSON.parse(JSON.stringify(structure));
-                const node = findNode(newRoots, id);
-                if (node) { node[field] = value; updateStructure(newRoots); }
-            };
+            removeRecursive(newRoots);
+        }
+        updateStructure(newRoots);
+    };
 
-            const addChild = (parentId) => {
-                const newRoots = JSON.parse(JSON.stringify(structure));
-                const parent = findNode(newRoots, parentId);
-                if (parent) {
-                    parent.children.push({ id: 'u-' + Math.random().toString(36).substr(2, 9), name: '新規役職', title: '', type: 'sub', linkType: '', linkId: '', children: [] });
-                    updateStructure(newRoots);
-                }
-            };
+    // --- 操作ロジック ---
 
-            // 新しい独立ツリーを追加
-            const addRootTree = () => {
-                const newRoots = JSON.parse(JSON.stringify(structure));
-                newRoots.push({ id: 'root-' + Math.random().toString(36).substr(2, 9), name: '新規独立組織', title: '権力機関', type: 'root', children: [] });
-                updateStructure(newRoots);
-            };
+    const handleStartDrag = (clientX, clientY, target) => {
+        if (target.closest('.editor-sidebar') || target.closest('.toggle-btn') || target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'BUTTON') return;
+        setIsDragging(true);
+        setDragStart({ x: clientX - pan.x, y: clientY - pan.y });
+    };
 
-            const deleteNode = (id) => {
-                if (!window.confirm("削除しますか？配下の組織も消えます。")) return;
-                let newRoots = JSON.parse(JSON.stringify(structure));
-                
-                // トップレベルの場合
-                if (newRoots.some(r => r.id === id)) {
-                    if (newRoots.length <= 1) { alert("最後の1つは削除できません"); return; }
-                    newRoots = newRoots.filter(r => r.id !== id);
-                } else {
-                    // 子ノードの場合
-                    const removeRecursive = (nodes) => {
-                        for (let node of nodes) {
-                            if (node.children) {
-                                node.children = node.children.filter(c => c.id !== id);
-                                removeRecursive(node.children);
-                            }
-                        }
-                    };
-                    removeRecursive(newRoots);
-                }
-                updateStructure(newRoots);
-            };
+    const handleDragMove = (clientX, clientY) => {
+        if (!isDragging) return;
+        setPan({ x: clientX - dragStart.x, y: clientY - dragStart.y });
+    };
 
-            const handleMouseDown = (e) => {
-                if (e.target.closest('.node-interactive') || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON') return;
-                setIsDragging(true);
-                setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-            };
-            const handleMouseMove = (e) => { if (!isDragging) return; setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }); };
-            const handleMouseUp = () => setIsDragging(false);
-            const handleWheel = (e) => { const scaleAmount = -e.deltaY * 0.001; setZoom(prev => Math.min(Math.max(0.2, prev + scaleAmount), 2.0)); };
+    const onMouseDown = (e) => {
+        handleStartDrag(e.clientX, e.clientY, e.target);
+        if (!e.target.closest('.editor-sidebar') && !e.target.closest('.toggle-btn') && !['INPUT','SELECT','BUTTON'].includes(e.target.tagName)) {
+            e.currentTarget.style.cursor = 'grabbing';
+        }
+    };
+    const onMouseMove = (e) => {
+        if (!isDragging) return;
+        e.preventDefault();
+        handleDragMove(e.clientX, e.clientY);
+    };
+    const onMouseUp = (e) => {
+        setIsDragging(false);
+        e.currentTarget.style.cursor = 'grab';
+    };
+    const onWheel = (e) => {
+        if (e.target.closest('.editor-sidebar')) return;
+        const scaleAmount = -e.deltaY * 0.001;
+        setZoom(prev => Math.min(Math.max(0.1, prev + scaleAmount), 3.0));
+    };
 
-            const treeCss = `
-                .tf-tree { display: flex; text-align: center; }
-                .tf-tree ul { padding-top: 20px; position: relative; display: flex; justify-content: center; }
-                .tf-tree li { float: left; text-align: center; list-style-type: none; position: relative; padding: 20px 5px 0 5px; }
-                .tf-tree li::before, .tf-tree li::after { content: ''; position: absolute; top: 0; right: 50%; border-top: 1px solid #999; width: 50%; height: 20px; }
-                .tf-tree li::after { right: auto; left: 50%; border-left: 1px solid #999; }
-                .tf-tree li:only-child::after, .tf-tree li:only-child::before { display: none; }
-                .tf-tree li:only-child { padding-top: 0; }
-                .tf-tree li:first-child::before { border: 0 none; }
-                .tf-tree li:last-child::after { border: 0 none; }
-                .tf-tree li:last-child::before { border-right: 1px solid #999; border-radius: 0 5px 0 0; }
-                .tf-tree li:first-child::after { border-radius: 5px 0 0 0; }
-                .tf-tree ul::before { content: ''; position: absolute; top: 0; left: 50%; border-left: 1px solid #999; width: 0; height: 20px; }
-                .node-card { display: flex; background: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); min-width: 200px; position: relative; z-index: 10; text-align: left; }
-                .node-card:hover { border-color: #60a5fa; box-shadow: 0 4px 8px rgba(59, 130, 246, 0.2); z-index: 20; }
-            `;
+    const getTouchDist = (touches) => {
+        return Math.hypot(
+            touches[0].clientX - touches[1].clientX,
+            touches[0].clientY - touches[1].clientY
+        );
+    };
 
-            const renderTree = (node) => {
-                let linkedData = null;
-                let keyPeople = [];
-                if (node.linkType === 'org' && node.linkId) {
-                    linkedData = organizations.find(o => o.id === node.linkId);
-                    if (linkedData && linkedData.keyPeople) keyPeople = linkedData.keyPeople;
-                } else if (node.linkType === 'char' && node.linkId) {
-                    linkedData = characters.find(c => c.id === node.linkId);
-                }
+    const onTouchStart = (e) => {
+        if (e.target.closest('.editor-sidebar') || e.target.closest('.toggle-btn') || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON') return;
+        if (e.touches.length === 2) {
+            e.preventDefault(); setIsPinching(true); setIsDragging(false);
+            const dist = getTouchDist(e.touches); setPinchStartDist(dist); setPinchStartZoom(zoom);
+        } else if (e.touches.length === 1) {
+            const touch = e.touches[0]; handleStartDrag(touch.clientX, touch.clientY, e.target);
+        }
+    };
 
-                const imageSrc = linkedData ? (node.linkType === 'org' ? linkedData.logo : linkedData.portrait) : null;
-                const DefaultIcon = node.linkType === 'org' ? Icons.Briefcase : (node.linkType === 'char' ? Icons.User : Icons.User);
+    const onTouchMove = (e) => {
+        if (isPinching && e.touches.length === 2) {
+            e.preventDefault(); const dist = getTouchDist(e.touches);
+            if (pinchStartDist > 0) { const scale = dist / pinchStartDist; setZoom(Math.min(Math.max(0.1, pinchStartZoom * scale), 3.0)); }
+        } else if (isDragging && e.touches.length === 1) {
+            const touch = e.touches[0]; handleDragMove(touch.clientX, touch.clientY);
+        }
+    };
 
-                return (
-                    <li key={node.id}>
-                        <div className="node-card group !p-0 overflow-visible node-interactive">
-                            <div className="w-16 h-16 bg-gray-100 flex-shrink-0 border-r border-gray-200 flex items-center justify-center overflow-hidden relative rounded-l">
-                                {imageSrc ? <img src={imageSrc} className="w-full h-full object-cover" /> : <div className="text-gray-300">{node.linkType ? <DefaultIcon size={24}/> : <Icons.User size={24}/>}</div>}
-                                {node.linkType && <div className={`absolute top-0 left-0 p-0.5 text-white text-[8px] ${node.linkType === 'org' ? 'bg-blue-500' : 'bg-green-500'}`}>{node.linkType === 'org' ? <Icons.Briefcase size={8}/> : <Icons.User size={8}/>}</div>}
-                            </div>
-                            <div className="flex-grow p-2 flex flex-col justify-center w-36 bg-white rounded-r">
-                                <input type="text" value={node.name} onChange={e => updateNodeField(node.id, 'name', e.target.value)} className="w-full font-bold border-b border-transparent hover:border-gray-300 focus:border-blue-500 outline-none text-sm bg-transparent mb-0.5 px-1" placeholder="役職名" />
-                                <input type="text" value={node.title} onChange={e => updateNodeField(node.id, 'title', e.target.value)} className="w-full text-[10px] text-gray-500 outline-none bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 px-1" placeholder="権限・役割" />
-                                {linkedData ? ( <div className="text-[9px] font-bold text-blue-800 truncate bg-blue-50 px-1 rounded mt-1 mx-1">{linkedData.name}</div> ) : ( <div className="text-[9px] text-gray-300 italic mt-1 mx-1">未設定</div> )}
-                            </div>
+    const onTouchEnd = () => { setIsDragging(false); setIsPinching(false); };
 
-                            <div className="absolute top-full left-0 w-full bg-white border border-t-0 border-gray-300 rounded-b shadow-lg p-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto z-30 flex flex-col gap-2">
-                                <div className="flex gap-1">
-                                    <select value={node.linkType || ''} onChange={e => updateNodeField(node.id, 'linkType', e.target.value)} className="text-[9px] border rounded w-1/3 p-0.5 bg-gray-50"> <option value="">紐付なし</option><option value="org">組織</option><option value="char">人物</option> </select>
-                                    {node.linkType === 'org' && ( <select value={node.linkId || ''} onChange={e => updateNodeField(node.id, 'linkId', e.target.value)} className="text-[9px] border rounded w-2/3 p-0.5 bg-gray-50"> <option value="">--選択--</option>{organizations.map(o => <option key={o.id} value={o.id}>{o.name}</option>)} </select> )}
-                                    {node.linkType === 'char' && ( <select value={node.linkId || ''} onChange={e => updateNodeField(node.id, 'linkId', e.target.value)} className="text-[9px] border rounded w-2/3 p-0.5 bg-gray-50"> <option value="">--選択--</option>{characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)} </select> )}
-                                </div>
-                                <div className="flex gap-2 justify-between">
-                                    <button onClick={() => deleteNode(node.id)} className="bg-red-100 text-red-600 text-[10px] px-2 py-1 rounded hover:bg-red-200 flex-1">削除</button>
-                                    <button onClick={() => addChild(node.id)} className="bg-blue-100 text-blue-600 text-[10px] px-2 py-1 rounded hover:bg-blue-200 flex-1 font-bold">＋下部組織を追加</button>
-                                </div>
-                            </div>
-                        </div>
-                        {node.children && node.children.length > 0 && <ul>{node.children.map(child => renderTree(child))}</ul>}
-                    </li>
-                );
-            };
+    // CSS定義
+    const treeCss = `
+        .tf-tree { display: flex; text-align: center; }
+        .tf-tree ul { padding-top: 20px; position: relative; display: flex; justify-content: center; }
+        .tf-tree li { float: left; text-align: center; list-style-type: none; position: relative; padding: 20px 5px 0 5px; }
+        .tf-tree li::before, .tf-tree li::after { content: ''; position: absolute; top: 0; right: 50%; border-top: 1px solid #999; width: 50%; height: 20px; }
+        .tf-tree li::after { right: auto; left: 50%; border-left: 1px solid #999; }
+        .tf-tree li:only-child::after, .tf-tree li:only-child::before { display: none; }
+        .tf-tree li:only-child { padding-top: 0; }
+        .tf-tree li:first-child::before { border: 0 none; }
+        .tf-tree li:last-child::after { border: 0 none; }
+        .tf-tree li:last-child::before { border-right: 1px solid #999; border-radius: 0 5px 0 0; }
+        .tf-tree li:first-child::after { border-radius: 5px 0 0 0; }
+        .tf-tree ul::before { content: ''; position: absolute; top: 0; left: 50%; border-left: 1px solid #999; width: 0; height: 20px; }
+        .node-card { display: flex; background: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); min-width: 200px; position: relative; z-index: 10; text-align: left; }
+        .node-card:hover { border-color: #60a5fa; box-shadow: 0 4px 8px rgba(59, 130, 246, 0.2); z-index: 20; }
+    `;
 
-            return (
-                <div className="h-full flex flex-col bg-[#f4f4f9] overflow-hidden relative">
-                    <style>{treeCss}</style>
-                    <div className="absolute top-4 left-4 z-40 bg-white/90 backdrop-blur p-4 rounded-lg shadow-lg border border-gray-200 w-64 node-interactive">
-                        <div className="flex items-center gap-2 mb-4 pb-2 border-b">
-                            <button onClick={() => setView('timeline')} className="p-1 hover:bg-gray-100 rounded"><Icons.ArrowLeft size={16}/></button>
-                            <h2 className="font-bold text-sm text-gray-700">権力構造図エディタ</h2>
-                        </div>
-                        <label className="block text-xs font-bold text-gray-500 mb-1">編集する国家</label>
-                        <select value={targetNationId} onChange={e => setTargetNationId(e.target.value)} className="w-full p-2 border rounded text-sm mb-4 font-bold">
-                            {nations.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
-                        </select>
-                        <div className="flex items-center gap-2 bg-gray-100 p-2 rounded mb-2">
-                            <button onClick={() => setZoom(z => Math.max(0.2, z - 0.1))} className="w-6 h-6 bg-white rounded border text-sm font-bold">-</button>
-                            <span className="flex-grow text-center text-xs font-mono">{Math.round(zoom * 100)}%</span>
-                            <button onClick={() => setZoom(z => Math.min(2.0, z + 0.1))} className="w-6 h-6 bg-white rounded border text-sm font-bold">+</button>
-                        </div>
-                        
-                        {/* ★追加: 独立したツリーを追加するボタン */}
-                        <button onClick={addRootTree} className="w-full mt-2 py-2 bg-blue-600 text-white rounded font-bold text-xs hover:bg-blue-700 shadow flex items-center justify-center gap-2">
-                            <Icons.GitMerge size={14}/> 独立組織(トップ)を追加
-                        </button>
+    const renderTree = (node) => {
+        let linkedData = null;
+        if (node.linkType === 'org' && node.linkId) {
+            linkedData = organizations.find(o => o.id === node.linkId);
+        } else if (node.linkType === 'char' && node.linkId) {
+            linkedData = characters.find(c => c.id === node.linkId);
+        }
+        const imageSrc = linkedData ? (node.linkType === 'org' ? linkedData.logo : linkedData.portrait) : null;
+        const DefaultIcon = node.linkType === 'org' ? Icons.Briefcase : (node.linkType === 'char' ? Icons.User : Icons.User);
+        
+        const hasChildren = node.children && node.children.length > 0;
+        const isCollapsed = !!node.isCollapsed;
 
-                        <div className="text-[10px] text-gray-400 leading-tight mt-3">
-                            <p>・ホイールで拡大縮小 / ドラッグで移動</p>
-                            <p>・カードホバーで編集・追加</p>
-                        </div>
+        return (
+            <li key={node.id}>
+                <div className="node-card group !p-0 overflow-visible">
+                    <div className="w-16 h-16 bg-gray-100 flex-shrink-0 border-r border-gray-200 flex items-center justify-center overflow-hidden relative rounded-l">
+                        {imageSrc ? <img src={imageSrc} className="w-full h-full object-cover" /> : <div className="text-gray-300">{node.linkType ? <DefaultIcon size={24}/> : <Icons.User size={24}/>}</div>}
+                        {node.linkType && <div className={`absolute top-0 left-0 p-0.5 text-white text-[8px] ${node.linkType === 'org' ? 'bg-blue-500' : 'bg-green-500'}`}>{node.linkType === 'org' ? <Icons.Briefcase size={8}/> : <Icons.User size={8}/>}</div>}
+                    </div>
+                    <div className="flex-grow p-2 flex flex-col justify-center w-36 bg-white rounded-r">
+                        <input type="text" value={node.name} onChange={e => updateNodeField(node.id, 'name', e.target.value)} className="w-full font-bold border-b border-transparent hover:border-gray-300 focus:border-blue-500 outline-none text-sm bg-transparent mb-0.5 px-1" placeholder="役職名" />
+                        <input type="text" value={node.title} onChange={e => updateNodeField(node.id, 'title', e.target.value)} className="w-full text-[10px] text-gray-500 outline-none bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 px-1" placeholder="権限・役割" />
+                        {linkedData ? ( <div className="text-[9px] font-bold text-blue-800 truncate bg-blue-50 px-1 rounded mt-1 mx-1">{linkedData.name}</div> ) : ( <div className="text-[9px] text-gray-300 italic mt-1 mx-1">未設定</div> )}
                     </div>
                     
-                    <div 
-                        ref={containerRef}
-                        className="flex-grow overflow-hidden cursor-grab active:cursor-grabbing relative"
-                        onMouseDown={handleMouseDown}
-                        onMouseMove={handleMouseMove}
-                        onMouseUp={handleMouseUp}
-                        onMouseLeave={handleMouseUp}
-                        onWheel={handleWheel}
-                        style={{ backgroundImage: 'radial-gradient(#ccc 1px, transparent 1px)', backgroundSize: '20px 20px' }}
-                    >
-                        <div 
-                            className="absolute top-0 left-0 origin-top-left transition-transform duration-75 ease-out flex gap-16 items-start"
-                            style={{ 
-                                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                                minWidth: '100%', minHeight: '100%', padding: '100px'
-                            }}
+                    {hasChildren && (
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); updateNodeField(node.id, 'isCollapsed', !isCollapsed); }}
+                            className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-white border border-gray-400 hover:border-blue-500 text-gray-500 hover:text-blue-600 rounded-full flex items-center justify-center z-40 shadow-sm transition-colors"
+                            title={isCollapsed ? "展開" : "折りたたむ"}
                         >
-                            {/* 複数のツリーを横並びに描画 */}
-                            {structure.map((rootNode, index) => (
-                                <div key={rootNode.id} className="tf-tree">
-                                    <ul>{renderTree(rootNode)}</ul>
-                                </div>
-                            ))}
+                            {isCollapsed ? <Icons.Plus size={12} strokeWidth={3} /> : <Icons.Minus size={12} strokeWidth={3} />}
+                        </button>
+                    )}
+
+                    <div className="absolute top-full left-0 w-full bg-white border border-t-0 border-gray-300 rounded-b shadow-lg p-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto z-30 flex flex-col gap-2">
+                        <div className="flex gap-1">
+                            <select value={node.linkType || ''} onChange={e => updateNodeField(node.id, 'linkType', e.target.value)} className="text-[9px] border rounded w-1/3 p-0.5 bg-gray-50"> <option value="">紐付なし</option><option value="org">組織</option><option value="char">人物</option> </select>
+                            {node.linkType === 'org' && ( <select value={node.linkId || ''} onChange={e => updateNodeField(node.id, 'linkId', e.target.value)} className="text-[9px] border rounded w-2/3 p-0.5 bg-gray-50"> <option value="">--選択--</option>{organizations.map(o => <option key={o.id} value={o.id}>{o.name}</option>)} </select> )}
+                            {node.linkType === 'char' && ( <select value={node.linkId || ''} onChange={e => updateNodeField(node.id, 'linkId', e.target.value)} className="text-[9px] border rounded w-2/3 p-0.5 bg-gray-50"> <option value="">--選択--</option>{characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)} </select> )}
+                        </div>
+                        <div className="flex gap-2 justify-between">
+                            <button onClick={() => deleteNode(node.id)} className="bg-red-100 text-red-600 text-[10px] px-2 py-1 rounded hover:bg-red-200 flex-1">削除</button>
+                            <button onClick={() => addChild(node.id)} className="bg-blue-100 text-blue-600 text-[10px] px-2 py-1 rounded hover:bg-blue-200 flex-1 font-bold">＋下部</button>
                         </div>
                     </div>
                 </div>
-            );
-        };
+                {!isCollapsed && hasChildren && <ul>{node.children.map(child => renderTree(child))}</ul>}
+            </li>
+        );
+    };
 
-// --- StatsManager コンポーネント (修正・復元版) ---
-const StatsManager = ({ setView, nations, stats, setStats }) => {
-    const [mode, setMode] = useState('year'); 
+    return (
+        <div className="h-full flex flex-col bg-[#f4f4f9] overflow-hidden relative touch-none">
+            <style>{treeCss}</style>
+            
+            {/* ★ パネル開閉ボタン (興亡系統図と同様に配置) */}
+            <button 
+                onClick={() => setIsPanelOpen(!isPanelOpen)} 
+                className="toggle-btn absolute top-4 left-4 z-[60] bg-white p-2 rounded-lg shadow-md border border-gray-200 text-gray-600 hover:bg-gray-50"
+                title={isPanelOpen ? "パネルを閉じる" : "設定を開く"}
+            >
+                {isPanelOpen ? <Icons.X size={20}/> : <Icons.Settings size={20}/>}
+            </button>
+
+            {/* ★ 左上のコントロールパネル (折りたたみ対応) */}
+            <div className={`editor-sidebar absolute top-16 left-4 md:top-4 md:left-4 z-50 bg-white/95 backdrop-blur p-4 rounded-lg shadow-xl border border-gray-200 w-64 max-h-[80vh] overflow-y-auto custom-scrollbar transition-all duration-300 origin-top-left ${isPanelOpen ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'}`}>
+                
+                {/* 閉じるボタンがあるため、ヘッダーのマージンを調整 (ボタンと重ならないように) */}
+                <div className="flex items-center gap-2 mb-4 pb-2 border-b pl-10 md:pl-0">
+                    <h2 className="font-bold text-sm text-gray-700 flex items-center gap-2"><Icons.Structure size={16}/> 権力構造図エディタ</h2>
+                </div>
+
+                <label className="block text-xs font-bold text-gray-500 mb-1">編集する国家</label>
+                <select value={targetNationId} onChange={e => setTargetNationId(e.target.value)} className="w-full p-2 border rounded text-sm mb-4 font-bold">
+                    {nations.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
+                </select>
+                <div className="flex items-center gap-2 bg-gray-100 p-2 rounded mb-2">
+                    <button onClick={() => setZoom(z => Math.max(0.1, z - 0.1))} className="w-6 h-6 bg-white rounded border text-sm font-bold">-</button>
+                    <span className="flex-grow text-center text-xs font-mono">{Math.round(zoom * 100)}%</span>
+                    <button onClick={() => setZoom(z => Math.min(3.0, z + 0.1))} className="w-6 h-6 bg-white rounded border text-sm font-bold">+</button>
+                </div>
+                <button onClick={addRootTree} className="w-full mt-2 py-2 bg-blue-600 text-white rounded font-bold text-xs hover:bg-blue-700 shadow flex items-center justify-center gap-2">
+                    <Icons.GitMerge size={14}/> 独立組織(トップ)を追加
+                </button>
+                <div className="text-[10px] text-gray-400 leading-tight mt-3">
+                    <p>・ドラッグで移動、ホイール/ピンチで拡大</p>
+                    <p>・[+/-]でツリー開閉</p>
+                    <p>・カードホバーで編集メニュー</p>
+                </div>
+            </div>
+            
+            <div 
+                ref={containerRef}
+                className="flex-grow overflow-hidden cursor-grab active:cursor-grabbing relative"
+                onMouseDown={onMouseDown}
+                onMouseMove={onMouseMove}
+                onMouseUp={onMouseUp}
+                onMouseLeave={onMouseUp}
+                onTouchStart={onTouchStart}
+                onTouchMove={onTouchMove}
+                onTouchEnd={onTouchEnd}
+                onWheel={onWheel}
+                style={{ backgroundImage: 'radial-gradient(#ccc 1px, transparent 1px)', backgroundSize: '20px 20px' }}
+            >
+                <div 
+                    className="absolute top-0 left-0 origin-top-left transition-transform duration-75 ease-out flex gap-16 items-start"
+                    style={{ 
+                        transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                        minWidth: '100%', minHeight: '100%', padding: '100px'
+                    }}
+                >
+                    {structure.map(rootNode => (
+                        <div key={rootNode.id} className="tf-tree">
+                            <ul>{renderTree(rootNode)}</ul>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- StatsEditView コンポーネント (修正版v3: プレビュー切り替え機能付き) ---
+const StatsEditView = ({ setView, nations, stats, setStats }) => {
+    const [mode, setMode] = useState('nation');
     const [targetYear, setTargetYear] = useState(DEFAULT_YEAR);
     const [yearInputData, setYearInputData] = useState({}); 
+    
     const [targetNationId, setTargetNationId] = useState(nations[0]?.id || '');
     const [nationInputData, setNationInputData] = useState([]); 
+    
+    // 自動補完用ステート
+    const [fillStartYear, setFillStartYear] = useState('');
+    const [fillEndYear, setFillEndYear] = useState('');
+    const [fillStartPop, setFillStartPop] = useState('');
+    const [fillEndPop, setFillEndPop] = useState('');
+    const [fillStartGdp, setFillStartGdp] = useState('');
+    const [fillEndGdp, setFillEndGdp] = useState('');
+    const [curveType, setCurveType] = useState('linear');
 
+    // 中間点（Midpoints）用ステート
+    const [midPoints, setMidPoints] = useState([]);
+
+    // ★追加: プレビュー表示項目切り替え用 ('population' or 'gdp')
+    const [previewMetric, setPreviewMetric] = useState('population');
+
+    // 初期データ読み込み
     useEffect(() => {
         if (mode === 'year') {
             const currentStats = stats.filter(s => s.year === parseInt(targetYear));
@@ -2139,14 +2064,44 @@ const StatsManager = ({ setView, nations, stats, setStats }) => {
         } else {
             if (!targetNationId) return;
             const currentStats = stats.filter(s => s.nationId === targetNationId).sort((a, b) => a.year - b.year);
-            setNationInputData(currentStats.map(s => ({ id: s.id, year: s.year, population: s.population, gdp: s.gdp })));
+            const formatted = currentStats.map(s => ({ id: s.id, year: s.year, population: s.population, gdp: s.gdp }));
+            setNationInputData(formatted);
+            
+            if (currentStats.length > 0) {
+                const first = currentStats[0];
+                const last = currentStats[currentStats.length - 1];
+                setFillStartYear(first.year); setFillStartPop(first.population); setFillStartGdp(first.gdp);
+                setFillEndYear(last.year); setFillEndPop(last.population); setFillEndGdp(last.gdp);
+            }
         }
     }, [mode, targetYear, targetNationId, stats]);
 
-    const handleYearInputChange = (nationId, field, value) => {
-        setYearInputData(prev => ({ ...prev, [nationId]: { ...prev[nationId], [field]: value } }));
+    const lookupAndSetData = (yearStr, setPop, setGdp) => {
+        const y = parseInt(yearStr);
+        if (isNaN(y)) return;
+        const existing = nationInputData.find(d => d.year === y);
+        if (existing) {
+            if (existing.population) setPop(existing.population);
+            if (existing.gdp) setGdp(existing.gdp);
+        }
     };
 
+    const handleStartYearChange = (val) => { setFillStartYear(val); lookupAndSetData(val, setFillStartPop, setFillStartGdp); };
+    const handleEndYearChange = (val) => { setFillEndYear(val); lookupAndSetData(val, setFillEndPop, setFillEndGdp); };
+    
+    const addMidPoint = () => { setMidPoints([...midPoints, { id: Date.now(), year: '', population: '', gdp: '' }]); };
+    const removeMidPoint = (idx) => { setMidPoints(midPoints.filter((_, i) => i !== idx)); };
+    const updateMidPoint = (idx, field, val) => {
+        const newMids = [...midPoints];
+        newMids[idx][field] = val;
+        if (field === 'year') {
+            lookupAndSetData(val, (p) => { newMids[idx].population = p; setMidPoints([...newMids]); }, (g) => { newMids[idx].gdp = g; setMidPoints([...newMids]); });
+        }
+        setMidPoints(newMids);
+    };
+
+    const handleYearInputChange = (nationId, field, value) => { setYearInputData(prev => ({ ...prev, [nationId]: { ...prev[nationId], [field]: value } })); };
+    
     const saveYearData = () => {
         const otherStats = stats.filter(s => s.year !== parseInt(targetYear));
         const newStats = [...otherStats];
@@ -2170,8 +2125,39 @@ const StatsManager = ({ setView, nations, stats, setStats }) => {
         setNationInputData([...nationInputData, { year: lastYear + 1, population: '', gdp: '' }]);
     };
 
-    const removeNationYearRow = (index) => {
-        setNationInputData(nationInputData.filter((_, i) => i !== index));
+    const removeNationYearRow = (index) => { setNationInputData(nationInputData.filter((_, i) => i !== index)); };
+
+    const executeAutoFill = () => {
+        const points = [
+            { year: parseInt(fillStartYear), pop: parseFloat(fillStartPop), gdp: parseFloat(fillStartGdp) },
+            ...midPoints.map(m => ({ year: parseInt(m.year), pop: parseFloat(m.population), gdp: parseFloat(m.gdp) })),
+            { year: parseInt(fillEndYear), pop: parseFloat(fillEndPop), gdp: parseFloat(fillEndGdp) }
+        ].filter(p => !isNaN(p.year)).sort((a, b) => a.year - b.year);
+
+        if (points.length < 2) { alert("開始年と終了年を正しく設定してください"); return; }
+
+        const easing = EASING_FUNCTIONS[curveType].func;
+        const existingMap = {};
+        nationInputData.forEach(d => existingMap[d.year] = d);
+
+        for (let i = 0; i < points.length - 1; i++) {
+            const p1 = points[i]; const p2 = points[i+1];
+            if (p1.year >= p2.year) continue;
+
+            const startY = p1.year; const endY = p2.year;
+            const startPop = p1.pop || 0; const endPop = p2.pop || 0;
+            const startGdp = p1.gdp || 0; const endGdp = p2.gdp || 0;
+
+            for (let y = startY; y <= endY; y++) {
+                const t = (y - startY) / (endY - startY);
+                const factor = easing(t);
+                const pop = Math.round(startPop + (endPop - startPop) * factor);
+                const gdp = Math.round(startGdp + (endGdp - startGdp) * factor);
+                existingMap[y] = { year: y, population: pop, gdp: gdp, id: existingMap[y]?.id };
+            }
+        }
+        const result = Object.values(existingMap).sort((a, b) => a.year - b.year);
+        setNationInputData(result);
     };
 
     const saveNationData = () => {
@@ -2186,21 +2172,181 @@ const StatsManager = ({ setView, nations, stats, setStats }) => {
         alert(`データを保存しました。`);
     };
 
+    const chartData = nationInputData.filter(d => d.year && (d.population || d.gdp)).sort((a,b)=>a.year-b.year);
+
     return (
         <div className="min-h-[calc(100vh-120px)] flex flex-col gap-4 animate-fade-in pb-20">
-            <SectionHeader icon={Icons.BarChart2} title="統計データ管理" desc="各国の人口・GDPデータを管理します。" />
+            <SectionHeader icon={Icons.BarChart2} title="統計データ管理" desc="各国の人口・GDPデータを管理します。自動補完機能を使うと、始点と終点を入力するだけで間のデータを一括生成できます。" />
+            
             <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden flex flex-col flex-grow min-h-[600px]">
-                {/* タブ切り替え */}
-                <div className="flex border-b border-gray-200 bg-gray-50">
-                    <button onClick={() => setMode('year')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 ${mode === 'year' ? 'bg-white border-t-4 border-blue-500 text-blue-800' : 'text-gray-500 hover:bg-gray-100'}`}>
-                        <Icons.Calendar size={16}/> 年単位で記録 (全国家)
-                    </button>
+                <div className="flex border-b border-gray-200 bg-gray-50 flex-shrink-0">
                     <button onClick={() => setMode('nation')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 ${mode === 'nation' ? 'bg-white border-t-4 border-green-500 text-green-800' : 'text-gray-500 hover:bg-gray-100'}`}>
-                        <Icons.Flag size={16}/> 国単位で記録 (時系列)
+                        <Icons.TrendingUp size={16}/> 時系列で記録 (国単位・推奨)
+                    </button>
+                    <button onClick={() => setMode('year')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 ${mode === 'year' ? 'bg-white border-t-4 border-blue-500 text-blue-800' : 'text-gray-500 hover:bg-gray-100'}`}>
+                        <Icons.Calendar size={16}/> 定点観測 (年単位)
                     </button>
                 </div>
 
-                {/* --- 年単位モード --- */}
+                {mode === 'nation' && (
+                    <div className="flex flex-col lg:flex-row h-full overflow-hidden">
+                        <div className="w-full lg:w-1/3 bg-gray-50 border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col overflow-y-auto custom-scrollbar">
+                            <div className="p-4 border-b border-gray-200 bg-white sticky top-0 z-10">
+                                <label className="block text-xs font-bold text-gray-500 mb-1">編集対象の国家</label>
+                                <select value={targetNationId} onChange={e => setTargetNationId(e.target.value)} className="w-full p-2 border rounded font-bold mb-2 bg-gray-50 focus:bg-white transition-colors">
+                                    {nations.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
+                                </select>
+                                <button onClick={saveNationData} className="w-full bg-green-700 text-white py-2 rounded font-bold shadow hover:bg-green-600 flex items-center justify-center gap-2 transition-transform active:scale-95">
+                                    <Icons.Save size={18}/> データを保存
+                                </button>
+                            </div>
+
+                            <div className="p-4 space-y-4">
+                                <div className="bg-white p-4 rounded-lg border border-green-200 shadow-sm relative">
+                                    <h4 className="font-bold text-sm text-green-800 mb-3 flex items-center gap-2"><Icons.Zap size={16}/> 自動補完 (Auto Fill)</h4>
+                                    
+                                    <div className="mb-4 bg-green-50 p-2 rounded border border-green-100">
+                                        <label className="text-[10px] font-bold text-green-800 mb-1 block">始点 (Start)</label>
+                                        <div className="flex gap-2 mb-1">
+                                            <input type="number" placeholder="年" value={fillStartYear} onChange={e=>handleStartYearChange(e.target.value)} className="w-1/3 p-1 border rounded text-center text-sm font-bold" />
+                                            <input type="number" placeholder="人口" value={fillStartPop} onChange={e=>setFillStartPop(e.target.value)} className="w-1/3 p-1 border rounded text-right text-sm" />
+                                            <input type="number" placeholder="GDP" value={fillStartGdp} onChange={e=>setFillStartGdp(e.target.value)} className="w-1/3 p-1 border rounded text-right text-sm" />
+                                        </div>
+                                    </div>
+
+                                    {midPoints.map((mp, idx) => (
+                                        <div key={mp.id} className="mb-2 pl-4 border-l-2 border-dashed border-gray-300 relative">
+                                            <div className="absolute -left-[7px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-gray-300"></div>
+                                            <div className="flex gap-2 items-center">
+                                                <input type="number" placeholder="中間年" value={mp.year} onChange={e=>updateMidPoint(idx, 'year', e.target.value)} className="w-1/3 p-1 border rounded text-center text-sm bg-gray-50" />
+                                                <input type="number" placeholder="人口" value={mp.population} onChange={e=>updateMidPoint(idx, 'population', e.target.value)} className="w-1/3 p-1 border rounded text-right text-sm bg-gray-50" />
+                                                <input type="number" placeholder="GDP" value={mp.gdp} onChange={e=>updateMidPoint(idx, 'gdp', e.target.value)} className="w-1/3 p-1 border rounded text-right text-sm bg-gray-50" />
+                                                <button onClick={() => removeMidPoint(idx)} className="text-red-400 hover:text-red-600"><Icons.X size={14}/></button>
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    <div className="text-center mb-4">
+                                        <button onClick={addMidPoint} className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center justify-center gap-1 mx-auto">
+                                            <Icons.Plus size={12}/> 中間点(経由地)を追加
+                                        </button>
+                                    </div>
+
+                                    <div className="mb-4 bg-blue-50 p-2 rounded border border-blue-100">
+                                        <label className="text-[10px] font-bold text-blue-800 mb-1 block">終点 (End)</label>
+                                        <div className="flex gap-2 mb-1">
+                                            <input type="number" placeholder="年" value={fillEndYear} onChange={e=>handleEndYearChange(e.target.value)} className="w-1/3 p-1 border rounded text-center text-sm font-bold" />
+                                            <input type="number" placeholder="人口" value={fillEndPop} onChange={e=>setFillEndPop(e.target.value)} className="w-1/3 p-1 border rounded text-right text-sm" />
+                                            <input type="number" placeholder="GDP" value={fillEndGdp} onChange={e=>setFillEndGdp(e.target.value)} className="w-1/3 p-1 border rounded text-right text-sm" />
+                                        </div>
+                                    </div>
+
+                                    <div className="mb-4">
+                                        <label className="text-[10px] font-bold text-gray-500 mb-1 block">変化カーブ (区間ごとに適用)</label>
+                                        <select value={curveType} onChange={e=>setCurveType(e.target.value)} className="w-full p-1.5 border rounded text-sm">
+                                            {Object.entries(EASING_FUNCTIONS).map(([key, func]) => (
+                                                <option key={key} value={key}>{func.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <button onClick={executeAutoFill} className="w-full py-2 bg-green-600 text-white rounded font-bold text-xs hover:bg-green-700 shadow-sm flex items-center justify-center gap-2">
+                                        <Icons.RefreshCw size={14}/> 生成 / 上書き
+                                    </button>
+                                </div>
+
+                                {chartData.length > 1 && (
+                                    <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <h4 className="font-bold text-xs text-gray-500">入力データプレビュー</h4>
+                                            {/* ★プレビュー切り替えボタン */}
+                                            <div className="flex bg-gray-100 rounded p-0.5">
+                                                <button onClick={() => setPreviewMetric('population')} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${previewMetric === 'population' ? 'bg-white shadow text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}>人口</button>
+                                                <button onClick={() => setPreviewMetric('gdp')} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${previewMetric === 'gdp' ? 'bg-white shadow text-green-600' : 'text-gray-400 hover:text-gray-600'}`}>GDP</button>
+                                            </div>
+                                        </div>
+                                        <div className="h-24 flex items-end gap-0.5 border-b border-gray-200 pb-1">
+                                            {(() => {
+                                                // 選択された指標に基づいて最大値を計算
+                                                const getValue = (d) => parseFloat(d[previewMetric]) || 0;
+                                                const maxValue = Math.max(...chartData.map(getValue));
+                                                
+                                                return chartData.map((d, i) => {
+                                                    const val = getValue(d);
+                                                    const h = maxValue ? (val / maxValue) * 100 : 0;
+                                                    // 色の切り替え
+                                                    const barColor = previewMetric === 'population' ? 'bg-blue-400 hover:bg-blue-600' : 'bg-green-400 hover:bg-green-600';
+                                                    const unit = previewMetric === 'population' ? '人' : '円';
+
+                                                    return (
+                                                        <div key={i} className={`flex-1 ${barColor} transition-all rounded-t-sm relative group`} style={{height: `${h}%`}}>
+                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 bg-black text-white text-[9px] px-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none mb-1 whitespace-nowrap z-10 shadow-lg">
+                                                                {d.year}年: {formatJapaneseNumber(val, unit, true)}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                });
+                                            })()}
+                                        </div>
+                                        <div className="flex justify-between text-[9px] text-gray-400 mt-1">
+                                            <span>{chartData[0].year}</span>
+                                            <span>{chartData[chartData.length-1].year}</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex-grow flex flex-col h-full overflow-hidden bg-white">
+                            <div className="p-2 bg-gray-100 border-b border-gray-200 flex justify-between items-center text-xs font-bold text-gray-500">
+                                <span className="pl-2">データリスト ({nationInputData.length}件)</span>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setNationInputData([])} className="px-2 py-1 hover:bg-red-100 text-red-500 rounded">全クリア</button>
+                                    <button onClick={() => {
+                                        const sorted = [...nationInputData].sort((a,b)=>a.year-b.year);
+                                        setNationInputData(sorted);
+                                    }} className="px-2 py-1 hover:bg-gray-200 rounded">年ソート</button>
+                                </div>
+                            </div>
+                            <div className="flex-grow overflow-y-auto custom-scrollbar p-0">
+                                <table className="w-full text-sm text-left whitespace-nowrap">
+                                    <thead className="text-xs text-gray-500 bg-gray-50 sticky top-0 z-10 shadow-sm">
+                                        <tr>
+                                            <th className="px-2 py-2 text-center w-20">年</th>
+                                            <th className="px-2 py-2 text-right">人口</th>
+                                            <th className="px-2 py-2 text-right">GDP</th>
+                                            <th className="px-1 py-2 w-8"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {nationInputData.map((d, idx) => (
+                                            <tr key={idx} className="group hover:bg-blue-50 transition-colors">
+                                                <td className="p-1">
+                                                    <input type="number" value={d.year} onChange={e => handleNationInputChange(idx, 'year', e.target.value)} className="w-full p-1.5 border border-transparent group-hover:bg-white group-hover:border-gray-300 rounded text-center font-bold bg-transparent" placeholder="年" />
+                                                </td>
+                                                <td className="p-1">
+                                                    <input type="number" value={d.population} onChange={e => handleNationInputChange(idx, 'population', e.target.value)} className="w-full p-1.5 border border-transparent group-hover:bg-white group-hover:border-gray-300 rounded text-right font-mono bg-transparent text-blue-800" placeholder="-" />
+                                                </td>
+                                                <td className="p-1">
+                                                    <input type="number" value={d.gdp} onChange={e => handleNationInputChange(idx, 'gdp', e.target.value)} className="w-full p-1.5 border border-transparent group-hover:bg-white group-hover:border-gray-300 rounded text-right font-mono bg-transparent text-green-800" placeholder="-" />
+                                                </td>
+                                                <td className="p-1 text-center">
+                                                    <button onClick={() => removeNationYearRow(idx)} className="text-gray-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"><Icons.X size={16}/></button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                <div className="p-4 border-t border-dashed border-gray-200">
+                                    <button onClick={addNationYearRow} className="w-full py-2 border-2 border-dashed border-gray-300 rounded text-gray-400 font-bold hover:border-blue-400 hover:text-blue-500 flex justify-center items-center gap-2 transition-colors">
+                                        <Icons.Plus size={16}/> 空行を追加
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {mode === 'year' && (
                     <div className="flex flex-col h-full">
                         <div className="p-4 border-b bg-gray-50 flex items-center gap-4">
@@ -2211,7 +2357,7 @@ const StatsManager = ({ setView, nations, stats, setStats }) => {
                         </div>
                         <div className="flex-grow overflow-y-auto custom-scrollbar p-4">
                             <table className="w-full text-sm">
-                                <thead className="bg-gray-100 text-gray-600 sticky top-0">
+                                <thead className="bg-gray-100 text-gray-600 sticky top-0 shadow-sm">
                                     <tr>
                                         <th className="p-3 text-left">国家</th>
                                         <th className="p-3 text-right">人口 (人)</th>
@@ -2235,45 +2381,6 @@ const StatsManager = ({ setView, nations, stats, setStats }) => {
                                     })}
                                 </tbody>
                             </table>
-                        </div>
-                    </div>
-                )}
-
-                {/* --- 国単位モード --- */}
-                {mode === 'nation' && (
-                    <div className="flex flex-col h-full">
-                        <div className="p-4 border-b bg-gray-50 flex items-center gap-4">
-                            <label className="font-bold text-gray-700">対象国:</label>
-                            <select value={targetNationId} onChange={e => setTargetNationId(e.target.value)} className="p-2 border rounded font-bold">
-                                {nations.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
-                            </select>
-                            <div className="flex-grow"></div>
-                            <button onClick={saveNationData} className="bg-green-700 text-white px-6 py-2 rounded font-bold shadow hover:bg-green-600 flex items-center gap-2"><Icons.Save size={18}/> 保存する</button>
-                        </div>
-                        <div className="flex-grow overflow-y-auto custom-scrollbar p-4">
-                            <table className="w-full text-sm">
-                                <thead className="bg-gray-100 text-gray-600 sticky top-0">
-                                    <tr>
-                                        <th className="p-3 text-left w-24">西暦 (年)</th>
-                                        <th className="p-3 text-right">人口 (人)</th>
-                                        <th className="p-3 text-right">GDP (円)</th>
-                                        <th className="p-3 w-12">削除</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {nationInputData.map((d, idx) => (
-                                        <tr key={idx} className="hover:bg-green-50">
-                                            <td className="p-2"><input type="number" value={d.year} onChange={e => handleNationInputChange(idx, 'year', e.target.value)} className="w-full p-2 border rounded font-bold text-center" /></td>
-                                            <td className="p-2"><input type="number" value={d.population} onChange={e => handleNationInputChange(idx, 'population', e.target.value)} className="w-full p-2 border rounded text-right font-mono" /></td>
-                                            <td className="p-2"><input type="number" value={d.gdp} onChange={e => handleNationInputChange(idx, 'gdp', e.target.value)} className="w-full p-2 border rounded text-right font-mono" /></td>
-                                            <td className="p-2 text-center"><button onClick={() => removeNationYearRow(idx)} className="text-red-400 hover:text-red-600"><Icons.Trash2 size={16}/></button></td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                            <button onClick={addNationYearRow} className="w-full mt-2 py-2 border-2 border-dashed border-gray-300 rounded text-gray-500 font-bold hover:border-green-500 hover:text-green-600 flex justify-center items-center gap-2">
-                                <Icons.Plus size={16}/> 行を追加
-                            </button>
                         </div>
                     </div>
                 )}
@@ -3832,15 +3939,18 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
     );
 };
 
-// --- TimelineWiki メインコンポーネント (最終統合版) ---
+
+
+        // --- TimelineWiki メインコンポーネント (Auth対応・完全版) ---
         function TimelineWiki() {
+            // ステート定義
             const [entries, setEntries] = useState([]);
             const [nations, setNations] = useState([]);
             const [stats, setStats] = useState([]);
             const [characters, setCharacters] = useState([]); 
             const [organizations, setOrganizations] = useState([]); 
             
-            const [view, setView] = useState('menu'); // 初期表示はメニュー
+            const [view, setView] = useState('menu'); // 初期画面
             
             const [selectedEntry, setSelectedEntry] = useState(null);
             const [selectedProfileNation, setSelectedProfileNation] = useState(null);
@@ -3854,40 +3964,92 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
             const [targetNation, setTargetNation] = useState(null);
             const [uiScale, setUiScale] = useState(100);
 
+            // ★追加: 認証関連ステート
+            const [currentUser, setCurrentUser] = useState(null);
+            const [isAuthorized, setIsAuthorized] = useState(false);
+
             const fileInputRef = useRef(null);
             const convertFileInputRef = useRef(null);
 
-            // データ読み込み
+            // ★追加: ログイン状態の監視
             useEffect(() => {
-                const savedData = localStorage.getItem('timeline_wiki_data_v10');
-                if (savedData) { try { setEntries(JSON.parse(savedData)); } catch (e) {} } 
-                else { setEntries([{ id: '1', title: '英覇王国の成立', reading: 'えいはおうこくのせいりつ', year: 1825, month: 1, day: 1, content: '初代国王により建国宣言がなされた。', tags: ['建国'], importance: 5 }]); }
-                
-                const savedNations = localStorage.getItem('timeline_wiki_nations_v10');
-                if (savedNations) { try { setNations(JSON.parse(savedNations)); } catch (e) {} } 
-                else { setNations([ { id: 'n1', name: '英覇王国', color: '#fbbf24', eras: [] } ]); }
-                
-                const savedStats = localStorage.getItem('timeline_wiki_stats_v10');
-                if (savedStats) { try { setStats(JSON.parse(savedStats)); } catch (e) {} } else { setStats([]); }
-                
-                const savedScale = localStorage.getItem('timeline_wiki_scale');
-                if (savedScale) { setUiScale(parseInt(savedScale)); }
-                
-                const savedChars = localStorage.getItem('timeline_wiki_characters_v10');
-                if (savedChars) { try { setCharacters(JSON.parse(savedChars)); } catch (e) {} }
-                
-                const savedOrgs = localStorage.getItem('timeline_wiki_orgs_v10');
-                if (savedOrgs) { try { setOrganizations(JSON.parse(savedOrgs)); } catch (e) {} }
+                const unsubscribe = auth.onAuthStateChanged((user) => {
+                    setCurrentUser(user);
+                    // 指定のメアドと一致するか判定
+                    setIsAuthorized(user && user.email === ADMIN_EMAIL);
+                });
+                return () => unsubscribe();
             }, []);
 
-            // データ保存
-            useEffect(() => { localStorage.setItem('timeline_wiki_data_v10', JSON.stringify(entries)); }, [entries]);
-            useEffect(() => { localStorage.setItem('timeline_wiki_nations_v10', JSON.stringify(nations)); }, [nations]);
-            useEffect(() => { localStorage.setItem('timeline_wiki_stats_v10', JSON.stringify(stats)); }, [stats]);
-            useEffect(() => { localStorage.setItem('timeline_wiki_scale', uiScale.toString()); }, [uiScale]);
-            useEffect(() => { localStorage.setItem('timeline_wiki_characters_v10', JSON.stringify(characters)); }, [characters]);
-            useEffect(() => { localStorage.setItem('timeline_wiki_orgs_v10', JSON.stringify(organizations)); }, [organizations]);
+            // ★追加: ログイン・ログアウト処理
+            const handleLogin = async () => {
+                try { await auth.signInWithPopup(googleProvider); } 
+                catch (e) { alert("ログイン失敗: " + e.message); }
+            };
+            const handleLogout = async () => {
+                try { await auth.signOut(); setView('menu'); } 
+                catch (e) { console.error(e); }
+            };
 
+            // ★追加: 権限がない場合の無効化クラス
+            const disabledClass = !isAuthorized ? "opacity-30 grayscale pointer-events-none select-none" : "";
+
+            // Firebase リアルタイム同期
+            useEffect(() => {
+                const unsubscribe = db.collection("wiki_data").doc("main_db")
+                    .onSnapshot((doc) => {
+                        if (doc.exists) {
+                            const data = doc.data();
+                            if (data.entries) setEntries(data.entries);
+                            if (data.nations) setNations(data.nations);
+                            if (data.stats) setStats(data.stats);
+                            if (data.characters) setCharacters(data.characters);
+                            if (data.organizations) setOrganizations(data.organizations);
+                            if (data.uiScale) setUiScale(data.uiScale);
+                        }
+                    }, (error) => {
+                        console.error("同期エラー:", error);
+                    });
+                return () => unsubscribe();
+            }, []);
+
+            // クラウドへの保存関数 (権限チェック付き)
+            const saveToCloud = async (newData = {}) => {
+                // 権限がない場合は保存しない (念のため)
+                if (!isAuthorized) return;
+
+                const dataToSave = {
+                    entries: newData.entries || entries,
+                    nations: newData.nations || nations,
+                    stats: newData.stats || stats,
+                    characters: newData.characters || characters,
+                    organizations: newData.organizations || organizations,
+                    uiScale: newData.uiScale || uiScale,
+                    lastUpdated: new Date().toISOString()
+                };
+                
+                if (!dataToSave.entries || dataToSave.entries.length === 0) return;
+
+                try {
+                    await db.collection("wiki_data").doc("main_db").set(dataToSave, { merge: true });
+                } catch (e) {
+                    console.error("保存失敗:", e);
+                }
+            };
+
+            // 自動保存
+            useEffect(() => {
+                if (!isAuthorized) return; // 権限なければ自動保存もしない
+                const timer = setTimeout(() => {
+                    if (entries.length > 0 || nations.length > 0) {
+                        saveToCloud();
+                    }
+                }, 2000);
+                return () => clearTimeout(timer);
+            }, [entries, nations, stats, characters, organizations, uiScale, isAuthorized]);
+
+
+            // エクスポート・インポート機能
             const handleExport = () => { 
                 const fullData = { entries, nations, stats, characters, organizations }; 
                 const blob = new Blob([JSON.stringify(fullData, null, 2)], { type: 'application/json' }); 
@@ -3898,233 +4060,344 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
             };
 
             const handleImportFile = (event) => { 
+                if (!isAuthorized) return; // ガード
                 const file = event.target.files[0]; if (!file) return; 
                 const reader = new FileReader(); 
-                reader.onload = (e) => { try { const data = JSON.parse(e.target.result); if (window.confirm('警告: 現在のデータをすべて削除し、ファイルの内容に置き換えますか？')) { 
-                    setEntries(Array.isArray(data) ? data : (data.entries || [])); 
-                    setNations(!Array.isArray(data) && data.nations ? data.nations : []); 
-                    setStats(!Array.isArray(data) && data.stats ? data.stats : []); 
-                    setCharacters(!Array.isArray(data) && data.characters ? data.characters : []);
-                    setOrganizations(!Array.isArray(data) && data.organizations ? data.organizations : []);
-                    alert(`インポート完了しました。`); } } catch (error) { console.error(error); alert('読み込みに失敗しました。'); } finally { if (fileInputRef.current) fileInputRef.current.value = ''; } }; reader.readAsText(file); 
+                reader.onload = (e) => { 
+                    try { 
+                        const data = JSON.parse(e.target.result); 
+                        if (window.confirm('警告: 現在のデータをすべて削除し、ファイルの内容に置き換えますか？\n(クラウド上のデータも上書きされます)')) { 
+                            const newEntries = Array.isArray(data) ? data : (data.entries || []);
+                            const newNations = !Array.isArray(data) && data.nations ? data.nations : [];
+                            const newStats = !Array.isArray(data) && data.stats ? data.stats : [];
+                            const newChars = !Array.isArray(data) && data.characters ? data.characters : [];
+                            const newOrgs = !Array.isArray(data) && data.organizations ? data.organizations : [];
+
+                            setEntries(newEntries); setNations(newNations); setStats(newStats); setCharacters(newChars); setOrganizations(newOrgs);
+                            
+                            saveToCloud({ entries: newEntries, nations: newNations, stats: newStats, characters: newChars, organizations: newOrgs });
+                            alert(`インポート完了しました。`); 
+                        } 
+                    } catch (error) { console.error(error); alert('読み込みに失敗しました。'); } 
+                    finally { if (fileInputRef.current) fileInputRef.current.value = ''; } 
+                }; 
+                reader.readAsText(file); 
             };
 
             const handleConvertFile = (event) => { 
-                const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => { try { const data = JSON.parse(e.target.result); if (!window.confirm('既存のデータを保持しつつ、新しい項目のみを追加しますか？')) return; const loadedEntries = Array.isArray(data) ? data : (data.entries || []); const loadedNations = !Array.isArray(data) && data.nations ? data.nations : []; const loadedStats = !Array.isArray(data) && data.stats ? data.stats : []; const loadedChars = !Array.isArray(data) && data.characters ? data.characters : []; const loadedOrgs = !Array.isArray(data) && data.organizations ? data.organizations : []; setEntries(prev => [...prev, ...loadedEntries.filter(e => !prev.some(ex => ex.id === e.id))]); setNations(prev => [...prev, ...loadedNations.filter(n => !prev.some(ex => ex.id === n.id))]); setStats(prev => [...prev, ...loadedStats.filter(s => !prev.some(ex => ex.id === s.id))]); setCharacters(prev => [...prev, ...loadedChars.filter(c => !prev.some(ex => ex.id === c.id))]); setOrganizations(prev => [...prev, ...loadedOrgs.filter(o => !prev.some(ex => ex.id === o.id))]); alert('コンバート完了しました。'); } catch (error) { console.error(error); alert('読み込み失敗'); } finally { if (convertFileInputRef.current) convertFileInputRef.current.value = ''; } }; reader.readAsText(file); 
+                if (!isAuthorized) return; // ガード
+                const file = event.target.files[0]; if (!file) return; 
+                const reader = new FileReader(); 
+                reader.onload = (e) => { 
+                    try { 
+                        const data = JSON.parse(e.target.result); 
+                        if (!window.confirm('既存のデータを保持しつつ、新しい項目のみを追加しますか？')) return; 
+                        
+                        const loadedEntries = Array.isArray(data) ? data : (data.entries || []); 
+                        const loadedNations = !Array.isArray(data) && data.nations ? data.nations : []; 
+                        const loadedStats = !Array.isArray(data) && data.stats ? data.stats : []; 
+                        const loadedChars = !Array.isArray(data) && data.characters ? data.characters : []; 
+                        const loadedOrgs = !Array.isArray(data) && data.organizations ? data.organizations : []; 
+
+                        const mergedEntries = [...entries, ...loadedEntries.filter(e => !entries.some(ex => ex.id === e.id))];
+                        const mergedNations = [...nations, ...loadedNations.filter(n => !nations.some(ex => ex.id === n.id))];
+                        const mergedStats = [...stats, ...loadedStats.filter(s => !stats.some(ex => ex.id === s.id))];
+                        const mergedChars = [...characters, ...loadedChars.filter(c => !characters.some(ex => ex.id === c.id))];
+                        const mergedOrgs = [...organizations, ...loadedOrgs.filter(o => !organizations.some(ex => ex.id === o.id))];
+
+                        setEntries(mergedEntries); setNations(mergedNations); setStats(mergedStats); setCharacters(mergedChars); setOrganizations(mergedOrgs); 
+                        
+                        saveToCloud({ entries: mergedEntries, nations: mergedNations, stats: mergedStats, characters: mergedChars, organizations: mergedOrgs });
+                        alert('コンバート完了しました。'); 
+                    } catch (error) { console.error(error); alert('読み込み失敗'); } 
+                    finally { if (convertFileInputRef.current) convertFileInputRef.current.value = ''; } 
+                }; 
+                reader.readAsText(file); 
             };
             
             const handleCreateNew = () => { 
+                if (!isAuthorized) return;
                 const newEntry = { id: Date.now().toString(), title: '', reading: '', year: DEFAULT_YEAR, month: '', day: '', content: '', tags: [], importance: 2 }; 
                 setSelectedEntry(newEntry); setIsEditing(true); setView('edit'); 
             };
 
             const openSettings = (nation = null) => { setTargetNation(nation); setView('settings'); };
             
-            const timelineItems = useMemo(() => { const items = []; let filteredEntries = entries; if (searchTerm) { const lowerTerm = searchTerm.toLowerCase(); filteredEntries = filteredEntries.filter(e => e.title.toLowerCase().includes(lowerTerm) || (e.reading && e.reading.toLowerCase().includes(lowerTerm)) || e.content.toLowerCase().includes(lowerTerm) || e.year.toString().includes(lowerTerm)); } if (filterTags.length > 0) filteredEntries = filteredEntries.filter(e => e.tags && filterTags.every(tag => e.tags.includes(tag))); if (filterImportance.length > 0) filteredEntries = filteredEntries.filter(e => filterImportance.includes(e.importance || 2)); filteredEntries.forEach(entry => { items.push({ type: 'entry', year: entry.year, month: entry.month || 0, day: entry.day || 0, data: entry }); }); const statsYears = [...new Set(stats.map(s => s.year))]; statsYears.forEach(year => { if (searchTerm && !year.toString().includes(searchTerm)) return; items.push({ type: 'stats_marker', year: year, month: -1, day: -1, id: `stats_marker_${year}` }); }); return items.sort((a, b) => { if (a.year !== b.year) return a.year - b.year; if (a.month !== b.month) return a.month - b.month; return a.day - b.day; }); }, [entries, stats, searchTerm, filterTags, filterImportance]);
+            // タイムライン項目の計算
+            const timelineItems = useMemo(() => { 
+                const items = []; 
+                let filteredEntries = entries; 
+                if (searchTerm) { 
+                    const lowerTerm = searchTerm.toLowerCase(); 
+                    filteredEntries = filteredEntries.filter(e => e.title.toLowerCase().includes(lowerTerm) || (e.reading && e.reading.toLowerCase().includes(lowerTerm)) || e.content.toLowerCase().includes(lowerTerm) || e.year.toString().includes(lowerTerm)); 
+                } 
+                if (filterTags.length > 0) filteredEntries = filteredEntries.filter(e => e.tags && filterTags.every(tag => e.tags.includes(tag))); 
+                if (filterImportance.length > 0) filteredEntries = filteredEntries.filter(e => filterImportance.includes(e.importance || 2)); 
+                
+                filteredEntries.forEach(entry => { items.push({ type: 'entry', year: entry.year, month: entry.month || 0, day: entry.day || 0, data: entry }); }); 
+                
+                const statsYears = [...new Set(stats.map(s => s.year))]; 
+                statsYears.forEach(year => { 
+                    if (searchTerm && !year.toString().includes(searchTerm)) return; 
+                    items.push({ type: 'stats_marker', year: year, month: -1, day: -1, id: `stats_marker_${year}` }); 
+                }); 
+                
+                return items.sort((a, b) => { 
+                    if (a.year !== b.year) return a.year - b.year; 
+                    if (a.month !== b.month) return a.month - b.month; 
+                    return a.day - b.day; 
+                }); 
+            }, [entries, stats, searchTerm, filterTags, filterImportance]);
+
             const allTags = useMemo(() => { const tags = new Set(); entries.forEach(e => e.tags?.forEach(t => tags.add(t))); return Array.from(tags).sort(); }, [entries]);
             let entryCounter = 0;
+            
             const zoomIn = () => setUiScale(prev => Math.min(200, prev + 10));
             const zoomOut = () => setUiScale(prev => Math.max(30, prev - 10));
             const zoomReset = () => setUiScale(100);
 
-            // メニュー画面
-            if (view === 'menu') {
-                return <MainMenu setView={setView} handleCreateNew={handleCreateNew} handleExport={handleExport} fileInputRef={fileInputRef} convertFileInputRef={convertFileInputRef} />;
-            }
-
-            // 通常画面
             return (
-                <div className="min-h-screen bg-[#f0f2f5] font-sans text-gray-800 flex flex-col h-screen overflow-hidden">
-                    <input type="file" ref={fileInputRef} onChange={handleImportFile} className="hidden" accept=".json" />
-                    <input type="file" ref={convertFileInputRef} onChange={handleConvertFile} className="hidden" accept=".json" />
-                    <StatsInputModal showStatsInput={showStatsInput} setShowStatsInput={setShowStatsInput} nations={nations} stats={stats} setStats={setStats} />
+                <>
+                    {/* ファイル操作用の隠しinput */}
+                    <input type="file" ref={fileInputRef} onChange={handleImportFile} className="hidden" accept=".json" disabled={!isAuthorized} />
+                    <input type="file" ref={convertFileInputRef} onChange={handleConvertFile} className="hidden" accept=".json" disabled={!isAuthorized} />
                     
-                    {/* ヘッダー */}
-                    <header className="bg-[#1a1a1a] text-white p-2 shadow-lg shrink-0 z-50 border-b-4 border-yellow-600">
-                        <div className="max-w-7xl mx-auto flex justify-between items-center overflow-x-auto custom-scrollbar pb-1">
-                            <div className="flex items-center gap-4 mr-6 shrink-0">
-                                {/* MENUボタン */}
-                                <button onClick={() => setView('menu')} className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-sm font-bold flex items-center gap-2 transition-colors">
-                                    <Icons.ArrowLeft size={18} /> MENU
-                                </button>
-                                <div className="h-6 w-px bg-gray-700"></div>
-                                <div className="flex items-center gap-2 cursor-pointer group" onClick={() => {setView('timeline'); setSelectedEntry(null);}}>
-                                    <div className="bg-yellow-600 p-1 rounded text-black shrink-0"><Icons.BookOpen size={20} /></div>
-                                    <div><h1 className="text-lg font-bold tracking-widest group-hover:text-yellow-500 transition-colors leading-none">英覇歴代記</h1></div>
-                                </div>
-                            </div>
+                    {/* 統計入力モーダル */}
+                    <StatsInputModal showStatsInput={showStatsInput} setShowStatsInput={setShowStatsInput} nations={nations} stats={stats} setStats={setStats} />
+
+                    {view === 'menu' ? (
+                        // メニュー画面 (Propsを追加)
+                        <MainMenu 
+                            setView={setView} 
+                            handleCreateNew={handleCreateNew} 
+                            handleExport={handleExport} 
+                            fileInputRef={fileInputRef} 
+                            convertFileInputRef={convertFileInputRef}
+                            currentUser={currentUser}
+                            isAuthorized={isAuthorized}
+                            handleLogin={handleLogin}
+                            handleLogout={handleLogout}
+                        />
+                    ) : (
+                        // メインアプリ画面
+                        <div className="min-h-screen bg-[#f0f2f5] font-sans text-gray-800 flex flex-col h-screen overflow-hidden">
                             
-                            <div className="flex items-end gap-3 shrink-0">
-                                <div className="flex flex-col items-center gap-1">
-                                    <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">ZOOM</span>
-                                    <div className="flex items-center bg-gray-700 rounded-lg border border-gray-600">
-                                        <button onClick={zoomOut} className="p-1.5 hover:bg-gray-600 rounded-l text-gray-300"><Icons.Minus size={16}/></button>
-                                        <button onClick={zoomReset} className="text-xs font-mono font-bold w-10 text-center text-yellow-500 hover:text-white">{uiScale}%</button>
-                                        <button onClick={zoomIn} className="p-1.5 hover:bg-gray-600 rounded-r text-gray-300"><Icons.Plus size={16}/></button>
+                            {/* ヘッダー */}
+                            <header className="bg-[#1a1a1a] text-white p-2 shadow-lg shrink-0 z-50 border-b-4 border-yellow-600">
+                                <div className="max-w-7xl mx-auto flex justify-between items-center overflow-x-auto custom-scrollbar pb-1">
+                                    <div className="flex items-center gap-4 mr-6 shrink-0">
+                                        {/* MENUボタン */}
+                                        <button onClick={() => setView('menu')} className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-sm font-bold flex items-center gap-2 transition-colors">
+                                            <Icons.ArrowLeft size={18} /> MENU
+                                        </button>
+                                        <div className="h-6 w-px bg-gray-700"></div>
+                                        <div className="flex items-center gap-2 cursor-pointer group" onClick={() => {setView('timeline'); setSelectedEntry(null);}}>
+                                            <div className="bg-yellow-600 p-1 rounded text-black shrink-0"><Icons.BookOpen size={20} /></div>
+                                            <div><h1 className="text-lg font-bold tracking-widest group-hover:text-yellow-500 transition-colors leading-none">英覇歴代記</h1></div>
+                                        </div>
                                     </div>
-                                </div>
-                                
-                                <div className="flex flex-col items-center gap-1">
-                                    <span className="text-[9px] text-yellow-600/80 font-bold uppercase tracking-widest">MANAGE</span>
-                                    <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 overflow-hidden shadow-sm">
-                                        <button onClick={() => openSettings(null)} className={`p-2 transition-colors border-r border-gray-700 ${view === 'settings' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="国家変遷"><Icons.Globe size={20} /></button>
-                                        <button onClick={() => setView('nation_overview')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'nation_overview' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="概要"><Icons.FileText size={20} /></button>
-                                        <button onClick={() => setView('characters')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'characters' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="人物"><Icons.User size={20} /></button>
-                                        <button onClick={() => setView('organizations')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'organizations' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="組織"><Icons.Briefcase size={20} /></button>
-                                        <button onClick={() => setView('statsEdit')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'statsEdit' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="統計編集"><Icons.BarChart2 size={20} /></button>
-                                        <button onClick={() => setView('power_structure')} className={`p-2 transition-colors ${view === 'power_structure' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="権力構造図"><Icons.Structure size={20} /></button>
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-col items-center gap-1">
-                                    <span className="text-[9px] text-blue-400/60 font-bold uppercase tracking-widest">VIEW</span>
-                                    <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 overflow-hidden shadow-sm">
-                                        <button onClick={() => setView('nation_list')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'nation_list' || view === 'nation_profile' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="国家一覧"><Icons.LayoutGrid size={20} /></button>
-                                        <button onClick={() => setView('graph')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'graph' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="グラフ分析"><Icons.Activity size={20} /></button>
-                                        <button onClick={() => setView('genealogy')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'genealogy' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="系譜図"><Icons.GitMerge size={20} /></button>
-                                        <button onClick={() => setView('table')} className={`p-2 transition-colors ${view === 'table' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="体制一覧"><Icons.List size={20} /></button>
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-col items-center gap-1">
-                                    <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">DATA</span>
-                                    <div className="flex items-center gap-1 border-r border-gray-700 pr-2 mr-1">
-                                    <button onClick={handleExport} className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors" title="エクスポート"><Icons.Upload size={20} /></button>
-                                    <button onClick={() => fileInputRef.current.click()} className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors" title="インポート"><Icons.Download size={20} /></button>
-                                    <button onClick={() => convertFileInputRef.current.click()} className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors" title="コンバート"><Icons.RefreshCw size={20} /></button>
-                                    <button onClick={() => setView('help')} className={`p-2 rounded transition-colors ${view === 'help' ? 'bg-yellow-600 text-black' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`} title="ヘルプ"><Icons.HelpCircle size={20} /></button>
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-col items-center gap-1">
-                                    <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">EDIT</span>
-                                    <button onClick={handleCreateNew} className="bg-yellow-600 text-black px-5 py-2 rounded font-bold flex items-center gap-2 hover:bg-yellow-500 transition-colors text-sm whitespace-nowrap shadow-lg transform hover:scale-105 active:scale-95">
-                                        <Icons.Plus size={18} /><span className="hidden md:inline">歴史を刻む</span>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </header>
-
-                    <div className="flex-grow overflow-auto bg-[#f0f2f5] relative w-full h-full">
-                        <main 
-                            className={(view === 'power_structure' || view === 'genealogy') ? "w-full h-full p-0 overflow-hidden" : "max-w-5xl mx-auto p-4 origin-top-left"} 
-                            style={(view === 'power_structure' || view === 'genealogy') ? {} : { zoom: uiScale / 100 }}
-                        >
-                            {view === 'settings' ? (
-                                <SettingsView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} setTargetNation={setTargetNation} />
-                            ) : view === 'nation_overview' ? (
-                                <NationOverviewView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} />
-                            ) : view === 'characters' ? ( 
-                                <CharacterManager setView={setView} nations={nations} characters={characters} setCharacters={setCharacters} organizations={organizations} setOrganizations={setOrganizations} />
-                            ) : view === 'organizations' ? ( 
-                                <OrganizationManager setView={setView} nations={nations} organizations={organizations} setOrganizations={setOrganizations} characters={characters} setCharacters={setCharacters} />
-                            ) : view === 'statsEdit' ? ( 
-                                <StatsEditView setView={setView} nations={nations} stats={stats} setStats={setStats} />
-                            ) : view === 'power_structure' ? (
-                                <PowerStructureView setView={setView} nations={nations} setNations={setNations} organizations={organizations} characters={characters} />
-                            ) : view === 'graph' ? (
-                                <GraphView setView={setView} stats={stats} nations={nations} />
-                            ) : view === 'genealogy' ? (
-                                <GenealogyView setView={setView} nations={nations} stats={stats} entries={entries} setSelectedEntry={setSelectedEntry} uiScale={uiScale} />
-                            ) : view === 'table' ? (
-                                <NationTableView setView={setView} nations={nations} stats={stats} onEditNation={openSettings} onAddNation={() => openSettings(null)}/>
-                            ) : view === 'nation_list' ? (
-                                <NationListView setView={setView} nations={nations} onSelectNation={(n) => { setSelectedProfileNation(n); setView('nation_profile'); }} />
-                            ) : view === 'nation_profile' && selectedProfileNation ? (
-                                <NationProfileView 
-                                    setView={setView} 
-                                    nation={selectedProfileNation} 
-                                    nations={nations} 
-                                    entries={entries} 
-                                    stats={stats} 
-                                    characters={characters} 
-                                    organizations={organizations} 
-                                    updateNation={(updated) => { setNations(prev => prev.map(n => n.id === updated.id ? updated : n)); setSelectedProfileNation(updated); }}
-                                    onEditEntry={(entry) => { setSelectedEntry(entry); setIsEditing(true); setView('edit'); }}
-                                    onEditNation={() => openSettings(selectedProfileNation)}
-                                    onEditStats={() => setShowStatsInput(true)}
-                                    onEditOverview={() => { setTargetNation(selectedProfileNation); setView('nation_overview'); }}
-                                />
-                            ) : view === 'help' ? (
-                                <HelpView setView={setView} />
-                            ) : view === 'timeline' ? (
-                                <div className="animate-fade-in">
-                                    <div className="mb-8 sticky top-0 z-20 pt-4">
-                                        <div className="relative max-w-2xl mx-auto flex gap-2">
-                                            <div className="relative flex-grow">
-                                                <Icons.Search className="absolute left-4 top-3.5 text-gray-400" size={20} />
-                                                <input type="text" placeholder="検索..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-12 pr-6 py-3 rounded-lg shadow-lg border-none focus:ring-2 focus:ring-yellow-500 transition-all bg-white/95 backdrop-blur" />
+                                    
+                                    <div className="flex items-end gap-3 shrink-0">
+                                        {/* ZOOM Controls */}
+                                        <div className="flex flex-col items-center gap-1">
+                                            <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">ZOOM</span>
+                                            <div className="flex items-center bg-gray-700 rounded-lg border border-gray-600">
+                                                <button onClick={zoomOut} className="p-1.5 hover:bg-gray-600 rounded-l text-gray-300"><Icons.Minus size={16}/></button>
+                                                <button onClick={zoomReset} className="text-xs font-mono font-bold w-10 text-center text-yellow-500 hover:text-white">{uiScale}%</button>
+                                                <button onClick={zoomIn} className="p-1.5 hover:bg-gray-600 rounded-r text-gray-300"><Icons.Plus size={16}/></button>
                                             </div>
-                                            <button onClick={() => setShowFilters(!showFilters)} className={`p-3 rounded-lg shadow-lg transition-colors flex items-center gap-2 font-bold shrink-0 ${(showFilters || filterTags.length > 0 || filterImportance.length > 0) ? 'bg-yellow-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}>
-                                                <Icons.Filter size={20} /><span className="hidden md:inline">条件</span>
+                                        </div>
+                                        
+                                        {/* MANAGE Controls (制限対象) */}
+                                        <div className={`flex flex-col items-center gap-1 ${disabledClass}`}>
+                                            <span className="text-[9px] text-yellow-600/80 font-bold uppercase tracking-widest">MANAGE</span>
+                                            <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 overflow-hidden shadow-sm">
+                                                <button onClick={() => openSettings(null)} className={`p-2 transition-colors border-r border-gray-700 ${view === 'settings' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="国家変遷"><Icons.Globe size={20} /></button>
+                                                <button onClick={() => setView('nation_overview')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'nation_overview' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="概要"><Icons.FileText size={20} /></button>
+                                                <button onClick={() => setView('characters')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'characters' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="人物"><Icons.User size={20} /></button>
+                                                <button onClick={() => setView('organizations')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'organizations' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="組織"><Icons.Briefcase size={20} /></button>
+                                                <button onClick={() => setView('statsEdit')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'statsEdit' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="統計編集"><Icons.BarChart2 size={20} /></button>
+                                                <button onClick={() => setView('power_structure')} className={`p-2 transition-colors ${view === 'power_structure' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="権力構造図"><Icons.Structure size={20} /></button>
+                                            </div>
+                                        </div>
+
+                                        {/* VIEW Controls (全員可能) */}
+                                        <div className="flex flex-col items-center gap-1">
+                                            <span className="text-[9px] text-blue-400/60 font-bold uppercase tracking-widest">VIEW</span>
+                                            <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 overflow-hidden shadow-sm">
+                                                <button onClick={() => setView('nation_list')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'nation_list' || view === 'nation_profile' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="国家一覧"><Icons.LayoutGrid size={20} /></button>
+                                                <button onClick={() => setView('graph')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'graph' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="グラフ分析"><Icons.Activity size={20} /></button>
+                                                <button onClick={() => setView('genealogy')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'genealogy' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="系譜図"><Icons.GitMerge size={20} /></button>
+                                                <button onClick={() => setView('table')} className={`p-2 transition-colors ${view === 'table' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="体制一覧"><Icons.List size={20} /></button>
+                                            </div>
+                                        </div>
+
+                                        {/* DATA Controls (一部制限) */}
+                                        <div className="flex flex-col items-center gap-1">
+                                            <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">DATA</span>
+                                            <div className="flex items-center gap-1 border-r border-gray-700 pr-2 mr-1">
+                                                {/* Exportは誰でもOK */}
+                                                <button onClick={handleExport} className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors" title="エクスポート"><Icons.Upload size={20} /></button>
+                                                
+                                                {/* Import/Convertは制限 */}
+                                                <div className={`flex gap-1 ${disabledClass}`}>
+                                                    <button onClick={() => fileInputRef.current.click()} className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors" title="インポート"><Icons.Download size={20} /></button>
+                                                    <button onClick={() => convertFileInputRef.current.click()} className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors" title="コンバート"><Icons.RefreshCw size={20} /></button>
+                                                </div>
+                                                
+                                                <button onClick={() => setView('help')} className={`p-2 rounded transition-colors ${view === 'help' ? 'bg-yellow-600 text-black' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`} title="ヘルプ"><Icons.HelpCircle size={20} /></button>
+                                            </div>
+                                        </div>
+
+                                        {/* EDIT Controls (制限対象) */}
+                                        <div className={`flex flex-col items-center gap-1 ${disabledClass}`}>
+                                            <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">EDIT</span>
+                                            <button onClick={handleCreateNew} className="bg-yellow-600 text-black px-5 py-2 rounded font-bold flex items-center gap-2 hover:bg-yellow-500 transition-colors text-sm whitespace-nowrap shadow-lg transform hover:scale-105 active:scale-95">
+                                                <Icons.Plus size={18} /><span className="hidden md:inline">歴史を刻む</span>
                                             </button>
                                         </div>
-                                        {showFilters && ( <div className="max-w-2xl mx-auto mt-4 bg-white p-6 rounded-lg shadow-xl border border-gray-200"><div className="flex justify-between items-center mb-4"><h3 className="font-bold text-gray-700">絞り込み条件</h3><button onClick={() => {setFilterTags([]); setFilterImportance([]);}} className="text-xs text-blue-600 hover:underline">条件をクリア</button></div><div className="mb-6"><label className="block text-xs font-bold text-gray-500 mb-2">重要度クラス</label><div className="flex flex-wrap gap-2">{Object.entries(importanceLevels).map(([level, info]) => <button key={level} onClick={() => setFilterImportance(prev => prev.includes(parseInt(level)) ? prev.filter(l => l !== parseInt(level)) : [...prev, parseInt(level)])} className={`px-3 py-1.5 rounded text-sm border transition-all ${filterImportance.includes(parseInt(level)) ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>{info.label}</button>)}</div></div><div><label className="block text-xs font-bold text-gray-500 mb-2">タグ</label><div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">{allTags.length > 0 ? allTags.map(tag => <button key={tag} onClick={() => setFilterTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} className={`px-3 py-1 rounded-full text-xs border flex items-center gap-1 transition-all ${filterTags.includes(tag) ? 'bg-yellow-500 text-white border-yellow-500' : 'bg-gray-50 text-gray-600 border-gray-200'}`}><Icons.Tag size={10} />{tag}</button>) : <span className="text-sm text-gray-400">タグなし</span>}</div></div></div> )}
-                                    </div>
 
-                                    <div className="relative min-h-[600px] pb-20">
-                                        <div className="absolute left-8 md:left-1/2 top-0 bottom-0 w-1.5 bg-gradient-to-b from-gray-800 via-gray-600 to-transparent transform -translate-x-1/2 rounded-full opacity-80"></div>
-                                        <div className="space-y-12">
-                                            {timelineItems.map((item, index) => {
-                                                if (item.type === 'stats_marker') {
-                                                    const hasEntryInSameYear = timelineItems.some(i => i.type === 'entry' && i.year === item.year);
-                                                    return (
-                                                        <div key={item.id} className="relative z-10">
-                                                            {!hasEntryInSameYear && (
-                                                                <>
-                                                                    <div className="absolute left-1/2 transform -translate-x-1/2 top-4 w-3 h-3 bg-gray-300 rounded-full border-2 border-white"></div>
-                                                                    <div className="absolute left-1/2 transform -translate-x-1/2 top-8 bg-gray-100 text-gray-500 text-xs font-bold px-2 py-1 rounded shadow-sm border border-gray-200">
-                                                                        {item.year}年
-                                                                    </div>
-                                                                </>
-                                                            )}
-                                                            <StatsDisplay year={item.year} stats={stats} expandedStatsYears={expandedStatsYears} setExpandedStatsYears={setExpandedStatsYears} nations={nations} />
-                                                        </div>
-                                                    );
-                                                }
-                                                const entry = item.data;
-                                                const level = entry.importance || 2;
-                                                const style = importanceLevels[level];
-                                                const isRight = entryCounter % 2 !== 0;
-                                                entryCounter++;
-                                                let dotStyle = 'w-4 h-4 bg-gray-800 ring-4 ring-gray-200';
-                                                if (level === 6) { dotStyle = 'w-8 h-8 bg-rose-600 ring-4 ring-rose-200 shadow-xl'; } 
-                                                else if (level === 5) { dotStyle = 'w-6 h-6 bg-yellow-500 ring-4 ring-yellow-200'; } 
-                                                else if (level === 4) { dotStyle = 'w-5 h-5 bg-purple-600 ring-4 ring-purple-200'; }
-                                                return (
-                                                    <div key={item.data.id} className={`relative flex flex-col md:flex-row items-center ${isRight ? 'md:flex-row-reverse' : ''}`}>
-                                                        <div className="absolute left-8 md:left-1/2 transform -translate-x-1/2 z-10 flex flex-col items-center group/date">
-                                                            <div className={`${dotStyle} rounded-full shadow-lg mb-2 transition-all`}></div>
-                                                            <div className={`bg-[#1a1a1a] text-xs font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap border flex flex-col items-center ${level === 6 ? 'border-rose-500 text-rose-400' : 'border-gray-700 text-yellow-500'}`}>
-                                                                <span>{entry.year}年</span>
-                                                                {entry.month && <span className="text-[10px] text-gray-300 font-normal mt-0.5">{CUSTOM_MONTHS[entry.month]}({entry.month}月){entry.day ? ` ${entry.day}日` : ''}</span>}
-                                                            </div>
-                                                        </div>
-                                                        <div className={`hidden md:block absolute w-[calc(50%-2rem)] border-t-2 ${level >= 4 ? 'border-yellow-500' : 'border-gray-300'} border-dashed ${isRight ? 'left-8' : 'right-8'}`}></div>
-                                                        <div className="hidden md:block w-1/2"></div>
-                                                        <div className={`w-full md:w-1/2 pl-16 md:pl-0 p-2 transition-all duration-300 ease-out hover:z-10 ${style.scale} ${isRight ? 'md:pr-12 md:pl-8' : 'md:pl-12 md:pr-8'}`}>
-                                                            <div onClick={() => { setSelectedEntry(entry); setView('detail'); }} className={`relative cursor-pointer overflow-hidden rounded-lg shadow-md ${style.bg} border-l-4 ${style.color} hover:shadow-xl hover:-translate-y-1 transition-all p-5`}>
-                                                                <div className="mb-2">{entry.reading && <p className="text-xs text-gray-500 mb-0.5 leading-none">{entry.reading}</p>}<h3 className={`font-bold text-gray-900 leading-tight ${level >= 4 ? 'text-2xl' : 'text-lg'}`}>{entry.title}</h3></div>
-                                                                <p className="text-gray-600 text-sm line-clamp-3 mb-3">{entry.content || '...'}</p>
-                                                                <div className="flex flex-wrap gap-1">{entry.tags?.map(tag => <NationTag key={tag} text={tag} nations={nations} year={entry.year} />)}</div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                            {timelineItems.length === 0 && <div className="text-center py-32"><p className="text-gray-500 font-serif text-lg">記録なし</p></div>}
+                                        {/* USER Controls */}
+                                        <div className="flex flex-col items-center gap-1 ml-1">
+                                            <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">USER</span>
+                                            {currentUser ? (
+                                                <button onClick={handleLogout} className={`flex items-center gap-1 px-2 py-2 rounded text-xs font-bold transition-colors ${isAuthorized ? 'bg-green-700 text-white hover:bg-green-600' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`} title={`Logged in as ${currentUser.email}`}>
+                                                    {currentUser.photoURL ? <img src={currentUser.photoURL} className="w-5 h-5 rounded-full" /> : <Icons.User size={16}/>}
+                                                    <span className="hidden md:inline">{isAuthorized ? 'Admin' : 'Guest'}</span>
+                                                </button>
+                                            ) : (
+                                                <button onClick={handleLogin} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded font-bold text-xs flex items-center gap-1">
+                                                    <Icons.Users size={14}/> Login
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
-                            ) : view === 'edit' && selectedEntry ? (
-                                <EditForm entry={selectedEntry} onSave={(entry) => { const clean = { ...entry, year: parseInt(entry.year)||0, month: entry.month?parseInt(entry.month):null, day: entry.day?parseInt(entry.day):null }; setEntries(prev => prev.some(e => e.id === clean.id) ? prev.map(e => e.id === clean.id ? clean : e) : [...prev, clean]); setIsEditing(false); setSelectedEntry(clean); setView('detail'); }} onCancel={() => { setIsEditing(false); if(!selectedEntry.title) setView('timeline'); else setView('detail'); }} nations={nations} />
-                            ) : view === 'detail' && selectedEntry ? (
-                                <DetailView entry={selectedEntry} onEdit={() => { setIsEditing(true); setView('edit'); }} onClose={() => { setView('timeline'); setSelectedEntry(null); }} onDelete={(id) => { if(window.confirm('削除しますか？')) { setEntries(prev => prev.filter(e => e.id !== id)); setView('timeline'); setSelectedEntry(null); } }} nations={nations} />
-                            ) : null}
-                        </main>
-                    </div>
-                </div>
+                            </header>
+
+                            <div className="flex-grow overflow-auto bg-[#f0f2f5] relative w-full h-full">
+                                <main 
+                                    className={(view === 'power_structure' || view === 'genealogy') ? "w-full h-full p-0 overflow-hidden" : "max-w-5xl mx-auto p-4 origin-top-left"} 
+                                    style={(view === 'power_structure' || view === 'genealogy') ? {} : { zoom: uiScale / 100 }}
+                                >
+                                    {/* 画面切り替えルーティング */}
+                                    {view === 'settings' ? (
+                                        <SettingsView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} setTargetNation={setTargetNation} />
+                                    ) : view === 'nation_overview' ? (
+                                        <NationOverviewView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} />
+                                    ) : view === 'characters' ? ( 
+                                        <CharacterManager setView={setView} nations={nations} characters={characters} setCharacters={setCharacters} organizations={organizations} setOrganizations={setOrganizations} />
+                                    ) : view === 'organizations' ? ( 
+                                        <OrganizationManager setView={setView} nations={nations} organizations={organizations} setOrganizations={setOrganizations} characters={characters} setCharacters={setCharacters} />
+                                    ) : view === 'statsEdit' ? ( 
+                                        <StatsEditView setView={setView} nations={nations} stats={stats} setStats={setStats} />
+                                    ) : view === 'power_structure' ? (
+                                        <PowerStructureView setView={setView} nations={nations} setNations={setNations} organizations={organizations} characters={characters} />
+                                    ) : view === 'graph' ? (
+                                        <GraphView setView={setView} stats={stats} nations={nations} />
+                                    ) : view === 'genealogy' ? (
+                                        <GenealogyView setView={setView} nations={nations} stats={stats} entries={entries} setSelectedEntry={setSelectedEntry} uiScale={uiScale} />
+                                    ) : view === 'table' ? (
+                                        <NationTableView setView={setView} nations={nations} stats={stats} onEditNation={openSettings} onAddNation={() => openSettings(null)}/>
+                                    ) : view === 'nation_list' ? (
+                                        <NationListView setView={setView} nations={nations} onSelectNation={(n) => { setSelectedProfileNation(n); setView('nation_profile'); }} />
+                                    ) : view === 'nation_profile' && selectedProfileNation ? (
+                                        <NationProfileView 
+                                            setView={setView} 
+                                            nation={selectedProfileNation} 
+                                            nations={nations} 
+                                            entries={entries} 
+                                            stats={stats} 
+                                            characters={characters} 
+                                            organizations={organizations} 
+                                            updateNation={(updated) => { setNations(prev => prev.map(n => n.id === updated.id ? updated : n)); setSelectedProfileNation(updated); }}
+                                            onEditEntry={(entry) => { setSelectedEntry(entry); setIsEditing(true); setView('edit'); }}
+                                            onEditNation={() => openSettings(selectedProfileNation)}
+                                            onEditStats={() => setShowStatsInput(true)}
+                                            onEditOverview={() => { setTargetNation(selectedProfileNation); setView('nation_overview'); }}
+                                        />
+                                    ) : view === 'help' ? (
+                                        <HelpView setView={setView} />
+                                    ) : view === 'timeline' ? (
+                                        // ★ TIMELINE VIEW
+                                        <div className="animate-fade-in">
+                                            <div className="mb-8 sticky top-0 z-20 pt-4">
+                                                <div className="relative max-w-2xl mx-auto flex gap-2">
+                                                    <div className="relative flex-grow">
+                                                        <Icons.Search className="absolute left-4 top-3.5 text-gray-400" size={20} />
+                                                        <input type="text" placeholder="検索..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-12 pr-6 py-3 rounded-lg shadow-lg border-none focus:ring-2 focus:ring-yellow-500 transition-all bg-white/95 backdrop-blur" />
+                                                    </div>
+                                                    <button onClick={() => setShowFilters(!showFilters)} className={`p-3 rounded-lg shadow-lg transition-colors flex items-center gap-2 font-bold shrink-0 ${(showFilters || filterTags.length > 0 || filterImportance.length > 0) ? 'bg-yellow-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}>
+                                                        <Icons.Filter size={20} /><span className="hidden md:inline">条件</span>
+                                                    </button>
+                                                </div>
+                                                {showFilters && ( <div className="max-w-2xl mx-auto mt-4 bg-white p-6 rounded-lg shadow-xl border border-gray-200"><div className="flex justify-between items-center mb-4"><h3 className="font-bold text-gray-700">絞り込み条件</h3><button onClick={() => {setFilterTags([]); setFilterImportance([]);}} className="text-xs text-blue-600 hover:underline">条件をクリア</button></div><div className="mb-6"><label className="block text-xs font-bold text-gray-500 mb-2">重要度クラス</label><div className="flex flex-wrap gap-2">{Object.entries(importanceLevels).map(([level, info]) => <button key={level} onClick={() => setFilterImportance(prev => prev.includes(parseInt(level)) ? prev.filter(l => l !== parseInt(level)) : [...prev, parseInt(level)])} className={`px-3 py-1.5 rounded text-sm border transition-all ${filterImportance.includes(parseInt(level)) ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>{info.label}</button>)}</div></div><div><label className="block text-xs font-bold text-gray-500 mb-2">タグ</label><div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">{allTags.length > 0 ? allTags.map(tag => <button key={tag} onClick={() => setFilterTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} className={`px-3 py-1 rounded-full text-xs border flex items-center gap-1 transition-all ${filterTags.includes(tag) ? 'bg-yellow-500 text-white border-yellow-500' : 'bg-gray-50 text-gray-600 border-gray-200'}`}><Icons.Tag size={10} />{tag}</button>) : <span className="text-sm text-gray-400">タグなし</span>}</div></div></div> )}
+                                            </div>
+
+                                            <div className="relative min-h-[600px] pb-20">
+                                                <div className="absolute left-8 md:left-1/2 top-0 bottom-0 w-1.5 bg-gradient-to-b from-gray-800 via-gray-600 to-transparent transform -translate-x-1/2 rounded-full opacity-80"></div>
+                                                <div className="space-y-12">
+                                                    {timelineItems.map((item, index) => {
+                                                        if (item.type === 'stats_marker') {
+                                                            const hasEntryInSameYear = timelineItems.some(i => i.type === 'entry' && i.year === item.year);
+                                                            return (
+                                                                <div key={item.id} className="relative z-10">
+                                                                    {!hasEntryInSameYear && (
+                                                                        <>
+                                                                            <div className="absolute left-1/2 transform -translate-x-1/2 top-4 w-3 h-3 bg-gray-300 rounded-full border-2 border-white"></div>
+                                                                            <div className="absolute left-1/2 transform -translate-x-1/2 top-8 bg-gray-100 text-gray-500 text-xs font-bold px-2 py-1 rounded shadow-sm border border-gray-200">
+                                                                                {item.year}年
+                                                                            </div>
+                                                                        </>
+                                                                    )}
+                                                                    <StatsDisplay year={item.year} stats={stats} expandedStatsYears={expandedStatsYears} setExpandedStatsYears={setExpandedStatsYears} nations={nations} />
+                                                                </div>
+                                                            );
+                                                        }
+                                                        const entry = item.data;
+                                                        const level = entry.importance || 2;
+                                                        const style = importanceLevels[level];
+                                                        const isRight = entryCounter % 2 !== 0;
+                                                        entryCounter++;
+                                                        let dotStyle = 'w-4 h-4 bg-gray-800 ring-4 ring-gray-200';
+                                                        if (level === 6) { dotStyle = 'w-8 h-8 bg-rose-600 ring-4 ring-rose-200 shadow-xl'; } 
+                                                        else if (level === 5) { dotStyle = 'w-6 h-6 bg-yellow-500 ring-4 ring-yellow-200'; } 
+                                                        else if (level === 4) { dotStyle = 'w-5 h-5 bg-purple-600 ring-4 ring-purple-200'; }
+                                                        return (
+                                                            <div key={item.data.id} className={`relative flex flex-col md:flex-row items-center ${isRight ? 'md:flex-row-reverse' : ''}`}>
+                                                                <div className="absolute left-8 md:left-1/2 transform -translate-x-1/2 z-10 flex flex-col items-center group/date">
+                                                                    <div className={`${dotStyle} rounded-full shadow-lg mb-2 transition-all`}></div>
+                                                                    <div className={`bg-[#1a1a1a] text-xs font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap border flex flex-col items-center ${level === 6 ? 'border-rose-500 text-rose-400' : 'border-gray-700 text-yellow-500'}`}>
+                                                                        <span>{entry.year}年</span>
+                                                                        {entry.month && <span className="text-[10px] text-gray-300 font-normal mt-0.5">{CUSTOM_MONTHS[entry.month]}({entry.month}月){entry.day ? ` ${entry.day}日` : ''}</span>}
+                                                                    </div>
+                                                                </div>
+                                                                <div className={`hidden md:block absolute w-[calc(50%-2rem)] border-t-2 ${level >= 4 ? 'border-yellow-500' : 'border-gray-300'} border-dashed ${isRight ? 'left-8' : 'right-8'}`}></div>
+                                                                <div className="hidden md:block w-1/2"></div>
+                                                                <div className={`w-full md:w-1/2 pl-16 md:pl-0 p-2 transition-all duration-300 ease-out hover:z-10 ${style.scale} ${isRight ? 'md:pr-12 md:pl-8' : 'md:pl-12 md:pr-8'}`}>
+                                                                    <div onClick={() => { setSelectedEntry(entry); setView('detail'); }} className={`relative cursor-pointer overflow-hidden rounded-lg shadow-md ${style.bg} border-l-4 ${style.color} hover:shadow-xl hover:-translate-y-1 transition-all p-5`}>
+                                                                        <div className="mb-2">{entry.reading && <p className="text-xs text-gray-500 mb-0.5 leading-none">{entry.reading}</p>}<h3 className={`font-bold text-gray-900 leading-tight ${level >= 4 ? 'text-2xl' : 'text-lg'}`}>{entry.title}</h3></div>
+                                                                        <p className="text-gray-600 text-sm line-clamp-3 mb-3">{entry.content || '...'}</p>
+                                                                        <div className="flex flex-wrap gap-1">{entry.tags?.map(tag => <NationTag key={tag} text={tag} nations={nations} year={entry.year} />)}</div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    {timelineItems.length === 0 && <div className="text-center py-32"><p className="text-gray-500 font-serif text-lg">記録なし</p></div>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : view === 'edit' && selectedEntry ? (
+                                        <EditForm entry={selectedEntry} onSave={(entry) => { const clean = { ...entry, year: parseInt(entry.year)||0, month: entry.month?parseInt(entry.month):null, day: entry.day?parseInt(entry.day):null }; const newEntries = entries.some(e => e.id === clean.id) ? entries.map(e => e.id === clean.id ? clean : e) : [...entries, clean]; setEntries(newEntries); saveToCloud({ entries: newEntries }); setIsEditing(false); setSelectedEntry(clean); setView('detail'); }} onCancel={() => { setIsEditing(false); if(!selectedEntry.title) setView('timeline'); else setView('detail'); }} nations={nations} />
+                                    ) : view === 'detail' && selectedEntry ? (
+                                        <DetailView entry={selectedEntry} onEdit={() => { setIsEditing(true); setView('edit'); }} onClose={() => { setView('timeline'); setSelectedEntry(null); }} onDelete={(id) => { if(window.confirm('削除しますか？')) { const newEntries = entries.filter(e => e.id !== id); setEntries(newEntries); saveToCloud({ entries: newEntries }); setView('timeline'); setSelectedEntry(null); } }} nations={nations} />
+                                    ) : null}
+                                </main>
+                            </div>
+                        </div>
+                    )}
+                </>
             );
         }
 

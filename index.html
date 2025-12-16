@@ -3995,35 +3995,86 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
             const [targetNation, setTargetNation] = useState(null);
             const [uiScale, setUiScale] = useState(100);
 
-            // ★追加: 認証関連ステート
-            const [currentUser, setCurrentUser] = useState(null);
-            const [isAuthorized, setIsAuthorized] = useState(false);
+            // ★変更: 権限管理用ステート
+            const [userRole, setUserRole] = useState('guest'); // 'guest', 'pending', 'writer', 'admin'
+            const [applicants, setApplicants] = useState([]); // 申請者リスト(管理者用)
 
-            const fileInputRef = useRef(null);
-            const convertFileInputRef = useRef(null);
+            // ★ 権限判定 (ハードコードのADMIN_EMAILは「スーパー管理者」として残しつつ、DBのロールも見る)
+            const canEdit = userRole === 'admin' || userRole === 'writer' || (currentUser && currentUser.email === ADMIN_EMAIL);
+            const isAdmin = userRole === 'admin' || (currentUser && currentUser.email === ADMIN_EMAIL);
 
-            // ★追加: ログイン状態の監視
+            // 権限がない場合の無効化クラス (canEditを使用)
+            const disabledClass = !canEdit ? "opacity-30 grayscale pointer-events-none select-none" : "";
+
+            // ★変更: ログイン監視とユーザー情報の取得
             useEffect(() => {
-                const unsubscribe = auth.onAuthStateChanged((user) => {
+                const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
                     setCurrentUser(user);
-                    // 指定のメアドと一致するか判定
-                    setIsAuthorized(user && user.email === ADMIN_EMAIL);
+                    if (user) {
+                        // Firestoreからユーザー情報を取得
+                        const userDoc = await db.collection('users').doc(user.uid).get();
+                        if (userDoc.exists) {
+                            setUserRole(userDoc.data().role);
+                        } else {
+                            // 未登録ならゲスト
+                            setUserRole('guest');
+                        }
+                    } else {
+                        setUserRole('guest');
+                    }
                 });
-                return () => unsubscribe();
+                return () => unsubscribeAuth();
             }, []);
 
-            // ★追加: ログイン・ログアウト処理
-            const handleLogin = async () => {
-                try { await auth.signInWithPopup(googleProvider); } 
-                catch (e) { alert("ログイン失敗: " + e.message); }
-            };
-            const handleLogout = async () => {
-                try { await auth.signOut(); setView('menu'); } 
-                catch (e) { console.error(e); }
+            // ★追加: 管理者用 - 申請者リストのリアルタイム監視
+            useEffect(() => {
+                if (!isAdmin) return;
+                // roleが 'pending' のユーザーを監視
+                const unsubscribeUsers = db.collection('users')
+                    .where('role', '==', 'pending')
+                    .onSnapshot(snap => {
+                        const apps = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        setApplicants(apps);
+                    });
+                return () => unsubscribeUsers();
+            }, [isAdmin]);
+
+            // ★追加: アカウント申請処理
+            const handleApplyAccount = async () => {
+                if (!currentUser) return;
+                try {
+                    await db.collection('users').doc(currentUser.uid).set({
+                        email: currentUser.email,
+                        displayName: currentUser.displayName,
+                        photoURL: currentUser.photoURL,
+                        role: 'pending', // 申請中ステータス
+                        appliedAt: new Date().toISOString()
+                    });
+                    setUserRole('pending');
+                    alert("申請しました。管理者の承認をお待ちください。");
+                } catch (e) {
+                    console.error(e);
+                    alert("申請に失敗しました。");
+                }
             };
 
-            // ★追加: 権限がない場合の無効化クラス
-            const disabledClass = !isAuthorized ? "opacity-30 grayscale pointer-events-none select-none" : "";
+            // ★追加: 権限付与処理 (管理者のみ実行可能)
+            const handleApproveUser = async (uid, newRole) => {
+                if (!isAdmin) return;
+                try {
+                    if (newRole === 'reject') {
+                        // 不認可の場合はドキュメントを削除するか、roleをrejectedにする
+                        await db.collection('users').doc(uid).update({ role: 'rejected' });
+                        alert("申請を却下しました。");
+                    } else {
+                        await db.collection('users').doc(uid).update({ role: newRole });
+                        alert(`権限を ${newRole} に変更しました。`);
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert("処理に失敗しました。");
+                }
+            };
 
             // Firebase リアルタイム同期
             useEffect(() => {
@@ -4047,7 +4098,7 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
             // クラウドへの保存関数 (権限チェック付き)
             const saveToCloud = async (newData = {}) => {
                 // 権限がない場合は保存しない (念のため)
-                if (!isAuthorized) return;
+                if (!canEdit) return;
 
                 const dataToSave = {
                     entries: newData.entries || entries,
@@ -4070,7 +4121,7 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
 
             // 自動保存
             useEffect(() => {
-                if (!isAuthorized) return; // 権限なければ自動保存もしない
+                if (!canEdit) return; // 権限なければ自動保存もしない
                 const timer = setTimeout(() => {
                     if (entries.length > 0 || nations.length > 0) {
                         saveToCloud();
@@ -4091,7 +4142,7 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
             };
 
             const handleImportFile = (event) => { 
-                if (!isAuthorized) return; // ガード
+                if (!canEdit) return; // ガード
                 const file = event.target.files[0]; if (!file) return; 
                 const reader = new FileReader(); 
                 reader.onload = (e) => { 
@@ -4116,7 +4167,7 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
             };
 
             const handleConvertFile = (event) => { 
-                if (!isAuthorized) return; // ガード
+                if (!canEdit) return; // ガード
                 const file = event.target.files[0]; if (!file) return; 
                 const reader = new FileReader(); 
                 reader.onload = (e) => { 
@@ -4147,7 +4198,7 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
             };
             
             const handleCreateNew = () => { 
-                if (!isAuthorized) return;
+                if (!canEdit) return;
                 const newEntry = { id: Date.now().toString(), title: '', reading: '', year: DEFAULT_YEAR, month: '', day: '', content: '', tags: [], importance: 2 }; 
                 setSelectedEntry(newEntry); setIsEditing(true); setView('edit'); 
             };
@@ -4190,8 +4241,8 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
             return (
                 <>
                     {/* ファイル操作用の隠しinput */}
-                    <input type="file" ref={fileInputRef} onChange={handleImportFile} className="hidden" accept=".json" disabled={!isAuthorized} />
-                    <input type="file" ref={convertFileInputRef} onChange={handleConvertFile} className="hidden" accept=".json" disabled={!isAuthorized} />
+                    <input type="file" ref={fileInputRef} onChange={handleImportFile} className="hidden" accept=".json" disabled={!canEdit} />
+                    <input type="file" ref={convertFileInputRef} onChange={handleConvertFile} className="hidden" accept=".json" disabled={!canEdit} />
                     
                     {/* 統計入力モーダル */}
                     <StatsInputModal showStatsInput={showStatsInput} setShowStatsInput={setShowStatsInput} nations={nations} stats={stats} setStats={setStats} />

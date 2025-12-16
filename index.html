@@ -4332,12 +4332,6 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                                                 <button onClick={() => setView('help')} className={`p-2 rounded transition-colors ${view === 'help' ? 'bg-yellow-600 text-black' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`} title="ヘルプ"><Icons.HelpCircle size={20} /></button>
                                             </div>
                                         </div>
-
-                                        <div className={`flex flex-col items-center gap-1 ${disabledClass}`}>
-                                            <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">EDIT</span>
-                                            <button onClick={handleCreateNew} className="bg-yellow-600 text-black px-5 py-2 rounded font-bold flex items-center gap-2 hover:bg-yellow-500 transition-colors text-sm whitespace-nowrap shadow-lg transform hover:scale-105 active:scale-95"><Icons.Plus size={18} /><span className="hidden md:inline">歴史を刻む</span></button>
-                                        </div>
-
                                         {/* USER Controls */}
                                         <div className="flex flex-col items-center gap-1 ml-1">
                                             <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">USER</span>

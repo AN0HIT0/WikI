@@ -3849,6 +3849,43 @@ const NationProfileView = ({ setView, nation: initialNation, nations, entries, s
     );
 };
 
+// --- UserManagementView コンポーネント (新規追加) ---
+const UserManagementView = ({ setView, applicants, onApprove }) => {
+    return (
+        <div className="min-h-[calc(100vh-120px)] flex flex-col gap-4 animate-fade-in pb-20">
+            <SectionHeader icon={Icons.Users} title="アカウント申請管理" desc="編集権限の申請一覧です。役割を選択して承認してください。" />
+            
+            <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
+                <div className="p-4 bg-gray-50 border-b font-bold text-gray-700">申請待ちユーザー ({applicants.length})</div>
+                
+                {applicants.length === 0 ? (
+                    <div className="p-8 text-center text-gray-400">現在、申請はありません。</div>
+                ) : (
+                    <div className="divide-y divide-gray-100">
+                        {applicants.map(user => (
+                            <div key={user.id} className="p-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+                                <div className="flex items-center gap-3">
+                                    <img src={user.photoURL} className="w-10 h-10 rounded-full border" />
+                                    <div>
+                                        <div className="font-bold text-gray-800">{user.displayName}</div>
+                                        <div className="text-xs text-gray-500">{user.email}</div>
+                                        <div className="text-[10px] text-gray-400">申請日: {new Date(user.appliedAt).toLocaleDateString()}</div>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => onApprove(user.id, 'admin')} className="px-3 py-1.5 bg-gray-800 text-white text-xs font-bold rounded hover:bg-black">管理者として認可</button>
+                                    <button onClick={() => onApprove(user.id, 'writer')} className="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded hover:bg-blue-700">執筆者として認可</button>
+                                    <button onClick={() => onApprove(user.id, 'reject')} className="px-3 py-1.5 bg-red-100 text-red-600 text-xs font-bold rounded hover:bg-red-200">不認可</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 // --- MainMenu コンポーネント (修正版: ログイン制限対応) ---
 const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, convertFileInputRef, currentUser, isAuthorized, handleLogin, handleLogout }) => {
     
@@ -3972,16 +4009,15 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
 };
 
 
-        // --- TimelineWiki メインコンポーネント (Auth対応・完全版) ---
+// --- TimelineWiki メインコンポーネント (修正完了版) ---
         function TimelineWiki() {
-            // ステート定義
             const [entries, setEntries] = useState([]);
             const [nations, setNations] = useState([]);
             const [stats, setStats] = useState([]);
             const [characters, setCharacters] = useState([]); 
             const [organizations, setOrganizations] = useState([]); 
             
-            const [view, setView] = useState('menu'); // 初期画面
+            const [view, setView] = useState('menu'); 
             
             const [selectedEntry, setSelectedEntry] = useState(null);
             const [selectedProfileNation, setSelectedProfileNation] = useState(null);
@@ -3995,28 +4031,35 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
             const [targetNation, setTargetNation] = useState(null);
             const [uiScale, setUiScale] = useState(100);
 
-            // ★変更: 権限管理用ステート
-            const [userRole, setUserRole] = useState('guest'); // 'guest', 'pending', 'writer', 'admin'
-            const [applicants, setApplicants] = useState([]); // 申請者リスト(管理者用)
+            // ★修正: ここで currentUser を定義
+            const [currentUser, setCurrentUser] = useState(null);
 
-            // ★ 権限判定 (ハードコードのADMIN_EMAILは「スーパー管理者」として残しつつ、DBのロールも見る)
+            // ★権限管理用ステート
+            const [userRole, setUserRole] = useState('guest'); 
+            const [applicants, setApplicants] = useState([]); 
+
+            // ★権限判定ロジック
             const canEdit = userRole === 'admin' || userRole === 'writer' || (currentUser && currentUser.email === ADMIN_EMAIL);
             const isAdmin = userRole === 'admin' || (currentUser && currentUser.email === ADMIN_EMAIL);
+            
+            // ★重要: エラー回避のため isAuthorized を canEdit のエイリアスとして定義
+            const isAuthorized = canEdit;
 
-            // 権限がない場合の無効化クラス (canEditを使用)
+            const fileInputRef = useRef(null);
+            const convertFileInputRef = useRef(null);
+
+            // 権限がない場合の無効化クラス
             const disabledClass = !canEdit ? "opacity-30 grayscale pointer-events-none select-none" : "";
 
-            // ★変更: ログイン監視とユーザー情報の取得
+            // ログイン監視
             useEffect(() => {
                 const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
                     setCurrentUser(user);
                     if (user) {
-                        // Firestoreからユーザー情報を取得
                         const userDoc = await db.collection('users').doc(user.uid).get();
                         if (userDoc.exists) {
                             setUserRole(userDoc.data().role);
                         } else {
-                            // 未登録ならゲスト
                             setUserRole('guest');
                         }
                     } else {
@@ -4026,10 +4069,9 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                 return () => unsubscribeAuth();
             }, []);
 
-            // ★追加: 管理者用 - 申請者リストのリアルタイム監視
+            // 管理者用: 申請者リスト監視
             useEffect(() => {
                 if (!isAdmin) return;
-                // roleが 'pending' のユーザーを監視
                 const unsubscribeUsers = db.collection('users')
                     .where('role', '==', 'pending')
                     .onSnapshot(snap => {
@@ -4039,7 +4081,7 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                 return () => unsubscribeUsers();
             }, [isAdmin]);
 
-            // ★追加: アカウント申請処理
+            // アカウント申請
             const handleApplyAccount = async () => {
                 if (!currentUser) return;
                 try {
@@ -4047,7 +4089,7 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                         email: currentUser.email,
                         displayName: currentUser.displayName,
                         photoURL: currentUser.photoURL,
-                        role: 'pending', // 申請中ステータス
+                        role: 'pending',
                         appliedAt: new Date().toISOString()
                     });
                     setUserRole('pending');
@@ -4058,12 +4100,11 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                 }
             };
 
-            // ★追加: 権限付与処理 (管理者のみ実行可能)
+            // 権限承認 (管理者のみ)
             const handleApproveUser = async (uid, newRole) => {
                 if (!isAdmin) return;
                 try {
                     if (newRole === 'reject') {
-                        // 不認可の場合はドキュメントを削除するか、roleをrejectedにする
                         await db.collection('users').doc(uid).update({ role: 'rejected' });
                         alert("申請を却下しました。");
                     } else {
@@ -4076,7 +4117,17 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                 }
             };
 
-            // Firebase リアルタイム同期
+            // ログイン・ログアウト
+            const handleLogin = async () => {
+                try { await auth.signInWithPopup(googleProvider); } 
+                catch (e) { alert("ログイン失敗: " + e.message); }
+            };
+            const handleLogout = async () => {
+                try { await auth.signOut(); setView('menu'); } 
+                catch (e) { console.error(e); }
+            };
+
+            // データ同期
             useEffect(() => {
                 const unsubscribe = db.collection("wiki_data").doc("main_db")
                     .onSnapshot((doc) => {
@@ -4095,11 +4146,9 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                 return () => unsubscribe();
             }, []);
 
-            // クラウドへの保存関数 (権限チェック付き)
+            // クラウド保存
             const saveToCloud = async (newData = {}) => {
-                // 権限がない場合は保存しない (念のため)
                 if (!canEdit) return;
-
                 const dataToSave = {
                     entries: newData.entries || entries,
                     nations: newData.nations || nations,
@@ -4109,9 +4158,7 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                     uiScale: newData.uiScale || uiScale,
                     lastUpdated: new Date().toISOString()
                 };
-                
                 if (!dataToSave.entries || dataToSave.entries.length === 0) return;
-
                 try {
                     await db.collection("wiki_data").doc("main_db").set(dataToSave, { merge: true });
                 } catch (e) {
@@ -4119,19 +4166,18 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                 }
             };
 
-            // 自動保存
+            // 自動保存 (修正: 依存配列を isAuthorized から canEdit に変更)
             useEffect(() => {
-                if (!canEdit) return; // 権限なければ自動保存もしない
+                if (!canEdit) return;
                 const timer = setTimeout(() => {
                     if (entries.length > 0 || nations.length > 0) {
                         saveToCloud();
                     }
                 }, 2000);
                 return () => clearTimeout(timer);
-            }, [entries, nations, stats, characters, organizations, uiScale, isAuthorized]);
+            }, [entries, nations, stats, characters, organizations, uiScale, canEdit]);
 
-
-            // エクスポート・インポート機能
+            // エクスポート
             const handleExport = () => { 
                 const fullData = { entries, nations, stats, characters, organizations }; 
                 const blob = new Blob([JSON.stringify(fullData, null, 2)], { type: 'application/json' }); 
@@ -4141,22 +4187,21 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                 document.body.appendChild(link); link.click(); document.body.removeChild(link); 
             };
 
+            // インポート
             const handleImportFile = (event) => { 
-                if (!canEdit) return; // ガード
+                if (!canEdit) return;
                 const file = event.target.files[0]; if (!file) return; 
                 const reader = new FileReader(); 
                 reader.onload = (e) => { 
                     try { 
                         const data = JSON.parse(e.target.result); 
-                        if (window.confirm('警告: 現在のデータをすべて削除し、ファイルの内容に置き換えますか？\n(クラウド上のデータも上書きされます)')) { 
+                        if (window.confirm('警告: 現在のデータをすべて削除し、ファイルの内容に置き換えますか？')) { 
                             const newEntries = Array.isArray(data) ? data : (data.entries || []);
                             const newNations = !Array.isArray(data) && data.nations ? data.nations : [];
                             const newStats = !Array.isArray(data) && data.stats ? data.stats : [];
                             const newChars = !Array.isArray(data) && data.characters ? data.characters : [];
                             const newOrgs = !Array.isArray(data) && data.organizations ? data.organizations : [];
-
                             setEntries(newEntries); setNations(newNations); setStats(newStats); setCharacters(newChars); setOrganizations(newOrgs);
-                            
                             saveToCloud({ entries: newEntries, nations: newNations, stats: newStats, characters: newChars, organizations: newOrgs });
                             alert(`インポート完了しました。`); 
                         } 
@@ -4166,29 +4211,26 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                 reader.readAsText(file); 
             };
 
+            // コンバート
             const handleConvertFile = (event) => { 
-                if (!canEdit) return; // ガード
+                if (!canEdit) return;
                 const file = event.target.files[0]; if (!file) return; 
                 const reader = new FileReader(); 
                 reader.onload = (e) => { 
                     try { 
                         const data = JSON.parse(e.target.result); 
                         if (!window.confirm('既存のデータを保持しつつ、新しい項目のみを追加しますか？')) return; 
-                        
                         const loadedEntries = Array.isArray(data) ? data : (data.entries || []); 
                         const loadedNations = !Array.isArray(data) && data.nations ? data.nations : []; 
                         const loadedStats = !Array.isArray(data) && data.stats ? data.stats : []; 
                         const loadedChars = !Array.isArray(data) && data.characters ? data.characters : []; 
                         const loadedOrgs = !Array.isArray(data) && data.organizations ? data.organizations : []; 
-
                         const mergedEntries = [...entries, ...loadedEntries.filter(e => !entries.some(ex => ex.id === e.id))];
                         const mergedNations = [...nations, ...loadedNations.filter(n => !nations.some(ex => ex.id === n.id))];
                         const mergedStats = [...stats, ...loadedStats.filter(s => !stats.some(ex => ex.id === s.id))];
                         const mergedChars = [...characters, ...loadedChars.filter(c => !characters.some(ex => ex.id === c.id))];
                         const mergedOrgs = [...organizations, ...loadedOrgs.filter(o => !organizations.some(ex => ex.id === o.id))];
-
                         setEntries(mergedEntries); setNations(mergedNations); setStats(mergedStats); setCharacters(mergedChars); setOrganizations(mergedOrgs); 
-                        
                         saveToCloud({ entries: mergedEntries, nations: mergedNations, stats: mergedStats, characters: mergedChars, organizations: mergedOrgs });
                         alert('コンバート完了しました。'); 
                     } catch (error) { console.error(error); alert('読み込み失敗'); } 
@@ -4205,7 +4247,6 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
 
             const openSettings = (nation = null) => { setTargetNation(nation); setView('settings'); };
             
-            // タイムライン項目の計算
             const timelineItems = useMemo(() => { 
                 const items = []; 
                 let filteredEntries = entries; 
@@ -4217,38 +4258,27 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                 if (filterImportance.length > 0) filteredEntries = filteredEntries.filter(e => filterImportance.includes(e.importance || 2)); 
                 
                 filteredEntries.forEach(entry => { items.push({ type: 'entry', year: entry.year, month: entry.month || 0, day: entry.day || 0, data: entry }); }); 
-                
                 const statsYears = [...new Set(stats.map(s => s.year))]; 
                 statsYears.forEach(year => { 
                     if (searchTerm && !year.toString().includes(searchTerm)) return; 
                     items.push({ type: 'stats_marker', year: year, month: -1, day: -1, id: `stats_marker_${year}` }); 
                 }); 
-                
-                return items.sort((a, b) => { 
-                    if (a.year !== b.year) return a.year - b.year; 
-                    if (a.month !== b.month) return a.month - b.month; 
-                    return a.day - b.day; 
-                }); 
+                return items.sort((a, b) => { if (a.year !== b.year) return a.year - b.year; if (a.month !== b.month) return a.month - b.month; return a.day - b.day; }); 
             }, [entries, stats, searchTerm, filterTags, filterImportance]);
 
             const allTags = useMemo(() => { const tags = new Set(); entries.forEach(e => e.tags?.forEach(t => tags.add(t))); return Array.from(tags).sort(); }, [entries]);
             let entryCounter = 0;
-            
             const zoomIn = () => setUiScale(prev => Math.min(200, prev + 10));
             const zoomOut = () => setUiScale(prev => Math.max(30, prev - 10));
             const zoomReset = () => setUiScale(100);
 
             return (
                 <>
-                    {/* ファイル操作用の隠しinput */}
                     <input type="file" ref={fileInputRef} onChange={handleImportFile} className="hidden" accept=".json" disabled={!canEdit} />
                     <input type="file" ref={convertFileInputRef} onChange={handleConvertFile} className="hidden" accept=".json" disabled={!canEdit} />
-                    
-                    {/* 統計入力モーダル */}
                     <StatsInputModal showStatsInput={showStatsInput} setShowStatsInput={setShowStatsInput} nations={nations} stats={stats} setStats={setStats} />
 
                     {view === 'menu' ? (
-                        // メニュー画面 (Propsを追加)
                         <MainMenu 
                             setView={setView} 
                             handleCreateNew={handleCreateNew} 
@@ -4256,19 +4286,15 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                             fileInputRef={fileInputRef} 
                             convertFileInputRef={convertFileInputRef}
                             currentUser={currentUser}
-                            isAuthorized={isAuthorized}
+                            isAuthorized={isAuthorized} // ★修正: isAuthorized(実体はcanEdit)を渡す
                             handleLogin={handleLogin}
                             handleLogout={handleLogout}
                         />
                     ) : (
-                        // メインアプリ画面
                         <div className="min-h-screen bg-[#f0f2f5] font-sans text-gray-800 flex flex-col h-screen overflow-hidden">
-                            
-                            {/* ヘッダー */}
                             <header className="bg-[#1a1a1a] text-white p-2 shadow-lg shrink-0 z-50 border-b-4 border-yellow-600">
                                 <div className="max-w-7xl mx-auto flex justify-between items-center overflow-x-auto custom-scrollbar pb-1">
                                     <div className="flex items-center gap-4 mr-6 shrink-0">
-                                        {/* MENUボタン */}
                                         <button onClick={() => setView('menu')} className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-sm font-bold flex items-center gap-2 transition-colors">
                                             <Icons.ArrowLeft size={18} /> MENU
                                         </button>
@@ -4278,19 +4304,9 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                                             <div><h1 className="text-lg font-bold tracking-widest group-hover:text-yellow-500 transition-colors leading-none">英覇歴代記</h1></div>
                                         </div>
                                     </div>
-                                    
                                     <div className="flex items-end gap-3 shrink-0">
-                                        {/* ZOOM Controls */}
-                                        <div className="flex flex-col items-center gap-1">
-                                            <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">ZOOM</span>
-                                            <div className="flex items-center bg-gray-700 rounded-lg border border-gray-600">
-                                                <button onClick={zoomOut} className="p-1.5 hover:bg-gray-600 rounded-l text-gray-300"><Icons.Minus size={16}/></button>
-                                                <button onClick={zoomReset} className="text-xs font-mono font-bold w-10 text-center text-yellow-500 hover:text-white">{uiScale}%</button>
-                                                <button onClick={zoomIn} className="p-1.5 hover:bg-gray-600 rounded-r text-gray-300"><Icons.Plus size={16}/></button>
-                                            </div>
-                                        </div>
+                                        <div className="flex flex-col items-center gap-1"><span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">ZOOM</span><div className="flex items-center bg-gray-700 rounded-lg border border-gray-600"><button onClick={zoomOut} className="p-1.5 hover:bg-gray-600 rounded-l text-gray-300"><Icons.Minus size={16}/></button><button onClick={zoomReset} className="text-xs font-mono font-bold w-10 text-center text-yellow-500 hover:text-white">{uiScale}%</button><button onClick={zoomIn} className="p-1.5 hover:bg-gray-600 rounded-r text-gray-300"><Icons.Plus size={16}/></button></div></div>
                                         
-                                        {/* MANAGE Controls (制限対象) */}
                                         <div className={`flex flex-col items-center gap-1 ${disabledClass}`}>
                                             <span className="text-[9px] text-yellow-600/80 font-bold uppercase tracking-widest">MANAGE</span>
                                             <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 overflow-hidden shadow-sm">
@@ -4303,54 +4319,49 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                                             </div>
                                         </div>
 
-                                        {/* VIEW Controls (全員可能) */}
-                                        <div className="flex flex-col items-center gap-1">
-                                            <span className="text-[9px] text-blue-400/60 font-bold uppercase tracking-widest">VIEW</span>
-                                            <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 overflow-hidden shadow-sm">
-                                                <button onClick={() => setView('nation_list')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'nation_list' || view === 'nation_profile' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="国家一覧"><Icons.LayoutGrid size={20} /></button>
-                                                <button onClick={() => setView('graph')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'graph' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="グラフ分析"><Icons.Activity size={20} /></button>
-                                                <button onClick={() => setView('genealogy')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'genealogy' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="系譜図"><Icons.GitMerge size={20} /></button>
-                                                <button onClick={() => setView('table')} className={`p-2 transition-colors ${view === 'table' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="体制一覧"><Icons.List size={20} /></button>
-                                            </div>
-                                        </div>
-
-                                        {/* DATA Controls (一部制限) */}
+                                        <div className="flex flex-col items-center gap-1"><span className="text-[9px] text-blue-400/60 font-bold uppercase tracking-widest">VIEW</span><div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 overflow-hidden shadow-sm"><button onClick={() => setView('nation_list')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'nation_list' || view === 'nation_profile' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="国家一覧"><Icons.LayoutGrid size={20} /></button><button onClick={() => setView('graph')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'graph' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="グラフ分析"><Icons.Activity size={20} /></button><button onClick={() => setView('genealogy')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'genealogy' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="系譜図"><Icons.GitMerge size={20} /></button><button onClick={() => setView('table')} className={`p-2 transition-colors ${view === 'table' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="体制一覧"><Icons.List size={20} /></button></div></div>
+                                        
                                         <div className="flex flex-col items-center gap-1">
                                             <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">DATA</span>
                                             <div className="flex items-center gap-1 border-r border-gray-700 pr-2 mr-1">
-                                                {/* Exportは誰でもOK */}
                                                 <button onClick={handleExport} className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors" title="エクスポート"><Icons.Upload size={20} /></button>
-                                                
-                                                {/* Import/Convertは制限 */}
                                                 <div className={`flex gap-1 ${disabledClass}`}>
                                                     <button onClick={() => fileInputRef.current.click()} className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors" title="インポート"><Icons.Download size={20} /></button>
                                                     <button onClick={() => convertFileInputRef.current.click()} className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors" title="コンバート"><Icons.RefreshCw size={20} /></button>
                                                 </div>
-                                                
                                                 <button onClick={() => setView('help')} className={`p-2 rounded transition-colors ${view === 'help' ? 'bg-yellow-600 text-black' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`} title="ヘルプ"><Icons.HelpCircle size={20} /></button>
                                             </div>
                                         </div>
 
-                                        {/* EDIT Controls (制限対象) */}
                                         <div className={`flex flex-col items-center gap-1 ${disabledClass}`}>
                                             <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">EDIT</span>
-                                            <button onClick={handleCreateNew} className="bg-yellow-600 text-black px-5 py-2 rounded font-bold flex items-center gap-2 hover:bg-yellow-500 transition-colors text-sm whitespace-nowrap shadow-lg transform hover:scale-105 active:scale-95">
-                                                <Icons.Plus size={18} /><span className="hidden md:inline">歴史を刻む</span>
-                                            </button>
+                                            <button onClick={handleCreateNew} className="bg-yellow-600 text-black px-5 py-2 rounded font-bold flex items-center gap-2 hover:bg-yellow-500 transition-colors text-sm whitespace-nowrap shadow-lg transform hover:scale-105 active:scale-95"><Icons.Plus size={18} /><span className="hidden md:inline">歴史を刻む</span></button>
                                         </div>
 
                                         {/* USER Controls */}
                                         <div className="flex flex-col items-center gap-1 ml-1">
                                             <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">USER</span>
                                             {currentUser ? (
-                                                <button onClick={handleLogout} className={`flex items-center gap-1 px-2 py-2 rounded text-xs font-bold transition-colors ${isAuthorized ? 'bg-green-700 text-white hover:bg-green-600' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`} title={`Logged in as ${currentUser.email}`}>
-                                                    {currentUser.photoURL ? <img src={currentUser.photoURL} className="w-5 h-5 rounded-full" /> : <Icons.User size={16}/>}
-                                                    <span className="hidden md:inline">{isAuthorized ? 'Admin' : 'Guest'}</span>
-                                                </button>
+                                                <div className="flex items-center gap-2">
+                                                    {isAdmin && (
+                                                        <button onClick={() => setView('user_management')} className="relative p-2 bg-gray-700 text-yellow-400 rounded hover:bg-gray-600" title="申請管理">
+                                                            <Icons.Users size={16} />
+                                                            {applicants.length > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping"></span>}
+                                                        </button>
+                                                    )}
+                                                    {userRole === 'guest' && (
+                                                        <button onClick={handleApplyAccount} className="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-green-700">申請する</button>
+                                                    )}
+                                                    {userRole === 'pending' && (
+                                                        <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded border border-yellow-200">承認待ち</span>
+                                                    )}
+                                                    <button onClick={handleLogout} className={`flex items-center gap-1 px-2 py-2 rounded text-xs font-bold transition-colors ${canEdit ? 'bg-green-700 text-white hover:bg-green-600' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`} title={`Logged in as ${currentUser.email}`}>
+                                                        {currentUser.photoURL ? <img src={currentUser.photoURL} className="w-5 h-5 rounded-full" /> : <Icons.User size={16}/>}
+                                                        <span className="hidden md:inline">{userRole === 'admin' ? 'Admin' : userRole === 'writer' ? 'Writer' : 'Guest'}</span>
+                                                    </button>
+                                                </div>
                                             ) : (
-                                                <button onClick={handleLogin} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded font-bold text-xs flex items-center gap-1">
-                                                    <Icons.Users size={14}/> Login
-                                                </button>
+                                                <button onClick={handleLogin} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded font-bold text-xs flex items-center gap-1"><Icons.Users size={14}/> Login</button>
                                             )}
                                         </div>
                                     </div>
@@ -4358,64 +4369,16 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                             </header>
 
                             <div className="flex-grow overflow-auto bg-[#f0f2f5] relative w-full h-full">
-                                <main 
-                                    className={(view === 'power_structure' || view === 'genealogy') ? "w-full h-full p-0 overflow-hidden" : "max-w-5xl mx-auto p-4 origin-top-left"} 
-                                    style={(view === 'power_structure' || view === 'genealogy') ? {} : { zoom: uiScale / 100 }}
-                                >
-                                    {/* 画面切り替えルーティング */}
-                                    {view === 'settings' ? (
-                                        <SettingsView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} setTargetNation={setTargetNation} />
-                                    ) : view === 'nation_overview' ? (
-                                        <NationOverviewView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} />
-                                    ) : view === 'characters' ? ( 
-                                        <CharacterManager setView={setView} nations={nations} characters={characters} setCharacters={setCharacters} organizations={organizations} setOrganizations={setOrganizations} />
-                                    ) : view === 'organizations' ? ( 
-                                        <OrganizationManager setView={setView} nations={nations} organizations={organizations} setOrganizations={setOrganizations} characters={characters} setCharacters={setCharacters} />
-                                    ) : view === 'statsEdit' ? ( 
-                                        <StatsEditView setView={setView} nations={nations} stats={stats} setStats={setStats} />
-                                    ) : view === 'power_structure' ? (
-                                        <PowerStructureView setView={setView} nations={nations} setNations={setNations} organizations={organizations} characters={characters} />
-                                    ) : view === 'graph' ? (
-                                        <GraphView setView={setView} stats={stats} nations={nations} />
-                                    ) : view === 'genealogy' ? (
-                                        <GenealogyView setView={setView} nations={nations} stats={stats} entries={entries} setSelectedEntry={setSelectedEntry} uiScale={uiScale} />
-                                    ) : view === 'table' ? (
-                                        <NationTableView setView={setView} nations={nations} stats={stats} onEditNation={openSettings} onAddNation={() => openSettings(null)}/>
-                                    ) : view === 'nation_list' ? (
-                                        <NationListView setView={setView} nations={nations} onSelectNation={(n) => { setSelectedProfileNation(n); setView('nation_profile'); }} />
-                                    ) : view === 'nation_profile' && selectedProfileNation ? (
-                                        <NationProfileView 
-                                            setView={setView} 
-                                            nation={selectedProfileNation} 
-                                            nations={nations} 
-                                            entries={entries} 
-                                            stats={stats} 
-                                            characters={characters} 
-                                            organizations={organizations} 
-                                            updateNation={(updated) => { setNations(prev => prev.map(n => n.id === updated.id ? updated : n)); setSelectedProfileNation(updated); }}
-                                            onEditEntry={(entry) => { setSelectedEntry(entry); setIsEditing(true); setView('edit'); }}
-                                            onEditNation={() => openSettings(selectedProfileNation)}
-                                            onEditStats={() => setShowStatsInput(true)}
-                                            onEditOverview={() => { setTargetNation(selectedProfileNation); setView('nation_overview'); }}
-                                        />
-                                    ) : view === 'help' ? (
-                                        <HelpView setView={setView} />
-                                    ) : view === 'timeline' ? (
-                                        // ★ TIMELINE VIEW
+                                <main className={(view === 'power_structure' || view === 'genealogy') ? "w-full h-full p-0 overflow-hidden" : "max-w-5xl mx-auto p-4 origin-top-left"} style={(view === 'power_structure' || view === 'genealogy') ? {} : { zoom: uiScale / 100 }}>
+                                    {view === 'settings' ? <SettingsView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} setTargetNation={setTargetNation} /> : view === 'nation_overview' ? <NationOverviewView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} /> : view === 'characters' ? <CharacterManager setView={setView} nations={nations} characters={characters} setCharacters={setCharacters} organizations={organizations} setOrganizations={setOrganizations} /> : view === 'organizations' ? <OrganizationManager setView={setView} nations={nations} organizations={organizations} setOrganizations={setOrganizations} characters={characters} setCharacters={setCharacters} /> : view === 'statsEdit' ? <StatsEditView setView={setView} nations={nations} stats={stats} setStats={setStats} /> : view === 'power_structure' ? <PowerStructureView setView={setView} nations={nations} setNations={setNations} organizations={organizations} characters={characters} /> : view === 'user_management' && isAdmin ? <UserManagementView setView={setView} applicants={applicants} onApprove={handleApproveUser} /> : view === 'graph' ? <GraphView setView={setView} stats={stats} nations={nations} /> : view === 'genealogy' ? <GenealogyView setView={setView} nations={nations} stats={stats} entries={entries} setSelectedEntry={setSelectedEntry} uiScale={uiScale} /> : view === 'table' ? <NationTableView setView={setView} nations={nations} stats={stats} onEditNation={openSettings} onAddNation={() => openSettings(null)}/> : view === 'nation_list' ? <NationListView setView={setView} nations={nations} onSelectNation={(n) => { setSelectedProfileNation(n); setView('nation_profile'); }} /> : view === 'nation_profile' && selectedProfileNation ? <NationProfileView setView={setView} nation={selectedProfileNation} nations={nations} entries={entries} stats={stats} characters={characters} organizations={organizations} updateNation={(updated) => { setNations(prev => prev.map(n => n.id === updated.id ? updated : n)); setSelectedProfileNation(updated); }} onEditEntry={(entry) => { setSelectedEntry(entry); setIsEditing(true); setView('edit'); }} onEditNation={() => openSettings(selectedProfileNation)} onEditStats={() => setShowStatsInput(true)} onEditOverview={() => { setTargetNation(selectedProfileNation); setView('nation_overview'); }} /> : view === 'help' ? <HelpView setView={setView} /> : view === 'timeline' ? (
                                         <div className="animate-fade-in">
                                             <div className="mb-8 sticky top-0 z-20 pt-4">
                                                 <div className="relative max-w-2xl mx-auto flex gap-2">
-                                                    <div className="relative flex-grow">
-                                                        <Icons.Search className="absolute left-4 top-3.5 text-gray-400" size={20} />
-                                                        <input type="text" placeholder="検索..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-12 pr-6 py-3 rounded-lg shadow-lg border-none focus:ring-2 focus:ring-yellow-500 transition-all bg-white/95 backdrop-blur" />
-                                                    </div>
-                                                    <button onClick={() => setShowFilters(!showFilters)} className={`p-3 rounded-lg shadow-lg transition-colors flex items-center gap-2 font-bold shrink-0 ${(showFilters || filterTags.length > 0 || filterImportance.length > 0) ? 'bg-yellow-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}>
-                                                        <Icons.Filter size={20} /><span className="hidden md:inline">条件</span>
-                                                    </button>
+                                                    <div className="relative flex-grow"><Icons.Search className="absolute left-4 top-3.5 text-gray-400" size={20} /><input type="text" placeholder="検索..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-12 pr-6 py-3 rounded-lg shadow-lg border-none focus:ring-2 focus:ring-yellow-500 transition-all bg-white/95 backdrop-blur" /></div>
+                                                    <button onClick={() => setShowFilters(!showFilters)} className={`p-3 rounded-lg shadow-lg transition-colors flex items-center gap-2 font-bold shrink-0 ${(showFilters || filterTags.length > 0 || filterImportance.length > 0) ? 'bg-yellow-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}><Icons.Filter size={20} /><span className="hidden md:inline">条件</span></button>
                                                 </div>
                                                 {showFilters && ( <div className="max-w-2xl mx-auto mt-4 bg-white p-6 rounded-lg shadow-xl border border-gray-200"><div className="flex justify-between items-center mb-4"><h3 className="font-bold text-gray-700">絞り込み条件</h3><button onClick={() => {setFilterTags([]); setFilterImportance([]);}} className="text-xs text-blue-600 hover:underline">条件をクリア</button></div><div className="mb-6"><label className="block text-xs font-bold text-gray-500 mb-2">重要度クラス</label><div className="flex flex-wrap gap-2">{Object.entries(importanceLevels).map(([level, info]) => <button key={level} onClick={() => setFilterImportance(prev => prev.includes(parseInt(level)) ? prev.filter(l => l !== parseInt(level)) : [...prev, parseInt(level)])} className={`px-3 py-1.5 rounded text-sm border transition-all ${filterImportance.includes(parseInt(level)) ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>{info.label}</button>)}</div></div><div><label className="block text-xs font-bold text-gray-500 mb-2">タグ</label><div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">{allTags.length > 0 ? allTags.map(tag => <button key={tag} onClick={() => setFilterTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} className={`px-3 py-1 rounded-full text-xs border flex items-center gap-1 transition-all ${filterTags.includes(tag) ? 'bg-yellow-500 text-white border-yellow-500' : 'bg-gray-50 text-gray-600 border-gray-200'}`}><Icons.Tag size={10} />{tag}</button>) : <span className="text-sm text-gray-400">タグなし</span>}</div></div></div> )}
                                             </div>
-
                                             <div className="relative min-h-[600px] pb-20">
                                                 <div className="absolute left-8 md:left-1/2 top-0 bottom-0 w-1.5 bg-gradient-to-b from-gray-800 via-gray-600 to-transparent transform -translate-x-1/2 rounded-full opacity-80"></div>
                                                 <div className="space-y-12">
@@ -4423,46 +4386,16 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                                                         if (item.type === 'stats_marker') {
                                                             const hasEntryInSameYear = timelineItems.some(i => i.type === 'entry' && i.year === item.year);
                                                             return (
-                                                                <div key={item.id} className="relative z-10">
-                                                                    {!hasEntryInSameYear && (
-                                                                        <>
-                                                                            <div className="absolute left-1/2 transform -translate-x-1/2 top-4 w-3 h-3 bg-gray-300 rounded-full border-2 border-white"></div>
-                                                                            <div className="absolute left-1/2 transform -translate-x-1/2 top-8 bg-gray-100 text-gray-500 text-xs font-bold px-2 py-1 rounded shadow-sm border border-gray-200">
-                                                                                {item.year}年
-                                                                            </div>
-                                                                        </>
-                                                                    )}
-                                                                    <StatsDisplay year={item.year} stats={stats} expandedStatsYears={expandedStatsYears} setExpandedStatsYears={setExpandedStatsYears} nations={nations} />
-                                                                </div>
+                                                                <div key={item.id} className="relative z-10">{!hasEntryInSameYear && (<><div className="absolute left-1/2 transform -translate-x-1/2 top-4 w-3 h-3 bg-gray-300 rounded-full border-2 border-white"></div><div className="absolute left-1/2 transform -translate-x-1/2 top-8 bg-gray-100 text-gray-500 text-xs font-bold px-2 py-1 rounded shadow-sm border border-gray-200">{item.year}年</div></>)}<StatsDisplay year={item.year} stats={stats} expandedStatsYears={expandedStatsYears} setExpandedStatsYears={setExpandedStatsYears} nations={nations} /></div>
                                                             );
                                                         }
-                                                        const entry = item.data;
-                                                        const level = entry.importance || 2;
-                                                        const style = importanceLevels[level];
-                                                        const isRight = entryCounter % 2 !== 0;
-                                                        entryCounter++;
-                                                        let dotStyle = 'w-4 h-4 bg-gray-800 ring-4 ring-gray-200';
-                                                        if (level === 6) { dotStyle = 'w-8 h-8 bg-rose-600 ring-4 ring-rose-200 shadow-xl'; } 
-                                                        else if (level === 5) { dotStyle = 'w-6 h-6 bg-yellow-500 ring-4 ring-yellow-200'; } 
-                                                        else if (level === 4) { dotStyle = 'w-5 h-5 bg-purple-600 ring-4 ring-purple-200'; }
+                                                        const entry = item.data; const level = entry.importance || 2; const style = importanceLevels[level]; const isRight = entryCounter % 2 !== 0; entryCounter++;
+                                                        let dotStyle = 'w-4 h-4 bg-gray-800 ring-4 ring-gray-200'; if (level === 6) { dotStyle = 'w-8 h-8 bg-rose-600 ring-4 ring-rose-200 shadow-xl'; } else if (level === 5) { dotStyle = 'w-6 h-6 bg-yellow-500 ring-4 ring-yellow-200'; } else if (level === 4) { dotStyle = 'w-5 h-5 bg-purple-600 ring-4 ring-purple-200'; }
                                                         return (
                                                             <div key={item.data.id} className={`relative flex flex-col md:flex-row items-center ${isRight ? 'md:flex-row-reverse' : ''}`}>
-                                                                <div className="absolute left-8 md:left-1/2 transform -translate-x-1/2 z-10 flex flex-col items-center group/date">
-                                                                    <div className={`${dotStyle} rounded-full shadow-lg mb-2 transition-all`}></div>
-                                                                    <div className={`bg-[#1a1a1a] text-xs font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap border flex flex-col items-center ${level === 6 ? 'border-rose-500 text-rose-400' : 'border-gray-700 text-yellow-500'}`}>
-                                                                        <span>{entry.year}年</span>
-                                                                        {entry.month && <span className="text-[10px] text-gray-300 font-normal mt-0.5">{CUSTOM_MONTHS[entry.month]}({entry.month}月){entry.day ? ` ${entry.day}日` : ''}</span>}
-                                                                    </div>
-                                                                </div>
-                                                                <div className={`hidden md:block absolute w-[calc(50%-2rem)] border-t-2 ${level >= 4 ? 'border-yellow-500' : 'border-gray-300'} border-dashed ${isRight ? 'left-8' : 'right-8'}`}></div>
-                                                                <div className="hidden md:block w-1/2"></div>
-                                                                <div className={`w-full md:w-1/2 pl-16 md:pl-0 p-2 transition-all duration-300 ease-out hover:z-10 ${style.scale} ${isRight ? 'md:pr-12 md:pl-8' : 'md:pl-12 md:pr-8'}`}>
-                                                                    <div onClick={() => { setSelectedEntry(entry); setView('detail'); }} className={`relative cursor-pointer overflow-hidden rounded-lg shadow-md ${style.bg} border-l-4 ${style.color} hover:shadow-xl hover:-translate-y-1 transition-all p-5`}>
-                                                                        <div className="mb-2">{entry.reading && <p className="text-xs text-gray-500 mb-0.5 leading-none">{entry.reading}</p>}<h3 className={`font-bold text-gray-900 leading-tight ${level >= 4 ? 'text-2xl' : 'text-lg'}`}>{entry.title}</h3></div>
-                                                                        <p className="text-gray-600 text-sm line-clamp-3 mb-3">{entry.content || '...'}</p>
-                                                                        <div className="flex flex-wrap gap-1">{entry.tags?.map(tag => <NationTag key={tag} text={tag} nations={nations} year={entry.year} />)}</div>
-                                                                    </div>
-                                                                </div>
+                                                                <div className="absolute left-8 md:left-1/2 transform -translate-x-1/2 z-10 flex flex-col items-center group/date"><div className={`${dotStyle} rounded-full shadow-lg mb-2 transition-all`}></div><div className={`bg-[#1a1a1a] text-xs font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap border flex flex-col items-center ${level === 6 ? 'border-rose-500 text-rose-400' : 'border-gray-700 text-yellow-500'}`}><span>{entry.year}年</span>{entry.month && <span className="text-[10px] text-gray-300 font-normal mt-0.5">{CUSTOM_MONTHS[entry.month]}({entry.month}月){entry.day ? ` ${entry.day}日` : ''}</span>}</div></div>
+                                                                <div className={`hidden md:block absolute w-[calc(50%-2rem)] border-t-2 ${level >= 4 ? 'border-yellow-500' : 'border-gray-300'} border-dashed ${isRight ? 'left-8' : 'right-8'}`}></div><div className="hidden md:block w-1/2"></div>
+                                                                <div className={`w-full md:w-1/2 pl-16 md:pl-0 p-2 transition-all duration-300 ease-out hover:z-10 ${style.scale} ${isRight ? 'md:pr-12 md:pl-8' : 'md:pl-12 md:pr-8'}`}><div onClick={() => { setSelectedEntry(entry); setView('detail'); }} className={`relative cursor-pointer overflow-hidden rounded-lg shadow-md ${style.bg} border-l-4 ${style.color} hover:shadow-xl hover:-translate-y-1 transition-all p-5`}><div className="mb-2">{entry.reading && <p className="text-xs text-gray-500 mb-0.5 leading-none">{entry.reading}</p>}<h3 className={`font-bold text-gray-900 leading-tight ${level >= 4 ? 'text-2xl' : 'text-lg'}`}>{entry.title}</h3></div><p className="text-gray-600 text-sm line-clamp-3 mb-3">{entry.content || '...'}</p><div className="flex flex-wrap gap-1">{entry.tags?.map(tag => <NationTag key={tag} text={tag} nations={nations} year={entry.year} />)}</div></div></div>
                                                             </div>
                                                         );
                                                     })}

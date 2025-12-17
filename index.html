@@ -31,6 +31,18 @@ body { font-family: 'Helvetica Neue', Arial, sans-serif; }
 <script type="text/babel">
 
 const { useState, useEffect, useMemo, useRef } = React;
+// --- 追加: 自動分割用の定数と関数 ---
+const CHUNK_SIZE = 800 * 1024; // 800KB (Firestoreの1MB制限に対する安全マージン)
+
+// 文字列を指定サイズで分割する関数
+const chunkString = (str, size) => {
+    const numChunks = Math.ceil(str.length / size);
+    const chunks = [];
+    for (let i = 0, o = 0; i < numChunks; ++i, o += size) {
+        chunks.push(str.substr(o, size));
+    }
+    return chunks;
+};
 
 // ★ Firebase設定 (ここをご自身のプロジェクトの設定に書き換えてください)
 const firebaseConfig = {
@@ -4074,7 +4086,6 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
 };
 
 
-// --- TimelineWiki メインコンポーネント (修正版・完全記述) ---
 function TimelineWiki() {
     const [entries, setEntries] = useState([]);
     const [nations, setNations] = useState([]);
@@ -4101,17 +4112,19 @@ function TimelineWiki() {
     const [userRole, setUserRole] = useState('guest'); 
     const [allUsers, setallUsers] = useState([]);
 
+    // ★追加: 同期状態管理用のState
+    const [isSyncing, setIsSyncing] = useState(false);
+    
+    // ★追加: 同期ループ防止用フラグ
+    const isRemoteUpdate = useRef(false);
+
     // 権限判定
     const canEdit = userRole === 'admin' || userRole === 'writer' || (currentUser && currentUser.email === ADMIN_EMAIL);
     const isAdmin = userRole === 'admin' || (currentUser && currentUser.email === ADMIN_EMAIL);
     
-    // ★重要: 同期ループ防止用フラグ
-    const isRemoteUpdate = useRef(false);
-
     const fileInputRef = useRef(null);
     const convertFileInputRef = useRef(null);
 
-    // 権限がない場合の無効化クラス
     const disabledClass = !canEdit ? "opacity-30 grayscale pointer-events-none select-none" : "";
 
     // 1. ログイン監視
@@ -4119,10 +4132,8 @@ function TimelineWiki() {
         const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
             setCurrentUser(user);
             if (user) {
-                // 特権管理者のメールアドレスなら、DBに関わらず強制的に admin
                 if (user.email === ADMIN_EMAIL) {
                     setUserRole('admin');
-                    // DB側も整合性を取るために更新
                     const userDoc = await db.collection('users').doc(user.uid).get();
                     if (!userDoc.exists || userDoc.data().role !== 'admin') {
                         db.collection('users').doc(user.uid).set({
@@ -4134,7 +4145,6 @@ function TimelineWiki() {
                         }, { merge: true });
                     }
                 } else {
-                    // 一般ユーザーはDBの情報を参照
                     const userDoc = await db.collection('users').doc(user.uid).get();
                     if (userDoc.exists) {
                         setUserRole(userDoc.data().role);
@@ -4160,63 +4170,75 @@ function TimelineWiki() {
         return () => unsubscribeUsers();
     }, [isAdmin]);
 
-// 3. データ同期（分割読み込み版）
+    // 3. データ同期 (自動分割読み込み対応版)
     useEffect(() => {
-        // 各カテゴリごとにリスナー（監視役）を設置
-        const refs = {
-            entries: db.collection("wiki_data").doc("db_entries"),
-            nations: db.collection("wiki_data").doc("db_nations"),
-            stats: db.collection("wiki_data").doc("db_stats"),
-            characters: db.collection("wiki_data").doc("db_characters"),
-            organizations: db.collection("wiki_data").doc("db_organizations"),
-            config: db.collection("wiki_data").doc("db_config") // 設定用
-        };
-
-        // 解除用関数のリスト
         const unsubscribers = [];
+        
+        // カテゴリごとの読み込みハンドラ
+        const subscribeCategory = (category, setter) => {
+            const unsub = db.collection("wiki_data").doc(`meta_${category}`)
+                .onSnapshot(async (doc) => {
+                    if (!doc.exists) return;
 
-        // 共通のデータ受信処理関数
-        const setupListener = (docRef, setter, keyName) => {
-            const unsub = docRef.onSnapshot((doc) => {
-                if (doc.exists) {
-                    const data = doc.data();
-                    // クラウド由来の更新であることをマーク
+                    const meta = doc.data();
+                    const totalChunks = meta.totalChunks || 0;
+                    
+                    // クラウド更新フラグをON
                     isRemoteUpdate.current = true;
-                    // データ構造が { list: [...] } か、旧形式かを判別してセット
-                    if (data.list) {
-                        setter(data.list);
-                    } else if (data[keyName]) { 
-                        // 旧データ形式からの移行用
-                        setter(data[keyName]);
+                    setIsSyncing(true); 
+
+                    try {
+                        // 分割された全チャンクを並列取得
+                        const promises = [];
+                        for (let i = 0; i < totalChunks; i++) {
+                            promises.push(db.collection("wiki_data").doc(`data_${category}_${i}`).get());
+                        }
+                        
+                        const snapshots = await Promise.all(promises);
+                        
+                        // 文字列結合して復元
+                        let combinedJson = "";
+                        snapshots.forEach(snap => {
+                            if (snap.exists) combinedJson += snap.data().content;
+                        });
+
+                        if (combinedJson) {
+                            const data = JSON.parse(combinedJson);
+                            setter(data);
+                        }
+                    } catch (error) {
+                        console.error(`${category} load error:`, error);
+                    } finally {
+                        setIsSyncing(false);
                     }
-                }
-            }, (err) => console.error(`${keyName} sync error:`, err));
+                });
             unsubscribers.push(unsub);
         };
 
-        setupListener(refs.entries, setEntries, 'entries');
-        setupListener(refs.nations, setNations, 'nations');
-        setupListener(refs.stats, setStats, 'stats');
-        setupListener(refs.characters, setCharacters, 'characters');
-        setupListener(refs.organizations, setOrganizations, 'organizations');
-        
-        // 設定（uiScaleなど）だけは別扱い
-        const unsubConfig = refs.config.onSnapshot(doc => {
-            if(doc.exists && doc.data().uiScale) setUiScale(doc.data().uiScale);
+        subscribeCategory('entries', setEntries);
+        subscribeCategory('nations', setNations);
+        subscribeCategory('stats', setStats);
+        subscribeCategory('characters', setCharacters);
+        subscribeCategory('organizations', setOrganizations);
+
+        // 設定は軽いのでそのまま
+        const unsubConfig = db.collection("wiki_data").doc("db_config").onSnapshot(d => {
+            if(d.exists) {
+                isRemoteUpdate.current = true;
+                if (d.data().uiScale) setUiScale(d.data().uiScale);
+            }
         });
         unsubscribers.push(unsubConfig);
 
-        // コンポーネント削除時に全リスナーを解除
-        return () => {
-            unsubscribers.forEach(u => u());
-        };
+        return () => unsubscribers.forEach(u => u());
     }, []);
 
-    // 4. クラウド保存処理（分割保存版）
+    // 4. クラウド保存処理 (自動分割保存対応版)
     const saveToCloud = async (newData = {}) => {
         if (!canEdit) return;
 
-        // 保存対象のデータを特定（引数がなければ現在のstateを使う）
+        setIsSyncing(true); // グルグル開始
+
         const currentData = {
             entries: newData.entries || entries,
             nations: newData.nations || nations,
@@ -4226,56 +4248,63 @@ function TimelineWiki() {
             uiScale: newData.uiScale || uiScale
         };
 
-        // 変更があったカテゴリだけ保存するのが理想ですが、
-        // 確実性を期して、引数に含まれるカテゴリ（更新されたもの）を保存します。
-        // 引数が空の場合は自動保存なので、全データをチェックして保存します。
-        
-        const batchPromises = [];
-        const timestamp = new Date().toISOString();
+        // 保存ヘルパー: データを分割してFirestoreに書き込む
+        const saveCategory = async (categoryName, dataObj) => {
+            // データが空ならスキップ（消去事故防止）
+            if (!dataObj || (Array.isArray(dataObj) && dataObj.length === 0)) return;
 
-        // カテゴリごとに個別のドキュメントへ保存（{ list: [...] } の形式でラップ）
-        // merge: false にすることで、ゴミデータを残さずクリーンに上書きします
-        
-        // エラーハンドリング用ヘルパー
-        const saveDoc = (docName, dataPayload) => {
-            return db.collection("wiki_data").doc(docName)
-                .set({ ...dataPayload, lastUpdated: timestamp }, { merge: true })
-                .catch(e => {
-                    console.error(`保存失敗 [${docName}]:`, e);
-                    if (e.code === 'invalid-argument' && e.message.includes('exceeds the maximum allowed size')) {
-                        alert(`【保存エラー】\n${docName} のデータ量が大きすぎます（1MB制限超過）。\n画像を減らすか、解像度を下げてください。`);
-                    }
-                    throw e;
+            try {
+                const jsonStr = JSON.stringify(dataObj);
+                const chunks = chunkString(jsonStr, CHUNK_SIZE);
+                const timestamp = new Date().toISOString();
+
+                const batch = db.batch();
+
+                // 1. メタデータを保存
+                const metaRef = db.collection("wiki_data").doc(`meta_${categoryName}`);
+                batch.set(metaRef, {
+                    totalChunks: chunks.length,
+                    totalSize: jsonStr.length,
+                    lastUpdated: timestamp
                 });
+
+                // 2. 実データを分割して保存
+                chunks.forEach((chunk, index) => {
+                    const chunkRef = db.collection("wiki_data").doc(`data_${categoryName}_${index}`);
+                    batch.set(chunkRef, { content: chunk, index: index });
+                });
+
+                await batch.commit();
+                console.log(`Saved ${categoryName}: ${chunks.length} chunks`);
+
+            } catch (e) {
+                console.error(`Save failed for ${categoryName}:`, e);
+                if (e.code === 'invalid-argument') {
+                    alert(`保存エラー: ${categoryName} のデータが巨大すぎます。`);
+                }
+            }
         };
 
-        // 必要なデータのみ並列保存
-        // newDataにキーがある（明示的な更新）または 自動保存のタイミング
         try {
-            if (newData.entries || entries.length > 0) 
-                batchPromises.push(saveDoc("db_entries", { list: currentData.entries }));
+            const promises = [];
+            // 更新対象または全データを保存
+            if (newData.entries || entries.length > 0) promises.push(saveCategory('entries', currentData.entries));
+            if (newData.nations || nations.length > 0) promises.push(saveCategory('nations', currentData.nations));
+            if (newData.stats || stats.length > 0) promises.push(saveCategory('stats', currentData.stats));
+            if (newData.characters || characters.length > 0) promises.push(saveCategory('characters', currentData.characters));
+            if (newData.organizations || organizations.length > 0) promises.push(saveCategory('organizations', currentData.organizations));
             
-            if (newData.nations || nations.length > 0) 
-                batchPromises.push(saveDoc("db_nations", { list: currentData.nations }));
-            
-            if (newData.stats || stats.length > 0) 
-                batchPromises.push(saveDoc("db_stats", { list: currentData.stats }));
-            
-            if (newData.characters || characters.length > 0) 
-                batchPromises.push(saveDoc("db_characters", { list: currentData.characters }));
-            
-            if (newData.organizations || organizations.length > 0) 
-                batchPromises.push(saveDoc("db_organizations", { list: currentData.organizations }));
+            // 設定は小さいのでそのまま
+            if (newData.uiScale) {
+                promises.push(db.collection("wiki_data").doc("db_config").set({ uiScale: currentData.uiScale }, { merge: true }));
+            }
 
-            if (newData.uiScale)
-                batchPromises.push(saveDoc("db_config", { uiScale: currentData.uiScale }));
-
-            await Promise.all(batchPromises);
-            console.log("分割保存完了");
+            await Promise.all(promises);
 
         } catch (error) {
-            console.error("全体保存フローでのエラー:", error);
-            // アラートは個別のsaveDocで出しているのでここではログのみ
+            console.error("Global save error:", error);
+        } finally {
+            setIsSyncing(false); // グルグル終了
         }
     };
 
@@ -4283,7 +4312,7 @@ function TimelineWiki() {
     useEffect(() => {
         if (!canEdit) return;
 
-        // ★クラウドからの更新直後なら、書き戻し（保存）を行わずにフラグを下ろして終了
+        // クラウドからの更新直後なら、書き戻しを行わずにフラグを下ろす
         if (isRemoteUpdate.current) {
             isRemoteUpdate.current = false;
             return;
@@ -4293,12 +4322,12 @@ function TimelineWiki() {
             if (entries.length > 0 || nations.length > 0) {
                 saveToCloud();
             }
-        }, 2000); // 2秒後に保存
+        }, 2000); 
         return () => clearTimeout(timer);
     }, [entries, nations, stats, characters, organizations, uiScale, canEdit]);
 
 
-    // 各種ハンドラ関数
+    // 各種ハンドラ
     const handleApplyAccount = async () => {
         if (!currentUser) return;
         try {
@@ -4369,12 +4398,15 @@ function TimelineWiki() {
                     const newChars = !Array.isArray(data) && data.characters ? data.characters : [];
                     const newOrgs = !Array.isArray(data) && data.organizations ? data.organizations : [];
                     
-                    // インポートはユーザー操作なので、フラグはfalseのままにして即時保存
+                    // インポートはユーザー操作。isRemoteUpdateはfalseのまま
                     isRemoteUpdate.current = false;
                     
                     setEntries(newEntries); setNations(newNations); setStats(newStats); setCharacters(newChars); setOrganizations(newOrgs);
+                    
+                    // 即時保存 (新しい分割ロジックで保存される)
                     saveToCloud({ entries: newEntries, nations: newNations, stats: newStats, characters: newChars, organizations: newOrgs });
-                    alert(`インポート完了しました。`); 
+                    
+                    alert(`インポート完了しました。バックグラウンドで保存処理が進行します。`); 
                 } 
             } catch (error) { console.error(error); alert('読み込みに失敗しました。'); } 
             finally { if (fileInputRef.current) fileInputRef.current.value = ''; } 
@@ -4582,6 +4614,15 @@ function TimelineWiki() {
                             ) : null}
                         </main>
                     </div>
+                    {/* ★追加: 同期中インジケーター (右下に固定表示) */}
+                    {isSyncing && (
+                        <div className="fixed bottom-4 right-4 z-50 bg-gray-900 text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-3 border border-gray-700 animate-fade-in">
+                            <div className="animate-spin text-yellow-500">
+                                <Icons.RefreshCw size={20} />
+                            </div>
+                            <span className="text-xs font-bold tracking-wider">SYNCING...</span>
+                        </div>
+                    )}
                 </div>
             )}
         </>

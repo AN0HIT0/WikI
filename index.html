@@ -4160,52 +4160,122 @@ function TimelineWiki() {
         return () => unsubscribeUsers();
     }, [isAdmin]);
 
-    // 3. データ同期 (同期ループ防止ロジック適用)
+// 3. データ同期（分割読み込み版）
     useEffect(() => {
-        const unsubscribe = db.collection("wiki_data").doc("main_db")
-            .onSnapshot((doc) => {
+        // 各カテゴリごとにリスナー（監視役）を設置
+        const refs = {
+            entries: db.collection("wiki_data").doc("db_entries"),
+            nations: db.collection("wiki_data").doc("db_nations"),
+            stats: db.collection("wiki_data").doc("db_stats"),
+            characters: db.collection("wiki_data").doc("db_characters"),
+            organizations: db.collection("wiki_data").doc("db_organizations"),
+            config: db.collection("wiki_data").doc("db_config") // 設定用
+        };
+
+        // 解除用関数のリスト
+        const unsubscribers = [];
+
+        // 共通のデータ受信処理関数
+        const setupListener = (docRef, setter, keyName) => {
+            const unsub = docRef.onSnapshot((doc) => {
                 if (doc.exists) {
                     const data = doc.data();
-                    
-                    // ★クラウドからの更新であることをマーク
+                    // クラウド由来の更新であることをマーク
                     isRemoteUpdate.current = true;
-
-                    if (data.entries) setEntries(data.entries);
-                    if (data.nations) setNations(data.nations);
-                    if (data.stats) setStats(data.stats);
-                    if (data.characters) setCharacters(data.characters);
-                    if (data.organizations) setOrganizations(data.organizations);
-                    if (data.uiScale) setUiScale(data.uiScale);
+                    // データ構造が { list: [...] } か、旧形式かを判別してセット
+                    if (data.list) {
+                        setter(data.list);
+                    } else if (data[keyName]) { 
+                        // 旧データ形式からの移行用
+                        setter(data[keyName]);
+                    }
                 }
-            }, (error) => {
-                console.error("同期エラー:", error);
-            });
-        return () => unsubscribe();
+            }, (err) => console.error(`${keyName} sync error:`, err));
+            unsubscribers.push(unsub);
+        };
+
+        setupListener(refs.entries, setEntries, 'entries');
+        setupListener(refs.nations, setNations, 'nations');
+        setupListener(refs.stats, setStats, 'stats');
+        setupListener(refs.characters, setCharacters, 'characters');
+        setupListener(refs.organizations, setOrganizations, 'organizations');
+        
+        // 設定（uiScaleなど）だけは別扱い
+        const unsubConfig = refs.config.onSnapshot(doc => {
+            if(doc.exists && doc.data().uiScale) setUiScale(doc.data().uiScale);
+        });
+        unsubscribers.push(unsubConfig);
+
+        // コンポーネント削除時に全リスナーを解除
+        return () => {
+            unsubscribers.forEach(u => u());
+        };
     }, []);
 
-    // 4. クラウド保存処理
+    // 4. クラウド保存処理（分割保存版）
     const saveToCloud = async (newData = {}) => {
-        if (!canEdit) return; // 権限がなければ保存しない
+        if (!canEdit) return;
 
-        const dataToSave = {
+        // 保存対象のデータを特定（引数がなければ現在のstateを使う）
+        const currentData = {
             entries: newData.entries || entries,
             nations: newData.nations || nations,
             stats: newData.stats || stats,
             characters: newData.characters || characters,
             organizations: newData.organizations || organizations,
-            uiScale: newData.uiScale || uiScale,
-            lastUpdated: new Date().toISOString()
+            uiScale: newData.uiScale || uiScale
         };
-        
-        // データ保護: 空データでの上書き防止
-        if ((!dataToSave.entries || dataToSave.entries.length === 0) && (!dataToSave.nations || dataToSave.nations.length === 0)) {
-            return;
-        }
 
+        // 変更があったカテゴリだけ保存するのが理想ですが、
+        // 確実性を期して、引数に含まれるカテゴリ（更新されたもの）を保存します。
+        // 引数が空の場合は自動保存なので、全データをチェックして保存します。
+        
+        const batchPromises = [];
+        const timestamp = new Date().toISOString();
+
+        // カテゴリごとに個別のドキュメントへ保存（{ list: [...] } の形式でラップ）
+        // merge: false にすることで、ゴミデータを残さずクリーンに上書きします
+        
+        // エラーハンドリング用ヘルパー
+        const saveDoc = (docName, dataPayload) => {
+            return db.collection("wiki_data").doc(docName)
+                .set({ ...dataPayload, lastUpdated: timestamp }, { merge: true })
+                .catch(e => {
+                    console.error(`保存失敗 [${docName}]:`, e);
+                    if (e.code === 'invalid-argument' && e.message.includes('exceeds the maximum allowed size')) {
+                        alert(`【保存エラー】\n${docName} のデータ量が大きすぎます（1MB制限超過）。\n画像を減らすか、解像度を下げてください。`);
+                    }
+                    throw e;
+                });
+        };
+
+        // 必要なデータのみ並列保存
+        // newDataにキーがある（明示的な更新）または 自動保存のタイミング
         try {
-            await db.collection("wiki_data").doc("main_db").set(dataToSave, { merge: true });
-        } catch (e) {
-            console.error("保存失敗:", e);
+            if (newData.entries || entries.length > 0) 
+                batchPromises.push(saveDoc("db_entries", { list: currentData.entries }));
+            
+            if (newData.nations || nations.length > 0) 
+                batchPromises.push(saveDoc("db_nations", { list: currentData.nations }));
+            
+            if (newData.stats || stats.length > 0) 
+                batchPromises.push(saveDoc("db_stats", { list: currentData.stats }));
+            
+            if (newData.characters || characters.length > 0) 
+                batchPromises.push(saveDoc("db_characters", { list: currentData.characters }));
+            
+            if (newData.organizations || organizations.length > 0) 
+                batchPromises.push(saveDoc("db_organizations", { list: currentData.organizations }));
+
+            if (newData.uiScale)
+                batchPromises.push(saveDoc("db_config", { uiScale: currentData.uiScale }));
+
+            await Promise.all(batchPromises);
+            console.log("分割保存完了");
+
+        } catch (error) {
+            console.error("全体保存フローでのエラー:", error);
+            // アラートは個別のsaveDocで出しているのでここではログのみ
         }
     };
 

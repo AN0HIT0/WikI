@@ -649,8 +649,8 @@ const NationListView = ({ setView, nations, onSelectNation }) => {
     );
 };
 
-// --- NationTableView コンポーネント (修正版: 従属国の過去情報表示対応) ---
-const NationTableView = ({ setView, nations, stats, onEditNation, onAddNation }) => { 
+// --- NationTableView コンポーネント (修正版: 権限チェック追加) ---
+const NationTableView = ({ isAuthorized, setView, nations, stats, onEditNation, onAddNation }) => { 
     const [year, setYear] = useState(DEFAULT_YEAR);
     const [expandedParents, setExpandedParents] = useState({}); 
     const toggleExpand = (nationId) => { setExpandedParents(prev => ({ ...prev, [nationId]: !prev[nationId] })); };
@@ -659,7 +659,6 @@ const NationTableView = ({ setView, nations, stats, onEditNation, onAddNation })
     const { parents, children } = resolveRelationships();
     
     const renderRow = (nation, depth = 0, parentId = null) => {
-        // デフォルトは現在の表示年時点の情報
         let info = getNationInfo(nation, year); 
         const stat = getStat(nation.id, year);
 
@@ -669,89 +668,31 @@ const NationTableView = ({ setView, nations, stats, onEditNation, onAddNation })
         if (info.isFuture) return null;
 
         const statStyle = stat?.isEstimated ? "text-gray-500 italic" : "text-gray-800";
-        
-        // 変数準備
-        let relationLabel = null; 
-        let eventYearLabel = null; 
-        let targetEvent = null;
+        let relationLabel = null; let eventYearLabel = null; let targetEvent = null;
 
-        // ★修正: 従属国（過去に併合された国）の場合、その当時の情報を復元して表示する
         if (depth > 0) {
-            // 親国に関連するイベント（併合、分割等）を持つEraを探す
             const sortedEras = (nation.eras || []).sort((a, b) => a.startYear - b.startYear);
-            const targetEraIndex = sortedEras.findIndex(e => 
-                e.startYear <= year &&
-                e.event && 
-                (e.event.targetId === parentId || (e.event.targetIds && e.event.targetIds.includes(parentId))) && 
-                ['annexed_by', 'partitioned_by', 'merger', 'dissolution', 'be_puppet'].includes(e.event.type)
-            );
-
+            const targetEraIndex = sortedEras.findIndex(e => e.startYear <= year && e.event && (e.event.targetId === parentId || (e.event.targetIds && e.event.targetIds.includes(parentId))) && ['annexed_by', 'partitioned_by', 'merger', 'dissolution', 'be_puppet'].includes(e.event.type));
             if (targetEraIndex !== -1) {
-                const targetEra = sortedEras[targetEraIndex];
-                targetEvent = targetEra.event;
-                
-                // 期間表示用のラベル (例: "1806年:")
+                const targetEra = sortedEras[targetEraIndex]; targetEvent = targetEra.event;
                 eventYearLabel = <span className="text-[10px] font-mono bg-gray-200 text-gray-700 px-1 rounded ml-1">{targetEra.startYear}年:</span>;
-
-                // ★情報の書き換え: 滅亡/併合イベントの一つ前のEra（その当時の状態）を取得
                 const prevEra = targetEraIndex > 0 ? sortedEras[targetEraIndex - 1] : null;
-                
-                info = {
-                    ...info,
-                    // 名前: 前のEraがあればそれ、なければ滅亡時（ただし滅亡Eraなら元の国名）
-                    name: prevEra ? prevEra.name : (targetEra.type === 'collapse' ? nation.name : targetEra.name),
-                    color: prevEra ? prevEra.color : (targetEra.color || nation.color),
-                    flag: prevEra ? (prevEra.flag || nation.flag) : (targetEra.flag || nation.flag),
-                    params: prevEra ? (prevEra.params || {}) : (nation.params || {}), // 当時のイデオロギー等
-                    
-                    // 期間: 前のEraの開始 ～ ターゲットEraの開始（＝滅亡年）
-                    eraStartYear: prevEra ? prevEra.startYear : (info.nationStartYear || '不明'),
-                    eraEndYear: targetEra.startYear,
-                    
-                    // リスト上では見やすくするため滅亡グレーアウトを解除（depthで表現されているため）
-                    isCollapsed: false 
-                };
-            } else {
-                relationLabel = <span className="ml-2 text-[10px] text-gray-400 border border-gray-200 px-1 rounded">(従属)</span>;
-            }
-        } else {
-            // ルート表示の場合は通常のイベントチェック
-            if (info.eraEvent && ['independence', 'splinter'].includes(info.eraEvent.type)) { 
-                targetEvent = info.eraEvent; 
-            }
-        }
+                info = { ...info, name: prevEra ? prevEra.name : (targetEra.type === 'collapse' ? nation.name : targetEra.name), color: prevEra ? prevEra.color : (targetEra.color || nation.color), flag: prevEra ? (prevEra.flag || nation.flag) : (targetEra.flag || nation.flag), params: prevEra ? (prevEra.params || {}) : (nation.params || {}), eraStartYear: prevEra ? prevEra.startYear : (info.nationStartYear || '不明'), eraEndYear: targetEra.startYear, isCollapsed: false };
+            } else { relationLabel = <span className="ml-2 text-[10px] text-gray-400 border border-gray-200 px-1 rounded">(従属)</span>; }
+        } else { if (info.eraEvent && ['independence', 'splinter'].includes(info.eraEvent.type)) { targetEvent = info.eraEvent; } }
 
-        // バッジ生成ロジック（既存のまま）
-        if (targetEvent) { 
-            const t = ERA_EVENT_TYPES[targetEvent.type]; 
-            if (t) { 
-                const targetIds = targetEvent.targetIds || (targetEvent.targetId ? [targetEvent.targetId] : []); 
-                let targetNames = ''; 
-                if (targetIds.length > 0) { 
-                    targetNames = targetIds.map(tid => { const tn = nations.find(n => n.id === tid); return tn ? tn.name : '?'; }).join('・'); 
-                } 
-                let labelText = t.label; 
-                let styleClass = "bg-gray-100 text-gray-600 border-gray-200"; 
-                if (['annexed_by', 'merger'].includes(targetEvent.type)) { labelText = `${targetNames}に併合`; styleClass = "bg-red-50 text-red-600 border-red-100"; } 
-                else if (targetEvent.type === 'partitioned_by') { labelText = `${targetNames}により分割`; styleClass = "bg-red-50 text-red-600 border-red-100"; } 
-                else if (targetEvent.type === 'dissolution') { labelText = `${targetNames}へ解体・分裂`; styleClass = "bg-red-50 text-red-600 border-red-100"; } 
-                else if (['independence', 'splinter'].includes(targetEvent.type)) { labelText = `${targetNames}${t.label}`; styleClass = "bg-indigo-50 text-indigo-700 border-indigo-100"; } 
-                else if (targetEvent.type === 'be_puppet') { labelText = `${targetNames}の傀儡`; } 
-                relationLabel = <span className={`ml-2 text-[10px] px-1 rounded border flex items-center gap-1 ${styleClass}`}>{t.icon} {labelText}</span>; 
-            } 
-        }
+        if (targetEvent) { const t = ERA_EVENT_TYPES[targetEvent.type]; if (t) { const targetIds = targetEvent.targetIds || (targetEvent.targetId ? [targetEvent.targetId] : []); let targetNames = ''; if (targetIds.length > 0) { targetNames = targetIds.map(tid => { const tn = nations.find(n => n.id === tid); return tn ? tn.name : '?'; }).join('・'); } let labelText = t.label; let styleClass = "bg-gray-100 text-gray-600 border-gray-200"; if (['annexed_by', 'merger'].includes(targetEvent.type)) { labelText = `${targetNames}に併合`; styleClass = "bg-red-50 text-red-600 border-red-100"; } else if (targetEvent.type === 'partitioned_by') { labelText = `${targetNames}により分割`; styleClass = "bg-red-50 text-red-600 border-red-100"; } else if (targetEvent.type === 'dissolution') { labelText = `${targetNames}へ解体・分裂`; styleClass = "bg-red-50 text-red-600 border-red-100"; } else if (['independence', 'splinter'].includes(targetEvent.type)) { labelText = `${targetNames}${t.label}`; styleClass = "bg-indigo-50 text-indigo-700 border-indigo-100"; } else if (targetEvent.type === 'be_puppet') { labelText = `${targetNames}の傀儡`; } relationLabel = <span className={`ml-2 text-[10px] px-1 rounded border flex items-center gap-1 ${styleClass}`}>{t.icon} {labelText}</span>; } }
 
         const myChildren = children[nation.id] || []; const hasChildren = myChildren.length > 0; const isExpanded = expandedParents[nation.id]; const isChild = depth > 0; const rowClass = isChild ? "bg-gray-50/80" : "hover:bg-gray-50"; const opacityClass = (info.isCollapsed && depth === 0) ? "opacity-60 grayscale" : ""; const key = `${nation.id}-${parentId || 'root'}`;
         let rankBadge = null; if (depth === 0 && info.params && !info.isCollapsed) { const rankInfo = NATION_RANKS[nation.rank || 'minor_power']; if (rankInfo) { rankBadge = <span className="text-[9px] px-1 rounded border ml-1 whitespace-nowrap" style={{borderColor: rankInfo.color, color: rankInfo.color, backgroundColor: 'white'}}>{rankInfo.label}</span>; } }
         
-        return ( <React.Fragment key={key}> <tr className={`${rowClass} transition-colors ${opacityClass}`}> <td className="px-4 py-3 font-bold sticky left-0 bg-white/95 z-10 shadow-sm border-r border-gray-100 align-top"> <div className="flex items-center" style={{ paddingLeft: `${depth * 20}px` }}> {hasChildren ? ( <button onClick={() => toggleExpand(nation.id)} className="mr-2 p-0.5 rounded hover:bg-gray-200 text-gray-500"> {isExpanded ? <Icons.ChevronDown size={14} /> : <Icons.ChevronRight size={14} />} </button> ) : ( <span className="w-4 mr-2"></span> )} {isChild && !hasChildren && <Icons.CornerDownRight size={14} className="text-gray-300 mr-1" />} {info.flag ? ( <img src={info.flag} alt="Flag" className="w-8 h-5 object-cover border border-gray-200 shadow-sm mr-2 flex-shrink-0" /> ) : ( <div className="w-8 h-5 shadow-sm border border-gray-200 flex-shrink-0 flex items-center justify-center text-[8px] text-gray-400 bg-gray-100 mr-2">No</div> )} <div className="flex flex-col justify-center"> <div className="flex items-center gap-1 flex-wrap"> {eventYearLabel} <span className={`text-sm ${info.isCollapsed && depth === 0 ? 'line-through text-gray-400' : ''}`}>{info.name}</span> {rankBadge} {relationLabel} </div> </div> </div> </td> <td className="px-2 py-3 text-center border-l border-gray-100 bg-gray-50/30"><button onClick={() => onEditNation(nation)} className="text-blue-600 hover:bg-blue-100 p-2 rounded transition-colors"><Icons.Edit2 size={16} /></button></td> <td className="px-2 py-3 text-center border-l border-gray-100 bg-gray-50/30"><div className="flex flex-col items-center justify-center leading-tight"><span className="text-xs font-bold text-gray-700">{info.eraStartYear ? info.eraStartYear : '不明'}<span className="text-gray-400 mx-0.5">～</span>{info.eraEndYear ? info.eraEndYear : ''}</span><span className="text-[10px] text-gray-400 mt-0.5">(国: {info.nationStartYear ? info.nationStartYear : '不明'}<span className="mx-0.5">～</span>{info.nationEndYear ? info.nationEndYear : ''})</span></div></td> <td className={`px-4 py-3 text-right font-mono border-l border-gray-100 bg-blue-50/30 ${statStyle} text-xs`}>{stat ? formatJapaneseNumber(stat.population, '人', true) : '-'}</td> <td className={`px-4 py-3 text-right font-mono border-l border-gray-100 bg-green-50/30 ${statStyle} text-xs`}>{stat ? formatJapaneseNumber(stat.gdp, '円', true) : '-'}</td> <td className={`px-4 py-3 text-right font-mono border-l border-gray-100 bg-yellow-50/30 ${statStyle} text-xs`}>{stat ? formatJapaneseNumber(calculatePerCapita(stat.gdp, stat.population), '円', true) : '-'}</td> {NATION_PARAMS.map(p => { const param = info.params?.[p.key] || {}; const bgColor = param.color || '#f3f4f6'; const isLight = parseInt(bgColor.replace('#', ''), 16) > 0xffffff / 2; const textColor = param.color ? (isLight ? '#000' : '#fff') : '#9ca3af'; return ( <td key={p.key} className="px-2 py-2 border-l border-gray-100 align-top"> <div className="h-full w-full rounded p-1 text-center flex flex-col items-center justify-center gap-0.5 min-h-[40px]" style={{backgroundColor: bgColor, color: textColor, border: param.name ? 'none' : '1px dashed #e5e7eb'}}> {param.name ? ( <> <div className="font-bold leading-tight text-[11px]">{param.name}</div> {param.desc && <div className={`text-[8px] leading-tight opacity-80 font-normal mt-0.5`}>{param.desc}</div>} </> ) : <span className="text-[10px]">-</span>} </div> </td> ); })} </tr> {myChildren.map(childId => { const childNation = nations.find(n => n.id === childId); if (childNation) return renderRow(childNation, depth + 1, nation.id); return null; })} </React.Fragment> );
+        return ( <React.Fragment key={key}> <tr className={`${rowClass} transition-colors ${opacityClass}`}> <td className="px-4 py-3 font-bold sticky left-0 bg-white/95 z-10 shadow-sm border-r border-gray-100 align-top"> <div className="flex items-center" style={{ paddingLeft: `${depth * 20}px` }}> {hasChildren ? ( <button onClick={() => toggleExpand(nation.id)} className="mr-2 p-0.5 rounded hover:bg-gray-200 text-gray-500"> {isExpanded ? <Icons.ChevronDown size={14} /> : <Icons.ChevronRight size={14} />} </button> ) : ( <span className="w-4 mr-2"></span> )} {isChild && !hasChildren && <Icons.CornerDownRight size={14} className="text-gray-300 mr-1" />} {info.flag ? ( <img src={info.flag} alt="Flag" className="w-8 h-5 object-cover border border-gray-200 shadow-sm mr-2 flex-shrink-0" /> ) : ( <div className="w-8 h-5 shadow-sm border border-gray-200 flex-shrink-0 flex items-center justify-center text-[8px] text-gray-400 bg-gray-100 mr-2">No</div> )} <div className="flex flex-col justify-center"> <div className="flex items-center gap-1 flex-wrap"> {eventYearLabel} <span className={`text-sm ${info.isCollapsed && depth === 0 ? 'line-through text-gray-400' : ''}`}>{info.name}</span> {rankBadge} {relationLabel} </div> </div> </div> </td> <td className="px-2 py-3 text-center border-l border-gray-100 bg-gray-50/30">{isAuthorized && <button onClick={() => onEditNation(nation)} className="text-blue-600 hover:bg-blue-100 p-2 rounded transition-colors"><Icons.Edit2 size={16} /></button>}</td> <td className="px-2 py-3 text-center border-l border-gray-100 bg-gray-50/30"><div className="flex flex-col items-center justify-center leading-tight"><span className="text-xs font-bold text-gray-700">{info.eraStartYear ? info.eraStartYear : '不明'}<span className="text-gray-400 mx-0.5">～</span>{info.eraEndYear ? info.eraEndYear : ''}</span><span className="text-[10px] text-gray-400 mt-0.5">(国: {info.nationStartYear ? info.nationStartYear : '不明'}<span className="mx-0.5">～</span>{info.nationEndYear ? info.nationEndYear : ''})</span></div></td> <td className={`px-4 py-3 text-right font-mono border-l border-gray-100 bg-blue-50/30 ${statStyle} text-xs`}>{stat ? formatJapaneseNumber(stat.population, '人', true) : '-'}</td> <td className={`px-4 py-3 text-right font-mono border-l border-gray-100 bg-green-50/30 ${statStyle} text-xs`}>{stat ? formatJapaneseNumber(stat.gdp, '円', true) : '-'}</td> <td className={`px-4 py-3 text-right font-mono border-l border-gray-100 bg-yellow-50/30 ${statStyle} text-xs`}>{stat ? formatJapaneseNumber(calculatePerCapita(stat.gdp, stat.population), '円', true) : '-'}</td> {NATION_PARAMS.map(p => { const param = info.params?.[p.key] || {}; const bgColor = param.color || '#f3f4f6'; const isLight = parseInt(bgColor.replace('#', ''), 16) > 0xffffff / 2; const textColor = param.color ? (isLight ? '#000' : '#fff') : '#9ca3af'; return ( <td key={p.key} className="px-2 py-2 border-l border-gray-100 align-top"> <div className="h-full w-full rounded p-1 text-center flex flex-col items-center justify-center gap-0.5 min-h-[40px]" style={{backgroundColor: bgColor, color: textColor, border: param.name ? 'none' : '1px dashed #e5e7eb'}}> {param.name ? ( <> <div className="font-bold leading-tight text-[11px]">{param.name}</div> {param.desc && <div className={`text-[8px] leading-tight opacity-80 font-normal mt-0.5`}>{param.desc}</div>} </> ) : <span className="text-[10px]">-</span>} </div> </td> ); })} </tr> {myChildren.map(childId => { const childNation = nations.find(n => n.id === childId); if (childNation) return renderRow(childNation, depth + 1, nation.id); return null; })} </React.Fragment> );
     };
 
     const rootNations = nations.filter(n => !parents[n.id]);
     
-    return ( <div className="space-y-6 animate-fade-in pb-20"> <div className="flex flex-wrap items-center justify-between gap-4"> <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-lg shadow border border-gray-200"> <span className="font-bold text-sm text-gray-600 whitespace-nowrap">表示年:</span> <div className="flex items-center gap-2"><input type="range" min="-3000" max="3000" value={year} onChange={e => setYear(parseInt(e.target.value) || 0)} className="w-32 md:w-48 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-900" /><input type="number" value={year} onChange={e => setYear(parseInt(e.target.value) || 0)} className="w-20 p-1 border rounded font-mono text-lg font-bold text-center text-blue-900" /></div> </div> </div> <SectionHeader icon={Icons.List} title={`国家体制一覧 (${year}年時点)`} desc="各国の統治体制、イデオロギー、宗教などの詳細を比較・確認できます。大陸別に国力ランク順（大列強 > 都市国家）で表示されます。" /> <div className="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden"> <div className="overflow-x-auto custom-scrollbar"> <table className="w-full text-sm text-left whitespace-nowrap border-collapse"> <thead className="bg-gray-100 text-gray-700 font-bold uppercase border-b-2 border-gray-300"> <tr> <th className="px-4 py-3 sticky left-0 bg-gray-100 z-10 shadow-sm min-w-[240px] border-r border-gray-200">国名・国旗</th> <th className="px-2 py-3 text-center border-l border-gray-200 w-[60px] bg-gray-50">操作</th> <th className="px-4 py-3 text-center border-l border-gray-200 min-w-[140px] bg-gray-50">期間</th> <th className="px-4 py-3 text-center border-l border-gray-200 min-w-[100px] bg-blue-50">人口</th> <th className="px-4 py-3 text-center border-l border-gray-200 min-w-[120px] bg-green-50">GDP</th> <th className="px-4 py-3 text-center border-l border-gray-200 min-w-[100px] bg-yellow-50">一人あたり</th> {NATION_PARAMS.map(p => ( <th key={p.key} className="px-4 py-3 text-center border-l border-gray-200 min-w-[140px]">{p.label}</th> ))} </tr> </thead> <tbody className="divide-y divide-gray-200"> {Object.entries(LOCATIONS).sort((a, b) => a[1].order - b[1].order).map(([locKey, locInfo]) => { const nationsInLoc = rootNations.filter(n => (n.location || 'unknown') === locKey); if (nationsInLoc.length === 0) return null; nationsInLoc.sort((a, b) => { const rankA = NATION_RANKS[a.rank || 'minor_power']?.order || 99; const rankB = NATION_RANKS[b.rank || 'minor_power']?.order || 99; return rankA - rankB; }); return ( <React.Fragment key={locKey}> <tr className="bg-orange-900/10 border-b border-orange-900/20"> <td colSpan={6 + NATION_PARAMS.length} className="px-4 py-2 font-bold text-white text-sm tracking-wider" style={{ backgroundColor: locInfo.color }}> {locInfo.label} </td> </tr> {nationsInLoc.map(nation => renderRow(nation))} </React.Fragment> ); }) } </tbody> </table> </div> </div> <div className="flex justify-end"> <button onClick={onAddNation} className="bg-blue-900 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow hover:bg-blue-800"><Icons.Plus size={18} /> 新規国家を追加</button> </div> </div> );
+    return ( <div className="space-y-6 animate-fade-in pb-20"> <div className="flex flex-wrap items-center justify-between gap-4"> <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-lg shadow border border-gray-200"> <span className="font-bold text-sm text-gray-600 whitespace-nowrap">表示年:</span> <div className="flex items-center gap-2"><input type="range" min="-3000" max="3000" value={year} onChange={e => setYear(parseInt(e.target.value) || 0)} className="w-32 md:w-48 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-900" /><input type="number" value={year} onChange={e => setYear(parseInt(e.target.value) || 0)} className="w-20 p-1 border rounded font-mono text-lg font-bold text-center text-blue-900" /></div> </div> </div> <SectionHeader icon={Icons.List} title={`国家体制一覧 (${year}年時点)`} desc="各国の統治体制、イデオロギー、宗教などの詳細を比較・確認できます。大陸別に国力ランク順（大列強 > 都市国家）で表示されます。" /> <div className="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden"> <div className="overflow-x-auto custom-scrollbar"> <table className="w-full text-sm text-left whitespace-nowrap border-collapse"> <thead className="bg-gray-100 text-gray-700 font-bold uppercase border-b-2 border-gray-300"> <tr> <th className="px-4 py-3 sticky left-0 bg-gray-100 z-10 shadow-sm min-w-[240px] border-r border-gray-200">国名・国旗</th> <th className="px-2 py-3 text-center border-l border-gray-200 w-[60px] bg-gray-50">操作</th> <th className="px-4 py-3 text-center border-l border-gray-200 min-w-[140px] bg-gray-50">期間</th> <th className="px-4 py-3 text-center border-l border-gray-200 min-w-[100px] bg-blue-50">人口</th> <th className="px-4 py-3 text-center border-l border-gray-200 min-w-[120px] bg-green-50">GDP</th> <th className="px-4 py-3 text-center border-l border-gray-200 min-w-[100px] bg-yellow-50">一人あたり</th> {NATION_PARAMS.map(p => ( <th key={p.key} className="px-4 py-3 text-center border-l border-gray-200 min-w-[140px]">{p.label}</th> ))} </tr> </thead> <tbody className="divide-y divide-gray-200"> {Object.entries(LOCATIONS).sort((a, b) => a[1].order - b[1].order).map(([locKey, locInfo]) => { const nationsInLoc = rootNations.filter(n => (n.location || 'unknown') === locKey); if (nationsInLoc.length === 0) return null; nationsInLoc.sort((a, b) => { const rankA = NATION_RANKS[a.rank || 'minor_power']?.order || 99; const rankB = NATION_RANKS[b.rank || 'minor_power']?.order || 99; return rankA - rankB; }); return ( <React.Fragment key={locKey}> <tr className="bg-orange-900/10 border-b border-orange-900/20"> <td colSpan={6 + NATION_PARAMS.length} className="px-4 py-2 font-bold text-white text-sm tracking-wider" style={{ backgroundColor: locInfo.color }}> {locInfo.label} </td> </tr> {nationsInLoc.map(nation => renderRow(nation))} </React.Fragment> ); }) } </tbody> </table> </div> </div> <div className="flex justify-end"> {isAuthorized && <button onClick={onAddNation} className="bg-blue-900 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow hover:bg-blue-800"><Icons.Plus size={18} /> 新規国家を追加</button>} </div> </div> );
 };
-
 // --- NationListPanel コンポーネント (修正版: 幅指定を親に委ねる) ---
 const NationListPanel = ({ nations, setNations, selectedNationId, onSelect }) => {
     const [newNationName, setNewNationName] = useState('');
@@ -2993,7 +2934,40 @@ const EditForm = ({ entry, onSave, onCancel, nations }) => {
     return ( <div className="bg-white p-6 rounded-lg shadow-lg max-w-2xl mx-auto border-2 border-gray-800"> <h2 className="text-2xl font-bold mb-6 text-gray-800 flex items-center gap-2"><Icons.Edit2 size={24} /> 記録を編集</h2> <div className="space-y-6"> <div className="bg-gray-50 p-4 rounded border border-gray-200"> <div className="flex items-center gap-2 mb-2 text-sm font-bold text-gray-700"><Icons.Calendar size={16} /><span>時期設定</span></div> <div className="grid grid-cols-3 gap-4"> <div><label className="block text-xs text-gray-500 mb-1">英覇暦 (年)</label><input type="number" value={formData.year} onChange={e => setFormData({...formData, year: e.target.value})} className="w-full p-2 border rounded" placeholder="必須" /></div> <div><label className="block text-xs text-gray-500 mb-1">月 (任意)</label><select value={formData.month || ''} onChange={e => setFormData({...formData, month: e.target.value})} className="w-full p-2 border rounded"><option value="">-- 不明 --</option>{Object.entries(CUSTOM_MONTHS).map(([num, name]) => <option key={num} value={num}>{name} ({num}月)</option>)}</select></div> <div><label className="block text-xs text-gray-500 mb-1">日 (任意)</label><input type="number" min="1" max="31" value={formData.day || ''} onChange={e => setFormData({...formData, day: e.target.value})} className="w-full p-2 border rounded" placeholder="--" /></div> </div> </div> <div> <label className="block text-sm font-bold text-gray-700 mb-1">重要度</label> <select value={formData.importance || 2} onChange={e => setFormData({...formData, importance: parseInt(e.target.value)})} className="w-full p-2 border-2 border-gray-300 rounded font-bold"> {Object.entries(importanceLevels).map(([level, info]) => <option key={level} value={level}>Lv.{level} {info.label}</option>)} </select> </div> <div className="space-y-2"> <div><label className="block text-xs text-gray-500">ふりがな</label><input type="text" value={formData.reading || ''} onChange={e => setFormData({...formData, reading: e.target.value})} className="w-full p-1 border-b border-gray-300 outline-none text-sm" /></div> <div><label className="block text-sm font-bold text-gray-700 mb-1">タイトル</label><input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full p-2 border-2 border-gray-300 rounded text-lg font-bold" /></div> </div> <div> <label className="block text-sm font-bold text-gray-700 mb-1">タグ</label> <input type="text" value={tagInput} onChange={e => setTagInput(e.target.value)} className="w-full p-2 border border-gray-300 rounded" placeholder="政治, 戦争" /> <div className="mt-2"> <span className="text-xs text-gray-500 mr-2">国家タグを追加:</span> <div className="flex flex-wrap gap-1 mt-1 max-h-32 overflow-y-auto p-1 border rounded bg-gray-50"> <button onClick={() => addNationTag('世界')} className="text-xs bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 px-2 py-1 rounded flex items-center gap-1"><Icons.Globe size={12} /> 世界</button> {sortedNations.map(n => { const info = getNationInfo(n, currentYear); if (info.isCollapsed) return null; const rankColor = NATION_RANKS[n.rank || 'minor_power']?.color || '#ccc'; return ( <button key={n.id} onClick={() => addNationTag(info.name)} className="text-xs bg-white hover:bg-gray-100 border px-2 py-1 rounded flex items-center gap-1" style={{borderColor: rankColor}}> {info.flag && <img src={info.flag} className="w-4 h-3 object-cover border border-gray-200" />} <span style={{color: rankColor, fontWeight: 'bold'}}>{info.name}</span> </button> ); })} </div> </div> </div> <div><label className="block text-sm font-bold text-gray-700 mb-1">詳細記述</label><textarea value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} className="w-full p-2 border-2 border-gray-300 rounded min-h-[200px]" /></div> <div className="flex justify-end gap-4 pt-4 border-t"> <button onClick={onCancel} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-bold">破棄</button> <button onClick={() => {const tagsArray = tagInput.split(',').map(t => t.trim()).filter(t => t !== ''); onSave({ ...formData, tags: tagsArray });}} disabled={!formData.title} className="px-6 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 flex items-center gap-2 font-bold shadow-lg"><Icons.Save size={18} /> 記録する</button> </div> </div> </div> );
 };
 
-const DetailView = ({ entry, onEdit, onClose, onDelete, nations }) => ( <div className="bg-white min-h-screen md:min-h-0 pb-20"> <div className="sticky top-0 bg-white/90 backdrop-blur-sm border-b border-gray-200 p-4 flex justify-between items-center z-10"><div className="flex gap-2"><button onClick={() => onEdit(entry)} className="p-2 text-blue-600 rounded" title="編集"><Icons.Edit2 size={20} /></button><button onClick={() => onDelete(entry.id)} className="p-2 text-red-600 rounded" title="削除"><Icons.Trash2 size={20} /></button></div></div> <div className="max-w-3xl mx-auto p-6 md:p-10"> <div className="flex flex-wrap items-center gap-4 mb-6"><div className="inline-block bg-gray-900 text-white px-4 py-1 rounded-sm font-mono text-xl font-bold shadow-md">{formatDate(entry.year, entry.month, entry.day)}</div><div className={`px-3 py-1 text-sm rounded-full border ${importanceLevels[entry.importance || 2].badge} border-opacity-20`}>{importanceLevels[entry.importance || 2].label}</div></div> <div className="mb-8 pb-4 border-b-4 border-gray-100">{entry.reading && <p className="text-sm text-gray-500 font-medium mb-1">{entry.reading}</p>}<h1 className="text-4xl md:text-5xl font-black text-gray-900 leading-tight">{entry.title}</h1></div> <div className="prose prose-lg text-gray-800 whitespace-pre-wrap leading-loose font-serif">{entry.content || <span className="text-gray-400 italic">記述なし</span>}</div> {entry.tags && entry.tags.length > 0 && (<div className="mt-10 pt-6 border-t border-gray-100"><div className="flex flex-wrap gap-2">{entry.tags.map(tag => <NationTag key={tag} text={tag} nations={nations} year={entry.year} />)}</div></div>)} </div> </div> );
+const DetailView = ({ isAuthorized, entry, onEdit, onClose, onDelete, nations }) => ( 
+    <div className="bg-white min-h-screen md:min-h-0 pb-20"> 
+        <div className="sticky top-0 bg-white/90 backdrop-blur-sm border-b border-gray-200 p-4 flex justify-between items-center z-10">
+            <div className="flex gap-2">
+                {/* ★権限がある時だけボタンを表示 */}
+                {isAuthorized && (
+                    <>
+                        <button onClick={() => onEdit(entry)} className="p-2 text-blue-600 rounded" title="編集"><Icons.Edit2 size={20} /></button>
+                        <button onClick={() => onDelete(entry.id)} className="p-2 text-red-600 rounded" title="削除"><Icons.Trash2 size={20} /></button>
+                    </>
+                )}
+            </div>
+        </div> 
+    <div className="max-w-3xl mx-auto p-6 md:p-10"> 
+        <div className="flex flex-wrap items-center gap-4 mb-6">
+            <div className="inline-block bg-gray-900 text-white px-4 py-1 rounded-sm font-mono text-xl font-bold shadow-md">{formatDate(entry.year, entry.month, entry.day)}
+            </div>
+            <div className={`px-3 py-1 text-sm rounded-full border ${importanceLevels[entry.importance || 2].badge} border-opacity-20`}>
+                {importanceLevels[entry.importance || 2].label}
+            </div>
+        </div>
+        <div className="mb-8 pb-4 border-b-4 border-gray-100">
+        {entry.reading && <p className="text-sm text-gray-500 font-medium mb-1">{entry.reading}</p>}
+        <h1 className="text-4xl md:text-5xl font-black text-gray-900 leading-tight">{entry.title}
+        </h1>
+        </div>
+        <div className="prose prose-lg text-gray-800 whitespace-pre-wrap leading-loose font-serif">
+        {entry.content || <span className="text-gray-400 italic">記述なし</span>}
+        </div> 
+        {entry.tags && entry.tags.length > 0 && (<div className="mt-10 pt-6 border-t border-gray-100">
+        <div className="flex flex-wrap gap-2">
+        {entry.tags.map(tag => <NationTag key={tag} text={tag} nations={nations} year={entry.year} />)}</div></div>)} 
+    </div> 
+</div> );
 
 // --- StatsInputModal コンポーネント (修正版: 高さ制限・内部スクロール対応) ---
 const StatsInputModal = ({ showStatsInput, setShowStatsInput, nations, stats, setStats }) => {
@@ -3389,8 +3363,8 @@ const ItemDetailModal = ({ item, type, onClose, parseRuby }) => {
     );
 };
 
-// --- NationProfileView コンポーネント (修正版: 構造図ズレ修正・タブ追加) ---
-const NationProfileView = ({ setView, nation: initialNation, nations, entries, stats, characters, organizations, onEditEntry, onEditNation, onEditStats, onEditOverview, updateNation }) => {
+// --- NationProfileView コンポーネント (修正版: 権限チェック追加) ---
+const NationProfileView = ({ isAuthorized, setView, nation: initialNation, nations, entries, stats, characters, organizations, onEditEntry, onEditNation, onEditStats, onEditOverview, updateNation }) => {
     const [activeTab, setActiveTab] = useState('overview');
     const [isKeyCharModalOpen, setIsKeyCharModalOpen] = useState(false);
     const [isKeyOrgModalOpen, setIsKeyOrgModalOpen] = useState(false);
@@ -3436,13 +3410,7 @@ const NationProfileView = ({ setView, nation: initialNation, nations, entries, s
     }, [entries, characters, organizations, nation]);
 
     const relatedStats = useMemo(() => stats.filter(s => s.nationId === nation.id).sort((a, b) => a.year - b.year), [stats, nation]);
-
-    // 権力構造データの取得
-    const powerStructureData = useMemo(() => {
-        const raw = nation.powerStructure;
-        if (!raw) return [];
-        return Array.isArray(raw) ? raw : [raw];
-    }, [nation]);
+    const powerStructureData = useMemo(() => { const raw = nation.powerStructure; if (!raw) return []; return Array.isArray(raw) ? raw : [raw]; }, [nation]);
 
     const handleSaveKeyChars = (ids) => { updateNation({ ...nation, keyCharacterIds: ids }); setIsKeyCharModalOpen(false); };
     const handleSaveKeyOrgs = (ids) => { updateNation({ ...nation, keyOrganizationIds: ids }); setIsKeyOrgModalOpen(false); };
@@ -3450,25 +3418,10 @@ const NationProfileView = ({ setView, nation: initialNation, nations, entries, s
     const textOutlineStyle = { textShadow: '2px 2px 0 #fff, -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 2px 0 0 #fff, -2px 0 0 #fff, 0 2px 0 #fff, 0 -2px 0 #fff' };
     const parseRuby = (html) => html ? html.replace(/\[(.*?)\|(.*?)\]/g, '<ruby>$1<rt>$2</rt></ruby>') : '';
 
-    // ★修正: ツリー表示用CSS (Flexboxによるセンタリングを強化)
     const treeCss = `
         .tf-tree { display: flex; text-align: center; }
-        .tf-tree ul { 
-            padding-top: 20px; 
-            position: relative; 
-            display: flex; 
-            justify-content: center;
-            padding-inline-start: 0; 
-            margin: 0;
-        }
-        .tf-tree li { 
-            list-style-type: none; 
-            position: relative; 
-            padding: 20px 5px 0 5px; 
-            display: flex;           /* Flexbox化 */
-            flex-direction: column;  /* 縦並び */
-            align-items: center;     /* 中央揃え (これでズレが直ります) */
-        }
+        .tf-tree ul { padding-top: 20px; position: relative; display: flex; justify-content: center; padding-inline-start: 0; margin: 0; }
+        .tf-tree li { list-style-type: none; position: relative; padding: 20px 5px 0 5px; display: flex; flex-direction: column; align-items: center; }
         .tf-tree li::before, .tf-tree li::after { content: ''; position: absolute; top: 0; right: 50%; border-top: 1px solid #ccc; width: 50%; height: 20px; }
         .tf-tree li::after { right: auto; left: 50%; border-left: 1px solid #ccc; }
         .tf-tree li:only-child::after, .tf-tree li:only-child::before { display: none; }
@@ -3480,44 +3433,22 @@ const NationProfileView = ({ setView, nation: initialNation, nations, entries, s
         .tf-tree ul::before { content: ''; position: absolute; top: 0; left: 50%; border-left: 1px solid #ccc; width: 0; height: 20px; }
     `;
 
-    // ツリーノードのレンダリング（閲覧用）
     const renderReadOnlyTree = (node) => {
-        let linkedData = null;
-        let imageSrc = null;
-        let DefaultIcon = Icons.User;
-        
-        if (node.linkType === 'org' && node.linkId) {
-            linkedData = organizations.find(o => o.id === node.linkId);
-            imageSrc = linkedData?.logo;
-            DefaultIcon = Icons.Briefcase;
-        } else if (node.linkType === 'char' && node.linkId) {
-            linkedData = characters.find(c => c.id === node.linkId);
-            imageSrc = linkedData?.portrait;
-            DefaultIcon = Icons.User;
-        }
+        let linkedData = null; let imageSrc = null; let DefaultIcon = Icons.User;
+        if (node.linkType === 'org' && node.linkId) { linkedData = organizations.find(o => o.id === node.linkId); imageSrc = linkedData?.logo; DefaultIcon = Icons.Briefcase; } 
+        else if (node.linkType === 'char' && node.linkId) { linkedData = characters.find(c => c.id === node.linkId); imageSrc = linkedData?.portrait; DefaultIcon = Icons.User; }
 
         return (
             <li key={node.id}>
                  <div className="flex flex-col items-center bg-white border border-gray-300 rounded shadow-sm min-w-[140px] max-w-[180px] overflow-hidden hover:shadow-md transition-shadow z-10 relative">
-                    {/* Header/Image */}
                     <div className="w-full h-12 bg-gray-50 flex items-center justify-center border-b border-gray-200 relative overflow-hidden">
                          {imageSrc ? <img src={imageSrc} className="w-full h-full object-cover" /> : <DefaultIcon className="text-gray-300" />}
                          {node.linkType && <div className={`absolute top-0 left-0 p-0.5 text-white text-[8px] ${node.linkType === 'org' ? 'bg-blue-500' : 'bg-green-500'}`}>{node.linkType === 'org' ? <Icons.Briefcase size={8}/> : <Icons.User size={8}/>}</div>}
                     </div>
-                    {/* Content */}
                     <div className="p-2 text-center w-full">
                         <div className="font-bold text-sm text-gray-800 leading-tight mb-0.5">{node.name}</div>
                         {node.title && <div className="text-[10px] text-gray-500 mb-1">{node.title}</div>}
-                        {linkedData ? (
-                            <div 
-                                className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded truncate mx-auto border border-blue-100 cursor-pointer hover:bg-blue-100 transition-colors"
-                                onClick={(e) => { e.stopPropagation(); setViewingItem({item: linkedData, type: node.linkType}); }}
-                            >
-                                {linkedData.name}
-                            </div>
-                        ) : (
-                            <div className="text-[9px] text-gray-300">-</div>
-                        )}
+                        {linkedData ? ( <div className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded truncate mx-auto border border-blue-100 cursor-pointer hover:bg-blue-100 transition-colors" onClick={(e) => { e.stopPropagation(); setViewingItem({item: linkedData, type: node.linkType}); }}>{linkedData.name}</div> ) : ( <div className="text-[9px] text-gray-300">-</div> )}
                     </div>
                  </div>
                  {node.children && node.children.length > 0 && <ul>{node.children.map(child => renderReadOnlyTree(child))}</ul>}
@@ -3529,45 +3460,28 @@ const NationProfileView = ({ setView, nation: initialNation, nations, entries, s
         <div className="bg-white p-6 rounded-lg shadow border border-gray-200 relative group/sidebar">
             <div className="flex justify-between items-center mb-4">
                 <h3 className="font-bold text-gray-500 text-xs uppercase flex items-center gap-2"><Icon size={16}/> {title}</h3>
-                <button onClick={onEdit} className="text-xs bg-gray-100 text-gray-600 border border-gray-200 px-2 py-1 rounded hover:bg-gray-200 flex items-center gap-1 transition-colors">
-                    <Icons.Edit2 size={12} /> 編集
-                </button>
+                {isAuthorized && <button onClick={onEdit} className="text-xs bg-gray-100 text-gray-600 border border-gray-200 px-2 py-1 rounded hover:bg-gray-200 flex items-center gap-1 transition-colors"><Icons.Edit2 size={12} /> 編集</button>}
             </div>
             <div className="space-y-3">
                 {items && items.length > 0 ? items.map(id => {
-                    const item = allItems.find(i => i.id === id);
-                    if (!item) return null;
+                    const item = allItems.find(i => i.id === id); if (!item) return null;
                     let role = '';
-                    if (type === 'char') {
-                        const aff = item.affiliations?.find(a => (typeof a === 'string' ? a : a.name) === nation.name) || item.affiliations?.[0];
-                        role = (typeof aff === 'object' && aff.role) ? aff.role : '';
-                    }
+                    if (type === 'char') { const aff = item.affiliations?.find(a => (typeof a === 'string' ? a : a.name) === nation.name) || item.affiliations?.[0]; role = (typeof aff === 'object' && aff.role) ? aff.role : ''; }
                     const rank = type === 'char' ? getLevelRank(item.level) : null;
                     return (
                         <div key={id} onClick={() => onItemClick(item, type)} className="flex items-center gap-3 p-2 rounded border border-gray-100 bg-gray-50 hover:bg-white hover:shadow-md cursor-pointer transition-all">
-                            <div className="w-10 h-10 rounded-full bg-gray-200 border border-gray-300 overflow-hidden flex-shrink-0">
-                                {(type === 'char' ? item.portrait : item.logo) ? <img src={type === 'char' ? item.portrait : item.logo} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-gray-400"><Icon size={16}/></div>}
-                            </div>
+                            <div className="w-10 h-10 rounded-full bg-gray-200 border border-gray-300 overflow-hidden flex-shrink-0">{(type === 'char' ? item.portrait : item.logo) ? <img src={type === 'char' ? item.portrait : item.logo} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-gray-400"><Icon size={16}/></div>}</div>
                             <div className="overflow-hidden">
                                 <div className="font-bold text-sm text-gray-800 truncate">{item.name}</div>
                                 {role && <div className="text-xs text-blue-600 font-bold">{role}</div>}
                                 <div className="flex flex-wrap items-center gap-1 mt-0.5">
                                     {!role && type === 'org' && item.type && <span className="text-xs text-gray-400">{ORG_TYPES.find(t=>t.key===item.type)?.label}</span>}
-                                    {type === 'char' && item.level && rank ? (
-                                        <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border ${rank.bg} ${rank.color} ${rank.border}`}>
-                                            <rank.icon size={10} /> <span className="font-mono">Lv.{item.level}</span>
-                                        </span>
-                                    ) : ( type === 'char' && item.level && <span className="font-mono font-bold text-indigo-400 text-xs">Lv.{item.level}</span> )}
+                                    {type === 'char' && item.level && rank ? ( <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border ${rank.bg} ${rank.color} ${rank.border}`}><rank.icon size={10} /> <span className="font-mono">Lv.{item.level}</span></span> ) : ( type === 'char' && item.level && <span className="font-mono font-bold text-indigo-400 text-xs">Lv.{item.level}</span> )}
                                 </div>
                             </div>
                         </div>
                     );
-                }) : (
-                    <div className="text-center py-4 border-2 border-dashed border-gray-100 rounded">
-                        <p className="text-xs text-gray-400 mb-2">設定なし</p>
-                        <button onClick={onEdit} className="text-xs text-blue-500 hover:underline">選択</button>
-                    </div>
-                )}
+                }) : ( <div className="text-center py-4 border-2 border-dashed border-gray-100 rounded"><p className="text-xs text-gray-400 mb-2">設定なし</p>{isAuthorized && <button onClick={onEdit} className="text-xs text-blue-500 hover:underline">選択</button>}</div> )}
             </div>
         </div>
     );
@@ -3578,7 +3492,6 @@ const NationProfileView = ({ setView, nation: initialNation, nations, entries, s
             <KeySelectionModal isOpen={isKeyOrgModalOpen} onClose={() => setIsKeyOrgModalOpen(false)} title="主要組織" candidates={relatedOrgs} selectedIds={nation.keyOrganizationIds} onSave={handleSaveKeyOrgs} />
             <ItemDetailModal item={viewingItem?.item} type={viewingItem?.type} onClose={() => setViewingItem(null)} parseRuby={parseRuby} />
 
-            {/* "一覧へ戻る" ボタンのみ配置 (年表へ戻る は削除済み) */}
             <div className="flex items-center gap-4">
                 <button onClick={() => setView('nation_list')} className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 font-bold rounded-lg shadow hover:bg-gray-50 transition-colors border border-gray-200">
                     <Icons.ArrowLeft size={20} /> 一覧へ戻る
@@ -3586,42 +3499,23 @@ const NationProfileView = ({ setView, nation: initialNation, nations, entries, s
             </div>
 
             <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden relative">
-                <div className="h-32 w-full relative overflow-hidden" style={{ backgroundColor: nation.color || '#1f2937' }}>
-                    {nation.flag && <img src={nation.flag} className="w-full h-full object-cover opacity-30 blur-xl scale-110" />}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                </div>
+                <div className="h-32 w-full relative overflow-hidden" style={{ backgroundColor: nation.color || '#1f2937' }}>{nation.flag && <img src={nation.flag} className="w-full h-full object-cover opacity-30 blur-xl scale-110" />}<div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div></div>
                 <div className="px-8 pb-0 relative flex flex-col md:flex-row items-end gap-6 -mt-16">
-                    <div className="w-40 h-28 bg-white p-1 shadow-xl border-4 border-white flex-shrink-0 rounded-sm relative z-10">
-                        {nation.flag ? <img src={nation.flag} className="w-full h-full object-cover border border-gray-200" /> : <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs font-bold">No Image</div>}
-                    </div>
+                    <div className="w-40 h-28 bg-white p-1 shadow-xl border-4 border-white flex-shrink-0 rounded-sm relative z-10">{nation.flag ? <img src={nation.flag} className="w-full h-full object-cover border border-gray-200" /> : <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs font-bold">No Image</div>}</div>
                     <div className="flex-grow mb-4 relative z-10">
                         <div className="flex items-center justify-between">
                             <div>
-                                <div className="flex items-center gap-2 mb-2">
-                                    <span className="bg-yellow-100 border border-yellow-300 text-yellow-800 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">{LOCATIONS[nation.location || 'unknown']?.label}</span>
-                                    <span className="bg-gray-100 border border-gray-300 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">{NATION_RANKS[nation.rank || 'minor_power']?.label}</span>
-                                </div>
+                                <div className="flex items-center gap-2 mb-2"><span className="bg-yellow-100 border border-yellow-300 text-yellow-800 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">{LOCATIONS[nation.location || 'unknown']?.label}</span><span className="bg-gray-100 border border-gray-300 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">{NATION_RANKS[nation.rank || 'minor_power']?.label}</span></div>
                                 <h1 className="text-4xl font-black tracking-tight text-gray-900 leading-none mb-2" style={textOutlineStyle}>{nation.name}</h1>
-                                <div className="flex gap-3 text-xs font-mono text-gray-500">
-                                    <span className="bg-white/80 px-1.5 py-0.5 rounded border border-gray-200 backdrop-blur-sm">ID: {nation.id}</span>
-                                </div>
+                                <div className="flex gap-3 text-xs font-mono text-gray-500"><span className="bg-white/80 px-1.5 py-0.5 rounded border border-gray-200 backdrop-blur-sm">ID: {nation.id}</span></div>
                             </div>
-                            <button onClick={onEditNation} className="mb-2 mr-2 bg-white/90 hover:bg-white text-gray-700 border border-gray-300 shadow-sm px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all">
-                                <Icons.Settings size={16} /> <span className="hidden sm:inline">国家設定を編集</span>
-                            </button>
+                            {isAuthorized && <button onClick={onEditNation} className="mb-2 mr-2 bg-white/90 hover:bg-white text-gray-700 border border-gray-300 shadow-sm px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all"><Icons.Settings size={16} /> <span className="hidden sm:inline">国家設定を編集</span></button>}
                         </div>
                     </div>
                 </div>
 
                 <div className="flex px-8 pt-4 border-t border-gray-100 bg-gray-50/50 gap-1 overflow-x-auto">
-                    {[
-                        {id: 'overview', icon: Icons.FileText, label: '概要・変遷'},
-                        {id: 'characters', icon: Icons.User, label: '関連人物', badge: relatedChars.length},
-                        {id: 'organizations', icon: Icons.Briefcase, label: '関連組織', badge: relatedOrgs.length},
-                        {id: 'structure', icon: Icons.Structure, label: '統治機構'}, // ★追加
-                        {id: 'stats', icon: Icons.Activity, label: '統計データ'},
-                        {id: 'timeline', icon: Icons.List, label: '関連年表', badge: relatedEntries.length},
-                    ].map(tab => (
+                    {[ {id: 'overview', icon: Icons.FileText, label: '概要・変遷'}, {id: 'characters', icon: Icons.User, label: '関連人物', badge: relatedChars.length}, {id: 'organizations', icon: Icons.Briefcase, label: '関連組織', badge: relatedOrgs.length}, {id: 'structure', icon: Icons.Structure, label: '統治機構'}, {id: 'stats', icon: Icons.Activity, label: '統計データ'}, {id: 'timeline', icon: Icons.List, label: '関連年表', badge: relatedEntries.length} ].map(tab => (
                         <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-6 py-3 text-sm font-bold border-b-4 transition-colors whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id ? 'border-yellow-500 text-gray-900 bg-yellow-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}>
                             <tab.icon size={18} /> {tab.label}
                             {tab.badge > 0 && <span className="bg-gray-200 text-gray-600 text-[10px] px-1.5 rounded-full">{tab.badge}</span>}
@@ -3635,73 +3529,29 @@ const NationProfileView = ({ setView, nation: initialNation, nations, entries, s
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         <div className="lg:col-span-2 space-y-6">
                             <div className="bg-white p-8 rounded-lg shadow border border-gray-200 min-h-[300px] relative">
-                                <div className="flex justify-between items-center border-b pb-3 mb-4">
-                                    <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2"><Icons.BookOpen size={20} className="text-yellow-600"/> 国家概要</h3>
-                                    <button onClick={onEditOverview} className="bg-yellow-100 text-yellow-800 border border-yellow-300 px-3 py-1.5 rounded font-bold text-xs flex items-center gap-1 hover:bg-yellow-200 transition-colors shadow-sm"><Icons.Edit2 size={14} /> 概要を編集</button>
-                                </div>
-                                {nation.note ? <div className="text-base leading-loose text-gray-800 font-serif ql-editor" style={{ padding: 0, overflow: 'visible' }} dangerouslySetInnerHTML={{ __html: parseRuby(nation.note) }} /> : <div className="text-center py-10"><p className="text-gray-400 italic font-serif mb-4">記述がありません。</p><button onClick={onEditOverview} className="text-blue-600 hover:underline text-sm">編集して追加する</button></div>}
+                                <div className="flex justify-between items-center border-b pb-3 mb-4"><h3 className="font-bold text-gray-800 text-lg flex items-center gap-2"><Icons.BookOpen size={20} className="text-yellow-600"/> 国家概要</h3>{isAuthorized && <button onClick={onEditOverview} className="bg-yellow-100 text-yellow-800 border border-yellow-300 px-3 py-1.5 rounded font-bold text-xs flex items-center gap-1 hover:bg-yellow-200 transition-colors shadow-sm"><Icons.Edit2 size={14} /> 概要を編集</button>}</div>
+                                {nation.note ? <div className="text-base leading-loose text-gray-800 font-serif ql-editor" style={{ padding: 0, overflow: 'visible' }} dangerouslySetInnerHTML={{ __html: parseRuby(nation.note) }} /> : <div className="text-center py-10"><p className="text-gray-400 italic font-serif mb-4">記述がありません。</p>{isAuthorized && <button onClick={onEditOverview} className="text-blue-600 hover:underline text-sm">編集して追加する</button>}</div>}
                             </div>
                         </div>
                         <div className="lg:col-span-1 space-y-6">
                             <SidebarKeyList title="重要人物" icon={Icons.User} items={nation.keyCharacterIds} allItems={characters} onEdit={() => setIsKeyCharModalOpen(true)} type="char" onItemClick={(item, type) => setViewingItem({item, type})} />
                             <SidebarKeyList title="主要組織" icon={Icons.Briefcase} items={nation.keyOrganizationIds} allItems={organizations} onEdit={() => setIsKeyOrgModalOpen(true)} type="org" onItemClick={(item, type) => setViewingItem({item, type})} />
                             <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-                                <div className="flex justify-between items-center mb-6">
-                                    <h3 className="font-bold text-gray-500 text-xs uppercase flex items-center gap-2"><Icons.History size={16}/> 歴史的変遷</h3>
-                                    <button onClick={onEditNation} className="text-xs bg-gray-100 text-gray-600 border border-gray-200 px-2 py-1 rounded hover:bg-gray-200 flex items-center gap-1"><Icons.Settings size={12} /> 変遷を編集</button>
-                                </div>
+                                <div className="flex justify-between items-center mb-6"><h3 className="font-bold text-gray-500 text-xs uppercase flex items-center gap-2"><Icons.History size={16}/> 歴史的変遷</h3>{isAuthorized && <button onClick={onEditNation} className="text-xs bg-gray-100 text-gray-600 border border-gray-200 px-2 py-1 rounded hover:bg-gray-200 flex items-center gap-1"><Icons.Settings size={12} /> 変遷を編集</button>}</div>
                                 <div className="relative border-l-2 border-gray-200 ml-3 space-y-8 py-2">
                                     {sortedEras.map((era, idx) => {
-                                        const isCollapse = era.type === 'collapse';
-                                        let eventBadge = null;
-                                        const eventType = era.event?.type;
+                                        const isCollapse = era.type === 'collapse'; let eventBadge = null; const eventType = era.event?.type;
                                         if (eventType && eventType !== 'none') {
                                             const eventDef = ERA_EVENT_TYPES[eventType];
                                             if (eventDef) {
                                                 const targetIds = era.event.targetIds || (era.event.targetId ? [era.event.targetId] : []);
-                                                const targetNames = targetIds.map(tid => {
-                                                    const n = nations.find(nav => nav.id === tid);
-                                                    return n ? n.name : '';
-                                                }).filter(n => n).join('・');
-                                                let labelText = eventDef.label;
-                                                let badgeClass = "bg-gray-100 text-gray-600 border-gray-200";
-                                                if (['annexed_by', 'merger'].includes(eventType)) { labelText = targetNames ? `${targetNames}に併合` : "他国に併合"; badgeClass = "bg-red-50 text-red-600 border-red-100"; } 
-                                                else if (eventType === 'partitioned_by') { labelText = targetNames ? `${targetNames}により分割` : "分割統治される"; badgeClass = "bg-red-50 text-red-600 border-red-100"; } 
-                                                else if (['independence', 'splinter'].includes(eventType)) { labelText = targetNames ? `${targetNames}より${eventDef.label}` : eventDef.label; badgeClass = "bg-indigo-50 text-indigo-700 border-indigo-100"; } 
-                                                else if (eventType === 'foundation') { labelText = "建国・成立"; badgeClass = "bg-green-50 text-green-700 border-green-100"; } 
-                                                else if (eventType === 'foundation_puppet') { labelText = targetNames ? `${targetNames}の傀儡として成立` : "傀儡国として成立"; badgeClass = "bg-purple-50 text-purple-700 border-purple-100"; } 
-                                                else if (eventType === 'regime_change') { labelText = "政体変更"; badgeClass = "bg-blue-50 text-blue-700 border-blue-100"; } 
-                                                else if (eventType === 'be_puppet') { labelText = targetNames ? `${targetNames}の傀儡になる` : "傀儡化される"; badgeClass = "bg-purple-50 text-purple-700 border-purple-100"; }
+                                                const targetNames = targetIds.map(tid => { const n = nations.find(nav => nav.id === tid); return n ? n.name : ''; }).filter(n => n).join('・');
+                                                let labelText = eventDef.label; let badgeClass = "bg-gray-100 text-gray-600 border-gray-200";
+                                                if (['annexed_by', 'merger'].includes(eventType)) { labelText = targetNames ? `${targetNames}に併合` : "他国に併合"; badgeClass = "bg-red-50 text-red-600 border-red-100"; } else if (eventType === 'partitioned_by') { labelText = targetNames ? `${targetNames}により分割` : "分割統治される"; badgeClass = "bg-red-50 text-red-600 border-red-100"; } else if (['independence', 'splinter'].includes(eventType)) { labelText = targetNames ? `${targetNames}より${eventDef.label}` : eventDef.label; badgeClass = "bg-indigo-50 text-indigo-700 border-indigo-100"; } else if (eventType === 'foundation') { labelText = "建国・成立"; badgeClass = "bg-green-50 text-green-700 border-green-100"; } else if (eventType === 'foundation_puppet') { labelText = targetNames ? `${targetNames}の傀儡として成立` : "傀儡国として成立"; badgeClass = "bg-purple-50 text-purple-700 border-purple-100"; } else if (eventType === 'regime_change') { labelText = "政体変更"; badgeClass = "bg-blue-50 text-blue-700 border-blue-100"; } else if (eventType === 'be_puppet') { labelText = targetNames ? `${targetNames}の傀儡になる` : "傀儡化される"; badgeClass = "bg-purple-50 text-purple-700 border-purple-100"; }
                                                 eventBadge = ( <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${badgeClass} mt-1 w-fit`}> {eventDef.icon} {labelText} </span> );
                                             }
                                         }
-                                        return (
-                                            <div key={idx} className="relative pl-6">
-                                                <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 border-white shadow-sm ${isCollapse ? 'bg-gray-400' : 'bg-blue-500'}`}></div>
-                                                <div className="flex flex-col">
-                                                    <span className="text-xs font-mono font-bold text-gray-500 mb-1 block">{era.startYear}年</span>
-                                                    <span className={`font-bold text-base ${isCollapse ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{era.name}</span>
-                                                    {eventBadge}
-                                                    {era.params && Object.keys(era.params).length > 0 && (
-                                                        <div className="mt-3 space-y-2">
-                                                            {NATION_PARAMS.map(p => {
-                                                                const val = era.params[p.key];
-                                                                if (!val || !val.name) return null;
-                                                                return (
-                                                                    <div key={p.key} className="text-xs flex flex-col bg-gray-50 p-2 rounded border border-gray-100">
-                                                                        <span className="text-[9px] font-bold text-gray-400 mb-0.5">{p.label}</span>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{backgroundColor: val.color || p.defaultColor}}></div>
-                                                                            <span className="font-bold text-gray-800">{val.name}</span>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
+                                        return ( <div key={idx} className="relative pl-6"> <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 border-white shadow-sm ${isCollapse ? 'bg-gray-400' : 'bg-blue-500'}`}></div> <div className="flex flex-col"> <span className="text-xs font-mono font-bold text-gray-500 mb-1 block">{era.startYear}年</span> <span className={`font-bold text-base ${isCollapse ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{era.name}</span> {eventBadge} {era.params && Object.keys(era.params).length > 0 && ( <div className="mt-3 space-y-2"> {NATION_PARAMS.map(p => { const val = era.params[p.key]; if (!val || !val.name) return null; return ( <div key={p.key} className="text-xs flex flex-col bg-gray-50 p-2 rounded border border-gray-100"> <span className="text-[9px] font-bold text-gray-400 mb-0.5">{p.label}</span> <div className="flex items-center gap-2"> <div className="w-2 h-2 rounded-full flex-shrink-0" style={{backgroundColor: val.color || p.defaultColor}}></div> <span className="font-bold text-gray-800">{val.name}</span> </div> </div> ); })} </div> )} </div> </div> );
                                     })}
                                 </div>
                             </div>
@@ -3713,39 +3563,9 @@ const NationProfileView = ({ setView, nation: initialNation, nations, entries, s
                     <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
                         <h3 className="font-bold text-lg text-gray-800 mb-6 flex items-center gap-2"><Icons.User size={20} className="text-blue-600"/> 関連人物一覧 ({relatedChars.length})</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {relatedChars.sort((a, b) => {
-                                const aKey = nation.keyCharacterIds?.includes(a.id) ? 1 : 0;
-                                const bKey = nation.keyCharacterIds?.includes(b.id) ? 1 : 0;
-                                return bKey - aKey;
-                            }).map(char => {
-                                const isKey = nation.keyCharacterIds?.includes(char.id);
-                                const aff = char.affiliations?.find(a => (typeof a === 'string' ? a : a.name) === nation.name) || char.affiliations?.[0];
-                                const role = (typeof aff === 'object' && aff.role) ? aff.role : '';
-                                const rank = getLevelRank(char.level);
-                                return (
-                                    <div key={char.id} onClick={() => setViewingItem({item: char, type: 'char'})} className={`p-4 rounded-lg border flex items-start gap-4 cursor-pointer transition-all ${isKey ? 'bg-blue-50 border-blue-200 hover:shadow-md' : 'bg-white border-gray-100 hover:bg-gray-50 hover:shadow-sm'}`}>
-                                        <div className="w-16 h-16 rounded-full bg-gray-200 border-2 border-white shadow overflow-hidden flex-shrink-0">
-                                            {char.portrait ? <img src={char.portrait} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-gray-400"><Icons.User size={24}/></div>}
-                                        </div>
-                                        <div className="flex-grow overflow-hidden">
-                                            <div className="flex items-center gap-2">
-                                                <h4 className="font-bold text-lg text-gray-900 truncate">{char.name}</h4>
-                                                {isKey && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200 font-bold flex-shrink-0">重要</span>}
-                                            </div>
-                                            <div className="text-sm text-gray-600 font-bold mb-1">{role || '所属'}</div>
-                                            <div className="text-xs text-gray-500 flex items-center gap-2 mb-2">
-                                                <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{char.race}</span>
-                                                {char.level && rank ? (
-                                                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${rank.bg} ${rank.color} ${rank.border}`}>
-                                                        <rank.icon size={10} /> <span className="font-mono">Lv.{char.level}</span>
-                                                    </span>
-                                                ) : ( char.level && <span className="font-mono font-bold text-indigo-400">Lv.{char.level}</span> )}
-                                                <span>{char.birthYear || '?'} - {char.deathYear || '?'}</span>
-                                            </div>
-                                            {char.note && <div className="text-xs text-gray-500 line-clamp-2 border-t border-gray-100 pt-2 mt-1">{char.note.replace(/<[^>]+>/g, '')}</div>}
-                                        </div>
-                                    </div>
-                                );
+                            {relatedChars.sort((a, b) => { const aKey = nation.keyCharacterIds?.includes(a.id) ? 1 : 0; const bKey = nation.keyCharacterIds?.includes(b.id) ? 1 : 0; return bKey - aKey; }).map(char => {
+                                const isKey = nation.keyCharacterIds?.includes(char.id); const aff = char.affiliations?.find(a => (typeof a === 'string' ? a : a.name) === nation.name) || char.affiliations?.[0]; const role = (typeof aff === 'object' && aff.role) ? aff.role : ''; const rank = getLevelRank(char.level);
+                                return ( <div key={char.id} onClick={() => setViewingItem({item: char, type: 'char'})} className={`p-4 rounded-lg border flex items-start gap-4 cursor-pointer transition-all ${isKey ? 'bg-blue-50 border-blue-200 hover:shadow-md' : 'bg-white border-gray-100 hover:bg-gray-50 hover:shadow-sm'}`}> <div className="w-16 h-16 rounded-full bg-gray-200 border-2 border-white shadow overflow-hidden flex-shrink-0"> {char.portrait ? <img src={char.portrait} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-gray-400"><Icons.User size={24}/></div>} </div> <div className="flex-grow overflow-hidden"> <div className="flex items-center gap-2"> <h4 className="font-bold text-lg text-gray-900 truncate">{char.name}</h4> {isKey && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200 font-bold flex-shrink-0">重要</span>} </div> <div className="text-sm text-gray-600 font-bold mb-1">{role || '所属'}</div> <div className="text-xs text-gray-500 flex items-center gap-2 mb-2"> <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{char.race}</span> {char.level && rank ? ( <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${rank.bg} ${rank.color} ${rank.border}`}><rank.icon size={10} /> <span className="font-mono">Lv.{char.level}</span></span> ) : ( char.level && <span className="font-mono font-bold text-indigo-400">Lv.{char.level}</span> )} <span>{char.birthYear || '?'} - {char.deathYear || '?'}</span> </div> {char.note && <div className="text-xs text-gray-500 line-clamp-2 border-t border-gray-100 pt-2 mt-1">{char.note.replace(/<[^>]+>/g, '')}</div>} </div> </div> );
                             })}
                             {relatedChars.length === 0 && <p className="text-gray-400 italic col-span-2">関連する人物は登録されていません。</p>}
                         </div>
@@ -3756,69 +3576,31 @@ const NationProfileView = ({ setView, nation: initialNation, nations, entries, s
                     <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
                         <h3 className="font-bold text-lg text-gray-800 mb-6 flex items-center gap-2"><Icons.Briefcase size={20} className="text-blue-600"/> 関連組織一覧 ({relatedOrgs.length})</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {relatedOrgs.sort((a, b) => {
-                                const aKey = nation.keyOrganizationIds?.includes(a.id) ? 1 : 0;
-                                const bKey = nation.keyOrganizationIds?.includes(b.id) ? 1 : 0;
-                                return bKey - aKey;
-                            }).map(org => {
-                                const isKey = nation.keyOrganizationIds?.includes(org.id);
-                                const typeInfo = ORG_TYPES.find(t => t.key === org.type);
-                                return (
-                                    <div key={org.id} onClick={() => setViewingItem({item: org, type: 'org'})} className={`p-4 rounded-lg border flex items-start gap-4 cursor-pointer transition-all ${isKey ? 'bg-blue-50 border-blue-200 hover:shadow-md' : 'bg-white border-gray-100 hover:bg-gray-50 hover:shadow-sm'}`}>
-                                        <div className="w-16 h-16 rounded bg-white border border-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0 p-1">
-                                            {org.logo ? <img src={org.logo} className="w-full h-full object-contain"/> : <span className="text-2xl">{typeInfo?.icon}</span>}
-                                        </div>
-                                        <div className="flex-grow overflow-hidden">
-                                            <div className="flex items-center gap-2">
-                                                <h4 className="font-bold text-lg text-gray-900 truncate">{org.name}</h4>
-                                                {isKey && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200 font-bold flex-shrink-0">主要</span>}
-                                            </div>
-                                            <div className="text-xs text-gray-500 mb-2">{typeInfo?.label}</div>
-                                            <p className="text-xs text-gray-600 line-clamp-2">{org.note || '概要なし'}</p>
-                                        </div>
-                                    </div>
-                                );
+                            {relatedOrgs.sort((a, b) => { const aKey = nation.keyOrganizationIds?.includes(a.id) ? 1 : 0; const bKey = nation.keyOrganizationIds?.includes(b.id) ? 1 : 0; return bKey - aKey; }).map(org => {
+                                const isKey = nation.keyOrganizationIds?.includes(org.id); const typeInfo = ORG_TYPES.find(t => t.key === org.type);
+                                return ( <div key={org.id} onClick={() => setViewingItem({item: org, type: 'org'})} className={`p-4 rounded-lg border flex items-start gap-4 cursor-pointer transition-all ${isKey ? 'bg-blue-50 border-blue-200 hover:shadow-md' : 'bg-white border-gray-100 hover:bg-gray-50 hover:shadow-sm'}`}> <div className="w-16 h-16 rounded bg-white border border-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0 p-1"> {org.logo ? <img src={org.logo} className="w-full h-full object-contain"/> : <span className="text-2xl">{typeInfo?.icon}</span>} </div> <div className="flex-grow overflow-hidden"> <div className="flex items-center gap-2"> <h4 className="font-bold text-lg text-gray-900 truncate">{org.name}</h4> {isKey && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200 font-bold flex-shrink-0">主要</span>} </div> <div className="text-xs text-gray-500 mb-2">{typeInfo?.label}</div> <p className="text-xs text-gray-600 line-clamp-2">{org.note || '概要なし'}</p> </div> </div> );
                             })}
                             {relatedOrgs.length === 0 && <p className="text-gray-400 italic col-span-2">関連する組織は登録されていません。</p>}
                         </div>
                     </div>
                 )}
 
-                {/* ★追加: 統治機構タブ */}
                 {activeTab === 'structure' && (
                     <div className="bg-white rounded-lg shadow border border-gray-200 p-8 min-h-[400px]">
                         <style>{treeCss}</style>
                         <div className="flex justify-between items-center mb-6 border-b pb-4">
-                            <h3 className="font-bold text-xl text-gray-800 flex items-center gap-2">
-                                <Icons.Structure size={24} className="text-purple-600"/> 統治機構・権力構造図
-                            </h3>
-                            <button onClick={() => { setView('power_structure'); }} className="bg-purple-100 text-purple-800 border border-purple-300 px-4 py-2 rounded font-bold text-sm flex items-center gap-2 hover:bg-purple-200 transition-colors shadow-sm">
-                                <Icons.Edit2 size={16} /> 構造を編集
-                            </button>
+                            <h3 className="font-bold text-xl text-gray-800 flex items-center gap-2"><Icons.Structure size={24} className="text-purple-600"/> 統治機構・権力構造図</h3>
+                            {isAuthorized && <button onClick={() => { setView('power_structure'); }} className="bg-purple-100 text-purple-800 border border-purple-300 px-4 py-2 rounded font-bold text-sm flex items-center gap-2 hover:bg-purple-200 transition-colors shadow-sm"><Icons.Edit2 size={16} /> 構造を編集</button>}
                         </div>
                         <div className="w-full overflow-x-auto pb-8 custom-scrollbar bg-[#f9fafb] rounded border border-gray-100 p-8">
-                            {powerStructureData.length > 0 ? (
-                                <div className="flex gap-16 justify-center min-w-max">
-                                    {powerStructureData.map((rootNode, index) => (
-                                        <div key={index} className="tf-tree">
-                                            <ul>{renderReadOnlyTree(rootNode)}</ul>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-center py-20 text-gray-400">
-                                    <Icons.Structure size={48} className="mx-auto mb-4 opacity-20"/>
-                                    <p>権力構造図が未作成です。</p>
-                                    <p className="text-sm">「構造を編集」ボタンから作成できます。</p>
-                                </div>
-                            )}
+                            {powerStructureData.length > 0 ? ( <div className="flex gap-16 justify-center min-w-max"> {powerStructureData.map((rootNode, index) => ( <div key={index} className="tf-tree"> <ul>{renderReadOnlyTree(rootNode)}</ul> </div> ))} </div> ) : ( <div className="text-center py-20 text-gray-400"> <Icons.Structure size={48} className="mx-auto mb-4 opacity-20"/> <p>権力構造図が未作成です。</p> <p className="text-sm">「構造を編集」ボタンから作成できます。</p> </div> )}
                         </div>
                     </div>
                 )}
 
                 {activeTab === 'stats' && (
                     <div className="space-y-6">
-                        <div className="flex justify-end"><button onClick={onEditStats} className="bg-blue-900 text-white px-4 py-2 rounded-lg font-bold shadow hover:bg-blue-800 flex items-center gap-2 transition-colors"><Icons.BarChart2 size={18} /> 統計データを記録・修正</button></div>
+                        <div className="flex justify-end">{isAuthorized && <button onClick={onEditStats} className="bg-blue-900 text-white px-4 py-2 rounded-lg font-bold shadow hover:bg-blue-800 flex items-center gap-2 transition-colors"><Icons.BarChart2 size={18} /> 統計データを記録・修正</button>}</div>
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <div className="bg-white p-6 rounded-lg shadow border border-gray-200"><SimpleLineChart title="総人口推移" data={relatedStats} nations={[nation]} getValue={(d) => d.population} formatValue={(v, isShort) => formatJapaneseNumber(v, '人', isShort)} icon={Icons.Users} dataType="population" /></div>
                             <div className="bg-white p-6 rounded-lg shadow border border-gray-200"><SimpleLineChart title="GDP推移" data={relatedStats} nations={[nation]} getValue={(d) => d.gdp} formatValue={(v, isShort) => formatJapaneseNumber(v, '円', isShort)} icon={Icons.BarChart2} dataType="gdp" /></div>
@@ -3834,7 +3616,7 @@ const NationProfileView = ({ setView, nation: initialNation, nations, entries, s
                                 <div key={entry.id} className="flex gap-6 p-4 hover:bg-gray-50 transition-all group border-b border-gray-100 last:border-0 relative">
                                     <div className="flex-shrink-0 w-28 pt-1 text-right"><div className="font-mono font-bold text-lg text-gray-700">{entry.year}年</div><div className="text-xs text-gray-400">{entry.month ? entry.month + '月' : ''}{entry.day ? entry.day + '日' : ''}</div></div>
                                     <div className="flex-grow relative pl-6 border-l-2 border-gray-200 group-hover:border-green-300 transition-colors"><div className={`absolute -left-[7px] top-2 w-3 h-3 rounded-full border-2 border-white shadow-sm ${importanceLevels[entry.importance||2].bg.replace('bg-', 'bg-').replace('-50', '-400')}`}></div><h4 className="font-bold text-lg text-gray-900 mb-1">{entry.title}</h4><p className="text-sm text-gray-600 leading-relaxed">{entry.content}</p></div>
-                                    <div className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => onEditEntry(entry)} className="p-2 bg-white text-gray-400 hover:text-blue-600 border border-gray-200 rounded-lg shadow-sm"><Icons.Edit2 size={16} /></button></div>
+                                    {isAuthorized && <div className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => onEditEntry(entry)} className="p-2 bg-white text-gray-400 hover:text-blue-600 border border-gray-200 rounded-lg shadow-sm"><Icons.Edit2 size={16} /></button></div>}
                                 </div>
                             ))}
                         </div>
@@ -4070,65 +3852,6 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
 };
 
 
-// --- TimelineWiki コンポーネント (進捗ゲージ実装版) ---
-
-// ★定数・ヘルパー（コンポーネントの外に配置）
-const CHUNK_SIZE = 800 * 1024; // 800KB
-
-const chunkString = (str, size) => {
-    const numChunks = Math.ceil(str.length / size);
-    const chunks = [];
-    for (let i = 0, o = 0; i < numChunks; ++i, o += size) {
-        chunks.push(str.substr(o, size));
-    }
-    return chunks;
-};
-
-// ★進捗表示用コンポーネント
-const ProgressToast = ({ tasks }) => {
-    if (Object.keys(tasks).length === 0) return null;
-
-    // 全タスクの合計進捗を計算
-    let totalChunks = 0;
-    let loadedChunks = 0;
-    let activeLabels = [];
-
-    Object.entries(tasks).forEach(([key, task]) => {
-        totalChunks += task.total;
-        loadedChunks += task.current;
-        activeLabels.push(`${task.label} (${Math.round((task.current / task.total) * 100)}%)`);
-    });
-
-    const percent = totalChunks > 0 ? Math.min(100, Math.round((loadedChunks / totalChunks) * 100)) : 0;
-
-    return (
-        <div className="fixed bottom-4 right-4 z-50 w-80 bg-gray-900/95 text-white p-4 rounded-xl shadow-2xl border border-gray-700 animate-fade-in backdrop-blur-sm">
-            <div className="flex justify-between items-center mb-2">
-                <div className="flex items-center gap-2">
-                    <div className="animate-spin text-yellow-500"><Icons.RefreshCw size={18} /></div>
-                    <span className="font-bold text-sm tracking-wider">SYNCING DATA...</span>
-                </div>
-                <span className="font-mono text-yellow-400 font-bold">{percent}%</span>
-            </div>
-            
-            {/* プログレスバー */}
-            <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden mb-2">
-                <div 
-                    className="h-full bg-gradient-to-r from-yellow-600 to-yellow-400 transition-all duration-300 ease-out"
-                    style={{ width: `${percent}%` }}
-                ></div>
-            </div>
-
-            {/* 詳細テキスト */}
-            <div className="text-xs text-gray-400 space-y-1 font-mono">
-                {activeLabels.map((label, idx) => (
-                    <div key={idx} className="truncate">▶ {label}</div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
 function TimelineWiki() {
     const [entries, setEntries] = useState([]);
     const [nations, setNations] = useState([]);
@@ -4154,10 +3877,12 @@ function TimelineWiki() {
     const [userRole, setUserRole] = useState('guest'); 
     const [allUsers, setallUsers] = useState([]);
 
-    // ★進捗管理ステート: { [taskName]: { label, current, total } }
+    // ★進捗管理ステート
     const [activeTasks, setActiveTasks] = useState({});
     
-    const isRemoteUpdate = useRef(0); // 受信中の数をカウントするため数値に変更
+    // ★修正1: 同期ループ防止のため、booleanではなくカウンター(数値)で管理
+    const isRemoteUpdate = useRef(0);
+    
     const fileInputRef = useRef(null);
     const convertFileInputRef = useRef(null);
 
@@ -4184,16 +3909,15 @@ function TimelineWiki() {
         return () => unsubscribeAuth();
     }, []);
 
-    // ユーザー管理
+    // ユーザー管理 (管理者のみ)
     useEffect(() => {
         if (!isAdmin) return;
         return db.collection('users').onSnapshot(snap => setallUsers(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     }, [isAdmin]);
 
-    // ★ヘルパー: タスクの開始・更新・終了
+    // タスク管理ヘルパー
     const updateTask = (key, data) => {
         setActiveTasks(prev => {
-            // 完了(current >= total)またはエラーで削除したい場合
             if (data === null) {
                 const next = { ...prev };
                 delete next[key];
@@ -4203,7 +3927,7 @@ function TimelineWiki() {
         });
     };
 
-// ★修正: データ読み込み (自分自身の書き込みは無視する最適化版)
+    // ★修正2: データ読み込み (カウンター処理によりループを防止)
     useEffect(() => {
         const unsubscribers = [];
         const categories = [
@@ -4217,17 +3941,15 @@ function TimelineWiki() {
         categories.forEach(({ key, label, setter }) => {
             const unsub = db.collection("wiki_data").doc(`meta_${key}`)
                 .onSnapshot(async (doc) => {
-                    // ★重要修正: 
-                    // hasPendingWrites が true の場合は「自分が今保存した直後のデータ」なので、
-                    // 再読み込み（受信）をスキップします。これで無駄な再描画を防げます。
+                    // 自分の書き込み直後の通知は無視
                     if (!doc.exists || doc.metadata.hasPendingWrites) return;
 
                     const meta = doc.data();
                     const totalChunks = meta.totalChunks || 0;
                     
+                    // ★受信開始：カウンターを増やす
                     isRemoteUpdate.current++;
                     
-                    // "受信中" タスク開始
                     updateTask(key, { label: `受信中: ${label}`, current: 0, total: totalChunks });
 
                     try {
@@ -4251,28 +3973,29 @@ function TimelineWiki() {
                     } catch (error) {
                         console.error(`${label} load error:`, error);
                     } finally {
-setTimeout(() => {
-        updateTask(key, null);
-        isRemoteUpdate.current = Math.max(0, isRemoteUpdate.current - 1);
-    }, 1000);
-}
+                        // ★受信完了：少し待ってからカウンターを減らす (タスク表示消去と同期)
+                        setTimeout(() => {
+                            updateTask(key, null);
+                            isRemoteUpdate.current = Math.max(0, isRemoteUpdate.current - 1);
+                        }, 1000);
+                    }
                 });
             unsubscribers.push(unsub);
         });
 
         // 設定同期
         unsubscribers.push(db.collection("wiki_data").doc("db_config").onSnapshot(d => {
-            // ここも自分の変更なら無視
             if(d.exists && !d.metadata.hasPendingWrites) { 
-                isRemoteUpdate.current++; 
-                if (d.data().uiScale) setUiScale(d.data().uiScale); 
+                isRemoteUpdate.current++;
+                if (d.data().uiScale) setUiScale(d.data().uiScale);
+                setTimeout(() => { isRemoteUpdate.current = Math.max(0, isRemoteUpdate.current - 1); }, 500);
             }
         }));
 
         return () => unsubscribers.forEach(u => u());
     }, []);
 
-    // ★クラウド保存 (進捗可視化版)
+    // クラウド保存
     const saveToCloud = async (newData = {}) => {
         if (!canEdit) return;
 
@@ -4288,7 +4011,6 @@ setTimeout(() => {
         const saveCategory = async (key, label, dataObj) => {
             if (!dataObj || (Array.isArray(dataObj) && dataObj.length === 0)) return;
 
-            // タスク登録: まずは分割計算中
             updateTask(key, { label: `準備中: ${label}`, current: 0, total: 100 });
 
             try {
@@ -4296,30 +4018,23 @@ setTimeout(() => {
                 const chunks = chunkString(jsonStr, CHUNK_SIZE);
                 const timestamp = new Date().toISOString();
 
-                // タスク更新: 送信開始
                 updateTask(key, { label: `送信中: ${label}`, current: 0, total: chunks.length });
 
                 const batch = db.batch();
-
-                // メタデータ
                 const metaRef = db.collection("wiki_data").doc(`meta_${key}`);
                 batch.set(metaRef, { totalChunks: chunks.length, totalSize: jsonStr.length, lastUpdated: timestamp });
 
-                // 実データ
                 chunks.forEach((chunk, index) => {
                     const chunkRef = db.collection("wiki_data").doc(`data_${key}_${index}`);
                     batch.set(chunkRef, { content: chunk, index: index });
                 });
 
-                // バッチコミット（ここは一括なので、完了待ちのみ）
                 await batch.commit();
-                
-                // 完了
                 updateTask(key, { label: `完了: ${label}`, current: chunks.length, total: chunks.length });
 
             } catch (e) {
                 console.error(`Save failed for ${key}:`, e);
-                alert(`保存エラー: ${label} (詳細はコンソール)`);
+                alert(`保存エラー: ${label}`);
             } finally {
                 setTimeout(() => updateTask(key, null), 800);
             }
@@ -4327,7 +4042,6 @@ setTimeout(() => {
 
         try {
             const promises = [];
-            // 変更があるか、または自動保存ですべてチェック
             if (newData.entries || entries.length > 0) promises.push(saveCategory('entries', '年表', currentData.entries));
             if (newData.nations || nations.length > 0) promises.push(saveCategory('nations', '国家', currentData.nations));
             if (newData.stats || stats.length > 0) promises.push(saveCategory('stats', '統計', currentData.stats));
@@ -4344,9 +4058,10 @@ setTimeout(() => {
         }
     };
 
-    // 自動保存
+    // ★修正3: 自動保存 (受信中は保存しない)
     useEffect(() => {
         if (!canEdit) return;
+        // 受信中(カウントが1以上)なら保存せずリターン
         if (isRemoteUpdate.current > 0) return;
         
         const timer = setTimeout(() => {
@@ -4355,9 +4070,9 @@ setTimeout(() => {
         return () => clearTimeout(timer);
     }, [entries, nations, stats, characters, organizations, uiScale, canEdit]);
 
-    // ハンドラ群（インポート等も修正不要、saveToCloudを呼ぶだけでゲージが出る）
-    const handleApplyAccount = async () => { /* ...省略(変更なし)... */ };
-    const handleApproveUser = async (uid, newRole) => { /* ...省略(変更なし)... */ };
+    // ハンドラ群
+    const handleApplyAccount = async () => { if(!currentUser) return; try { await db.collection('users').doc(currentUser.uid).set({ email: currentUser.email, role: 'pending', appliedAt: new Date().toISOString() }, { merge: true }); alert("申請しました。管理者の承認をお待ちください。"); } catch(e) { alert("エラー: " + e.message); } };
+    const handleApproveUser = async (uid, newRole) => { try { if (newRole === 'reject') { await db.collection('users').doc(uid).update({ role: 'rejected' }); } else { await db.collection('users').doc(uid).update({ role: newRole }); } } catch(e) { alert("更新エラー"); } };
     const handleLogin = async () => { try { await auth.signInWithPopup(googleProvider); } catch (e) { alert(e.message); } };
     const handleLogout = async () => { try { await auth.signOut(); setView('menu'); } catch (e) { console.error(e); } };
 
@@ -4384,7 +4099,7 @@ setTimeout(() => {
                         characters: !Array.isArray(data) && data.characters ? data.characters : [],
                         organizations: !Array.isArray(data) && data.organizations ? data.organizations : []
                     };
-                    isRemoteUpdate.current = false;
+                    isRemoteUpdate.current = 0; // 手動インポート時は強制リセット
                     setEntries(d.entries); setNations(d.nations); setStats(d.stats); setCharacters(d.characters); setOrganizations(d.organizations);
                     saveToCloud(d);
                 } 
@@ -4402,9 +4117,11 @@ setTimeout(() => {
             try { 
                 const data = JSON.parse(e.target.result); 
                 if (!window.confirm('既存データを維持してマージしますか？')) return; 
-                // マージロジックは前のコードと同様...
-                // (省略しても動作に影響ないので簡略化記述しますが、元のロジックを維持してください)
-                alert('コンバート実装は省略（元のロジックを利用してください）');
+                // 簡易マージ
+                const mergedEntries = [...entries, ...(Array.isArray(data) ? data : (data.entries || []))];
+                setEntries(mergedEntries);
+                saveToCloud({ entries: mergedEntries });
+                alert('マージ完了');
             } catch (error) { alert('失敗'); } 
             finally { if (convertFileInputRef.current) convertFileInputRef.current.value = ''; } 
         }; 
@@ -4416,7 +4133,6 @@ setTimeout(() => {
     
     // UI構築用ロジック
     const timelineItems = useMemo(() => {
-        // ... (前のコードと同じロジック) ...
         const items = []; 
         let filteredEntries = entries; 
         if (searchTerm) { 
@@ -4447,7 +4163,6 @@ setTimeout(() => {
             <input type="file" ref={convertFileInputRef} onChange={handleConvertFile} className="hidden" accept=".json" disabled={!canEdit} />
             <StatsInputModal showStatsInput={showStatsInput} setShowStatsInput={setShowStatsInput} nations={nations} stats={stats} setStats={setStats} />
 
-            {/* ★進捗表示用トースト（タスクがある時だけ表示） */}
             <ProgressToast tasks={activeTasks} />
 
             {view === 'menu' ? (
@@ -4464,7 +4179,6 @@ setTimeout(() => {
                 />
             ) : (
                 <div className="min-h-screen bg-[#f0f2f5] font-sans text-gray-800 flex flex-col h-screen overflow-hidden">
-                    {/* ヘッダー部分は変更なし、そのまま記述 */}
                     <header className="bg-[#1a1a1a] text-white p-2 shadow-lg shrink-0 z-50 border-b-4 border-yellow-600">
                         <div className="max-w-7xl mx-auto flex justify-between items-center overflow-x-auto custom-scrollbar pb-1">
                             <div className="flex items-center gap-4 mr-6 shrink-0">
@@ -4479,11 +4193,11 @@ setTimeout(() => {
                             </div>
                             <div className="flex items-end gap-3 shrink-0">
                                 <div className="flex flex-col items-center gap-1"><span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">ZOOM</span><div className="flex items-center bg-gray-700 rounded-lg border border-gray-600"><button onClick={zoomOut} className="p-1.5 hover:bg-gray-600 rounded-l text-gray-300"><Icons.Minus size={16}/></button><button onClick={zoomReset} className="text-xs font-mono font-bold w-10 text-center text-yellow-500 hover:text-white">{uiScale}%</button><button onClick={zoomIn} className="p-1.5 hover:bg-gray-600 rounded-r text-gray-300"><Icons.Plus size={16}/></button></div></div>
-                                {/* 他のメニューボタン群 (Manage, View, Data, User) もそのまま */}
+                                
                                 <div className={`flex flex-col items-center gap-1 ${disabledClass}`}>
                                     <span className="text-[9px] text-yellow-600/80 font-bold uppercase tracking-widest">MANAGE</span>
                                     <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 overflow-hidden shadow-sm">
-                                        <button onClick={() => openSettings(null)} className={`p-2 transition-colors border-r border-gray-700 ${view === 'settings' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="国家変遷"><Icons.Globe size={20} /></button>
+                                        <button onClick={() => setView('settings')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'settings' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="国家変遷"><Icons.Globe size={20} /></button>
                                         <button onClick={() => setView('nation_overview')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'nation_overview' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="概要"><Icons.FileText size={20} /></button>
                                         <button onClick={() => setView('characters')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'characters' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="人物"><Icons.User size={20} /></button>
                                         <button onClick={() => setView('organizations')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'organizations' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="組織"><Icons.Briefcase size={20} /></button>
@@ -4491,7 +4205,9 @@ setTimeout(() => {
                                         <button onClick={() => setView('power_structure')} className={`p-2 transition-colors ${view === 'power_structure' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="権力構造図"><Icons.Structure size={20} /></button>
                                     </div>
                                 </div>
+
                                 <div className="flex flex-col items-center gap-1"><span className="text-[9px] text-blue-400/60 font-bold uppercase tracking-widest">VIEW</span><div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 overflow-hidden shadow-sm"><button onClick={() => setView('nation_list')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'nation_list' || view === 'nation_profile' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="国家一覧"><Icons.LayoutGrid size={20} /></button><button onClick={() => setView('graph')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'graph' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="グラフ分析"><Icons.Activity size={20} /></button><button onClick={() => setView('genealogy')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'genealogy' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="系譜図"><Icons.GitMerge size={20} /></button><button onClick={() => setView('table')} className={`p-2 transition-colors ${view === 'table' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="体制一覧"><Icons.List size={20} /></button></div></div>
+                                
                                 <div className="flex flex-col items-center gap-1">
                                     <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">DATA</span>
                                     <div className="flex items-center gap-1 border-r border-gray-700 pr-2 mr-1">
@@ -4520,11 +4236,23 @@ setTimeout(() => {
                             </div>
                         </div>
                     </header>
-                    {/* Mainコンテンツ */}
                     <div className="flex-grow overflow-auto bg-[#f0f2f5] relative w-full h-full">
                         <main className={(view === 'power_structure' || view === 'genealogy') ? "w-full h-full p-0 overflow-hidden" : "max-w-5xl mx-auto p-4 origin-top-left"} style={(view === 'power_structure' || view === 'genealogy') ? {} : { zoom: uiScale / 100 }}>
-                            {/* ビューの切り替え (前のコードと同じ) */}
-                            {view === 'settings' ? <SettingsView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} setTargetNation={setTargetNation} /> : view === 'nation_overview' ? <NationOverviewView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} /> : view === 'characters' ? <CharacterManager setView={setView} nations={nations} characters={characters} setCharacters={setCharacters} organizations={organizations} setOrganizations={setOrganizations} /> : view === 'organizations' ? <OrganizationManager setView={setView} nations={nations} organizations={organizations} setOrganizations={setOrganizations} characters={characters} setCharacters={setCharacters} /> : view === 'statsEdit' ? <StatsEditView setView={setView} nations={nations} stats={stats} setStats={setStats} /> : view === 'power_structure' ? <PowerStructureView setView={setView} nations={nations} setNations={setNations} organizations={organizations} characters={characters} /> :view === 'user_management' && isAdmin ? <UserManagementView setView={setView} allUsers={allUsers} onChangeRole={handleApproveUser} />: view === 'graph' ? <GraphView setView={setView} stats={stats} nations={nations} /> : view === 'genealogy' ? <GenealogyView setView={setView} nations={nations} stats={stats} entries={entries} setSelectedEntry={setSelectedEntry} uiScale={uiScale} /> : view === 'table' ? <NationTableView setView={setView} nations={nations} stats={stats} onEditNation={openSettings} onAddNation={() => openSettings(null)}/> : view === 'nation_list' ? <NationListView setView={setView} nations={nations} onSelectNation={(n) => { setSelectedProfileNation(n); setView('nation_profile'); }} /> : view === 'nation_profile' && selectedProfileNation ? <NationProfileView setView={setView} nation={selectedProfileNation} nations={nations} entries={entries} stats={stats} characters={characters} organizations={organizations} updateNation={(updated) => { setNations(prev => prev.map(n => n.id === updated.id ? updated : n)); setSelectedProfileNation(updated); }} onEditEntry={(entry) => { setSelectedEntry(entry); setIsEditing(true); setView('edit'); }} onEditNation={() => openSettings(selectedProfileNation)} onEditStats={() => setShowStatsInput(true)} onEditOverview={() => { setTargetNation(selectedProfileNation); setView('nation_overview'); }} /> : view === 'help' ? <HelpView setView={setView} /> : view === 'timeline' ? (
+                            {/* ★修正4: 権限チェックによるビューの表示制限とプロパティ渡し */}
+                            {view === 'settings' ? (canEdit ? <SettingsView ... /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
+                             view === 'nation_overview' ? (canEdit ? <NationOverviewView ... /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
+                             view === 'characters' ? (canEdit ? <CharacterManager ... /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
+                             view === 'organizations' ? (canEdit ? <OrganizationManager ... /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
+                             view === 'statsEdit' ? (canEdit ? <StatsEditView ... /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
+                             view === 'power_structure' ? (canEdit ? <PowerStructureView ... /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) :
+                             view === 'user_management' && isAdmin ? <UserManagementView setView={setView} allUsers={allUsers} onChangeRole={handleApproveUser} /> : 
+                             view === 'graph' ? <GraphView setView={setView} stats={stats} nations={nations} /> : 
+                             view === 'genealogy' ? <GenealogyView setView={setView} nations={nations} stats={stats} entries={entries} setSelectedEntry={setSelectedEntry} uiScale={uiScale} /> : 
+                             view === 'table' ? <NationTableView isAuthorized={canEdit} setView={setView} nations={nations} stats={stats} onEditNation={openSettings} onAddNation={() => openSettings(null)}/> : 
+                             view === 'nation_list' ? <NationListView setView={setView} nations={nations} onSelectNation={(n) => { setSelectedProfileNation(n); setView('nation_profile'); }} /> : 
+                             view === 'nation_profile' && selectedProfileNation ? <NationProfileView isAuthorized={canEdit} setView={setView} nation={selectedProfileNation} nations={nations} entries={entries} stats={stats} characters={characters} organizations={organizations} updateNation={(updated) => { setNations(prev => prev.map(n => n.id === updated.id ? updated : n)); setSelectedProfileNation(updated); }} onEditEntry={(entry) => { setSelectedEntry(entry); setIsEditing(true); setView('edit'); }} onEditNation={() => openSettings(selectedProfileNation)} onEditStats={() => setShowStatsInput(true)} onEditOverview={() => { setTargetNation(selectedProfileNation); setView('nation_overview'); }} /> : 
+                             view === 'help' ? <HelpView setView={setView} /> : 
+                             view === 'timeline' ? (
                                 <div className="animate-fade-in">
                                     <div className="mb-8 sticky top-0 z-20 pt-4">
                                         <div className="relative max-w-2xl mx-auto flex gap-2">
@@ -4533,7 +4261,6 @@ setTimeout(() => {
                                         </div>
                                         {showFilters && ( <div className="max-w-2xl mx-auto mt-4 bg-white p-6 rounded-lg shadow-xl border border-gray-200"><div className="flex justify-between items-center mb-4"><h3 className="font-bold text-gray-700">絞り込み条件</h3><button onClick={() => {setFilterTags([]); setFilterImportance([]);}} className="text-xs text-blue-600 hover:underline">条件をクリア</button></div><div className="mb-6"><label className="block text-xs font-bold text-gray-500 mb-2">重要度クラス</label><div className="flex flex-wrap gap-2">{Object.entries(importanceLevels).map(([level, info]) => <button key={level} onClick={() => setFilterImportance(prev => prev.includes(parseInt(level)) ? prev.filter(l => l !== parseInt(level)) : [...prev, parseInt(level)])} className={`px-3 py-1.5 rounded text-sm border transition-all ${filterImportance.includes(parseInt(level)) ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>{info.label}</button>)}</div></div><div><label className="block text-xs font-bold text-gray-500 mb-2">タグ</label><div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">{allTags.length > 0 ? allTags.map(tag => <button key={tag} onClick={() => setFilterTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} className={`px-3 py-1 rounded-full text-xs border flex items-center gap-1 transition-all ${filterTags.includes(tag) ? 'bg-yellow-500 text-white border-yellow-500' : 'bg-gray-50 text-gray-600 border-gray-200'}`}><Icons.Tag size={10} />{tag}</button>) : <span className="text-sm text-gray-400">タグなし</span>}</div></div></div> )}
                                     </div>
-                                    {/* タイムラインリスト描画 (前のコードと同じ) */}
                                     <div className="relative min-h-[600px] pb-20">
                                         <div className="absolute left-8 md:left-1/2 top-0 bottom-0 w-1.5 bg-gradient-to-b from-gray-800 via-gray-600 to-transparent transform -translate-x-1/2 rounded-full opacity-80"></div>
                                         <div className="space-y-12">
@@ -4559,9 +4286,9 @@ setTimeout(() => {
                                     </div>
                                 </div>
                             ) : view === 'edit' && selectedEntry ? (
-                                <EditForm entry={selectedEntry} onSave={(entry) => { const clean = { ...entry, year: parseInt(entry.year)||0, month: entry.month?parseInt(entry.month):null, day: entry.day?parseInt(entry.day):null }; const newEntries = entries.some(e => e.id === clean.id) ? entries.map(e => e.id === clean.id ? clean : e) : [...entries, clean]; setEntries(newEntries); saveToCloud({ entries: newEntries }); setIsEditing(false); setSelectedEntry(clean); setView('detail'); }} onCancel={() => { setIsEditing(false); if(!selectedEntry.title) setView('timeline'); else setView('detail'); }} nations={nations} />
+                                canEdit ? <EditForm entry={selectedEntry} onSave={(entry) => { const clean = { ...entry, year: parseInt(entry.year)||0, month: entry.month?parseInt(entry.month):null, day: entry.day?parseInt(entry.day):null }; const newEntries = entries.some(e => e.id === clean.id) ? entries.map(e => e.id === clean.id ? clean : e) : [...entries, clean]; setEntries(newEntries); saveToCloud({ entries: newEntries }); setIsEditing(false); setSelectedEntry(clean); setView('detail'); }} onCancel={() => { setIsEditing(false); if(!selectedEntry.title) setView('timeline'); else setView('detail'); }} nations={nations} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>
                             ) : view === 'detail' && selectedEntry ? (
-                                <DetailView entry={selectedEntry} onEdit={() => { setIsEditing(true); setView('edit'); }} onClose={() => { setView('timeline'); setSelectedEntry(null); }} onDelete={(id) => { if(window.confirm('削除しますか？')) { const newEntries = entries.filter(e => e.id !== id); setEntries(newEntries); saveToCloud({ entries: newEntries }); setView('timeline'); setSelectedEntry(null); } }} nations={nations} />
+                                <DetailView isAuthorized={canEdit} entry={selectedEntry} onEdit={() => { setIsEditing(true); setView('edit'); }} onClose={() => { setView('timeline'); setSelectedEntry(null); }} onDelete={(id) => { if(window.confirm('削除しますか？')) { const newEntries = entries.filter(e => e.id !== id); setEntries(newEntries); saveToCloud({ entries: newEntries }); setView('timeline'); setSelectedEntry(null); } }} nations={nations} />
                             ) : null}
                         </main>
                     </div>

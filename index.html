@@ -3986,11 +3986,11 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                 <div className="flex flex-wrap justify-center gap-4 items-center">
                     {/* ログイン/ログアウトボタン */}
                     {!currentUser ? (
-                        <ActionBtn onClick={handleLogin} icon={Icons.Users} label="管理者ログイン" className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" />
+                        <ActionBtn onClick={handleLogin} icon={Icons.Users} label="ログイン" className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" />
                     ) : (
                         <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-gray-400 mr-2">
-                                {isAuthorized ? "管理者としてログイン中" : "ゲスト閲覧モード"}
+                                {isAuthorized ? "管理者としてログイン中" : "ログイン中"}
                             </span>
                             <ActionBtn onClick={handleLogout} icon={Icons.X} label="ログアウト" className="bg-gray-100 text-gray-600 hover:bg-gray-200" />
                         </div>
@@ -4063,7 +4063,7 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
             </div>
             
             <div className="mt-12 text-center text-gray-400 text-xs font-mono">
-                <p>© EIHA CHRONICLE TIMELINE SYSTEM</p>
+                <p>by HELMENEA PROJECT</p>
             </div>
         </div>
     );
@@ -4203,7 +4203,7 @@ function TimelineWiki() {
         });
     };
 
-    // ★データ読み込み (進捗可視化版)
+// ★修正: データ読み込み (自分自身の書き込みは無視する最適化版)
     useEffect(() => {
         const unsubscribers = [];
         const categories = [
@@ -4217,37 +4217,30 @@ function TimelineWiki() {
         categories.forEach(({ key, label, setter }) => {
             const unsub = db.collection("wiki_data").doc(`meta_${key}`)
                 .onSnapshot(async (doc) => {
-                    if (!doc.exists) return;
+                    // ★重要修正: 
+                    // hasPendingWrites が true の場合は「自分が今保存した直後のデータ」なので、
+                    // 再読み込み（受信）をスキップします。これで無駄な再描画を防げます。
+                    if (!doc.exists || doc.metadata.hasPendingWrites) return;
 
                     const meta = doc.data();
                     const totalChunks = meta.totalChunks || 0;
                     
                     isRemoteUpdate.current = true;
                     
-                    // タスク開始
+                    // "受信中" タスク開始
                     updateTask(key, { label: `受信中: ${label}`, current: 0, total: totalChunks });
 
                     try {
                         const promises = [];
                         for (let i = 0; i < totalChunks; i++) {
-                            // 各チャンクの取得プロミス
-                            const p = db.collection("wiki_data").doc(`data_${key}_${i}`).get()
+                            promises.push(db.collection("wiki_data").doc(`data_${key}_${i}`).get()
                                 .then(res => {
-                                    // 1つ完了するごとに進捗更新
-                                    setActiveTasks(prev => {
-                                        if(!prev[key]) return prev;
-                                        return { 
-                                            ...prev, 
-                                            [key]: { ...prev[key], current: prev[key].current + 1 } 
-                                        };
-                                    });
+                                    updateTask(key, p => p && p[key] ? { ...p, [key]: { ...p[key], current: p[key].current + 1 } } : p);
                                     return res;
-                                });
-                            promises.push(p);
+                                }));
                         }
                         
                         const snapshots = await Promise.all(promises);
-                        
                         let combinedJson = "";
                         snapshots.forEach(snap => { if (snap.exists) combinedJson += snap.data().content; });
 
@@ -4258,16 +4251,19 @@ function TimelineWiki() {
                     } catch (error) {
                         console.error(`${label} load error:`, error);
                     } finally {
-                        // タスク完了（表示から消す）
                         setTimeout(() => updateTask(key, null), 1000);
                     }
                 });
             unsubscribers.push(unsub);
         });
 
-        // 設定同期（軽量なので進捗表示なし）
+        // 設定同期
         unsubscribers.push(db.collection("wiki_data").doc("db_config").onSnapshot(d => {
-            if(d.exists) { isRemoteUpdate.current = true; if (d.data().uiScale) setUiScale(d.data().uiScale); }
+            // ここも自分の変更なら無視
+            if(d.exists && !d.metadata.hasPendingWrites) { 
+                isRemoteUpdate.current = true; 
+                if (d.data().uiScale) setUiScale(d.data().uiScale); 
+            }
         }));
 
         return () => unsubscribers.forEach(u => u());
@@ -4352,7 +4348,7 @@ function TimelineWiki() {
         
         const timer = setTimeout(() => {
             if (entries.length > 0 || nations.length > 0) saveToCloud();
-        }, 3000); // 頻繁な更新を防ぐため3秒に延長
+        }, 800); 
         return () => clearTimeout(timer);
     }, [entries, nations, stats, characters, organizations, uiScale, canEdit]);
 
@@ -4598,11 +4594,7 @@ function TimelineWiki() {
                                     <span className="text-3xl">⚠️</span> エラーが発生しました
                                 </h1>
                                 <p className="text-gray-600 mb-4 font-bold">
-                                    ブラウザの「自動翻訳機能」がONになっていませんか？
-                                </p>
-                                <p className="text-sm text-gray-500 mb-6">
-                                    Reactは自動翻訳と相性が悪く、翻訳機能がページの内容を書き換えるとクラッシュすることがあります。<br/>
-                                    翻訳をOFFにして再読み込みをお試しください。
+                                    エラーメッセージを運営に報告してください
                                 </p>
                                 <div className="bg-gray-50 p-4 rounded text-xs font-mono text-red-500 overflow-auto max-h-32 mb-6 border">
                                     {this.state.errorInfo}

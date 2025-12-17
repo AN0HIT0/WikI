@@ -4196,8 +4196,8 @@ function TimelineWiki() {
                                 
                                 <div className={`flex flex-col items-center gap-1 ${disabledClass}`}>
                                     <span className="text-[9px] text-yellow-600/80 font-bold uppercase tracking-widest">MANAGE</span>
-                                    <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 overflow-hidden shadow-sm">
-                                        <button onClick={() => setView('settings')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'settings' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="国家変遷"><Icons.Globe size={20} /></button>
+                                    <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 overflow-hidden shadow-sm">{view === 'settings
+                                        <button onClick={() => setView('settings')} className={`p-2 transition-colors border-r border-gray-700 $' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="国家変遷"><Icons.Globe size={20} /></button>
                                         <button onClick={() => setView('nation_overview')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'nation_overview' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="概要"><Icons.FileText size={20} /></button>
                                         <button onClick={() => setView('characters')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'characters' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="人物"><Icons.User size={20} /></button>
                                         <button onClick={() => setView('organizations')} className={`p-2 transition-colors border-r border-gray-700 ${view === 'organizations' ? 'bg-yellow-600 text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`} title="組織"><Icons.Briefcase size={20} /></button>
@@ -4238,14 +4238,12 @@ function TimelineWiki() {
                     </header>
                     <div className="flex-grow overflow-auto bg-[#f0f2f5] relative w-full h-full">
                         <main className={(view === 'power_structure' || view === 'genealogy') ? "w-full h-full p-0 overflow-hidden" : "max-w-5xl mx-auto p-4 origin-top-left"} style={(view === 'power_structure' || view === 'genealogy') ? {} : { zoom: uiScale / 100 }}>
-                            {/* ★修正4: 権限チェックによるビューの表示制限とプロパティ渡し */}
-                            {view === 'settings' ? (canEdit ? <SettingsView ... /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
-                             view === 'nation_overview' ? (canEdit ? <NationOverviewView ... /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
-                             view === 'characters' ? (canEdit ? <CharacterManager ... /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
-                             view === 'organizations' ? (canEdit ? <OrganizationManager ... /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
-                             view === 'statsEdit' ? (canEdit ? <StatsEditView ... /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
-                             view === 'power_structure' ? (canEdit ? <PowerStructureView ... /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) :
-                             view === 'user_management' && isAdmin ? <UserManagementView setView={setView} allUsers={allUsers} onChangeRole={handleApproveUser} /> : 
+                             {view === 'settings' ? (canEdit ? <SettingsView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} setTargetNation={setTargetNation} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
+                             view === 'nation_overview' ? (canEdit ? <NationOverviewView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
+                             view === 'characters' ? (canEdit ? <CharacterManager setView={setView} nations={nations} characters={characters} setCharacters={setCharacters} organizations={organizations} setOrganizations={setOrganizations} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
+                             view === 'organizations' ? (canEdit ? <OrganizationManager setView={setView} nations={nations} organizations={organizations} setOrganizations={setOrganizations} characters={characters} setCharacters={setCharacters} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
+                             view === 'statsEdit' ? (canEdit ? <StatsEditView setView={setView} nations={nations} stats={stats} setStats={setStats} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
+                             view === 'power_structure' ? (canEdit ? <PowerStructureView setView={setView} nations={nations} setNations={setNations} organizations={organizations} characters={characters} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) :                             view === 'user_management' && isAdmin ? <UserManagementView setView={setView} allUsers={allUsers} onChangeRole={handleApproveUser} /> : 
                              view === 'graph' ? <GraphView setView={setView} stats={stats} nations={nations} /> : 
                              view === 'genealogy' ? <GenealogyView setView={setView} nations={nations} stats={stats} entries={entries} setSelectedEntry={setSelectedEntry} uiScale={uiScale} /> : 
                              view === 'table' ? <NationTableView isAuthorized={canEdit} setView={setView} nations={nations} stats={stats} onEditNation={openSettings} onAddNation={() => openSettings(null)}/> : 

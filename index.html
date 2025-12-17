@@ -4577,8 +4577,62 @@ function TimelineWiki() {
 }
 
 
+        // エラー発生時に真っ白になるのを防ぐコンポーネント
+        class ErrorBoundary extends React.Component {
+            constructor(props) {
+                super(props);
+                this.state = { hasError: false, errorInfo: null };
+            }
+
+            static getDerivedStateFromError(error) {
+                return { hasError: true };
+            }
+
+            componentDidCatch(error, errorInfo) {
+                console.error("Uncaught error:", error, errorInfo);
+                this.setState({ errorInfo: error.toString() });
+            }
+
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+                            <div className="bg-white p-8 rounded-lg shadow-xl max-w-lg w-full border border-red-200">
+                                <h1 className="text-2xl font-bold text-red-600 mb-4 flex items-center gap-2">
+                                    <span className="text-3xl">⚠️</span> エラーが発生しました
+                                </h1>
+                                <p className="text-gray-600 mb-4 font-bold">
+                                    ブラウザの「自動翻訳機能」がONになっていませんか？
+                                </p>
+                                <p className="text-sm text-gray-500 mb-6">
+                                    Reactは自動翻訳と相性が悪く、翻訳機能がページの内容を書き換えるとクラッシュすることがあります。<br/>
+                                    翻訳をOFFにして再読み込みをお試しください。
+                                </p>
+                                <div className="bg-gray-50 p-4 rounded text-xs font-mono text-red-500 overflow-auto max-h-32 mb-6 border">
+                                    {this.state.errorInfo}
+                                </div>
+                                <button 
+                                    onClick={() => window.location.reload()} 
+                                    className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors shadow"
+                                >
+                                    ページを再読み込み
+                                </button>
+                            </div>
+                        </div>
+                    );
+                }
+
+                return this.props.children;
+            }
+        }
+
+        // アプリケーションの描画
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<TimelineWiki />);
+        root.render(
+            <ErrorBoundary>
+                <TimelineWiki />
+            </ErrorBoundary>
+        );
     </script>
 </body>
 </html>

@@ -4157,7 +4157,7 @@ function TimelineWiki() {
     // ★進捗管理ステート: { [taskName]: { label, current, total } }
     const [activeTasks, setActiveTasks] = useState({});
     
-    const isRemoteUpdate = useRef(false);
+    const isRemoteUpdate = useRef(0); // 受信中の数をカウントするため数値に変更
     const fileInputRef = useRef(null);
     const convertFileInputRef = useRef(null);
 
@@ -4225,7 +4225,7 @@ function TimelineWiki() {
                     const meta = doc.data();
                     const totalChunks = meta.totalChunks || 0;
                     
-                    isRemoteUpdate.current = true;
+                    isRemoteUpdate.current++;
                     
                     // "受信中" タスク開始
                     updateTask(key, { label: `受信中: ${label}`, current: 0, total: totalChunks });
@@ -4251,8 +4251,11 @@ function TimelineWiki() {
                     } catch (error) {
                         console.error(`${label} load error:`, error);
                     } finally {
-                        setTimeout(() => updateTask(key, null), 1000);
-                    }
+setTimeout(() => {
+        updateTask(key, null);
+        isRemoteUpdate.current = Math.max(0, isRemoteUpdate.current - 1);
+    }, 1000);
+}
                 });
             unsubscribers.push(unsub);
         });
@@ -4261,7 +4264,7 @@ function TimelineWiki() {
         unsubscribers.push(db.collection("wiki_data").doc("db_config").onSnapshot(d => {
             // ここも自分の変更なら無視
             if(d.exists && !d.metadata.hasPendingWrites) { 
-                isRemoteUpdate.current = true; 
+                isRemoteUpdate.current++; 
                 if (d.data().uiScale) setUiScale(d.data().uiScale); 
             }
         }));
@@ -4344,7 +4347,7 @@ function TimelineWiki() {
     // 自動保存
     useEffect(() => {
         if (!canEdit) return;
-        if (isRemoteUpdate.current) { isRemoteUpdate.current = false; return; }
+        if (isRemoteUpdate.current > 0) return;
         
         const timer = setTimeout(() => {
             if (entries.length > 0 || nations.length > 0) saveToCloud();

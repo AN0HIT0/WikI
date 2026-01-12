@@ -4388,6 +4388,8 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                         <MenuBtn onClick={() => setView('genealogy')} icon={Icons.GitMerge} label="興亡系譜図" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
                         <MenuBtn onClick={() => setView('graph')} icon={Icons.Activity} label="統計グラフ" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
                         <MenuBtn onClick={() => setView('table')} icon={Icons.List} label="体制一覧表" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
+                        {/* ★追加: 用語集ボタン */}
+                        <MenuBtn onClick={() => setView('glossary')} icon={Icons.BookOpen} label="用語集" subLabel="Encyclopedia" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
                     </div>
                 </div>
             </div>
@@ -4941,36 +4943,45 @@ function TimelineWiki() {
                              view === 'genealogy' ? <GenealogyView setView={setView} nations={nations} stats={stats} entries={entries} setSelectedEntry={setSelectedEntry} uiScale={uiScale} onOpenDetail={handleOpenDetail} /> : 
                              view === 'table' ? <NationTableView isAuthorized={canEdit} setView={setView} nations={nations} stats={stats} onEditNation={openSettings} onAddNation={() => openSettings(null)}/> : 
                              view === 'nation_list' ? <NationListView setView={setView} nations={nations} onSelectNation={(n) => { setSelectedProfileNation(n); setView('nation_profile'); }} /> : 
-                             view === 'nation_profile' && selectedProfileNation ? (
-                             view === 'glossary' ? (<GlossaryView setView={setView} nations={nations} entries={entries} characters={characters} organizations={organizations} glossaryData={glossaryData} setGlossaryData={setGlossaryData} isAuthorized={canEdit}
-                 />
-             ) :
-                <NationProfileView 
-                    isAuthorized={canEdit} 
-                    nation={selectedProfileNation} 
-                    entries={entries}
-                    stats={stats}
-                    /* ★以下3行は既存のコードにあるはずですが、念のため確認 */
-                    nations={nations}
-                    characters={characters}
-                    organizations={organizations}
-                    /* ------------------------------------------- */
-                    onClose={() => { setView('nation_list'); setSelectedProfileNation(null); }} 
-                    onEdit={() => { setEditingNation(selectedProfileNation); setView('settings'); }}
-                    onEditEntry={handleEditEntryTransition} 
-                    onEditNation={() => { setTargetNation(selectedProfileNation); setView('settings'); }}
-                    onEditStats={() => { setTargetNation(selectedProfileNation); setView('statsEdit'); }}
-                    onEditOverview={() => { setTargetNation(selectedProfileNation); setView('nation_overview'); }}
-                    updateNation={(updated) => {
-                        const newNations = nations.map(n => n.id === updated.id ? updated : n);
-                        setNations(newNations);
-                        saveToCloud({ nations: newNations });
-                        setSelectedProfileNation(updated);
-                    }}
-                    /* ★ここに追加: 詳細画面を開くための関数を渡す */
-                    onOpenDetail={handleOpenDetail} 
-                />
-            ) :
+                            /* ★修正: 用語集 (Glossary) を独立した分岐として配置 */
+                             view === 'glossary' ? (
+                                <GlossaryView 
+                                    setView={setView} 
+                                    nations={nations} 
+                                    entries={entries} 
+                                    characters={characters} 
+                                    organizations={organizations} 
+                                    glossaryData={glossaryData} 
+                                    setGlossaryData={setGlossaryData} 
+                                    isAuthorized={canEdit}
+                                />
+                            ) :
+
+                            /* 国家プロフィール */
+                            view === 'nation_profile' && selectedProfileNation ? (
+                                <NationProfileView 
+                                    isAuthorized={canEdit} 
+                                    nation={selectedProfileNation} 
+                                    entries={entries} 
+                                    stats={stats}
+                                    nations={nations}
+                                    characters={characters}
+                                    organizations={organizations}
+                                    onClose={() => { setView('nation_list'); setSelectedProfileNation(null); }} 
+                                    onEdit={() => { setEditingNation(selectedProfileNation); setView('settings'); }}
+                                    onEditEntry={handleEditEntryTransition} 
+                                    onEditNation={() => { setTargetNation(selectedProfileNation); setView('settings'); }}
+                                    onEditStats={() => { setTargetNation(selectedProfileNation); setView('statsEdit'); }}
+                                    onEditOverview={() => { setTargetNation(selectedProfileNation); setView('nation_overview'); }}
+                                    updateNation={(updated) => {
+                                        const newNations = nations.map(n => n.id === updated.id ? updated : n);
+                                        setNations(newNations);
+                                        saveToCloud({ nations: newNations });
+                                        setSelectedProfileNation(updated);
+                                    }}
+                                    onOpenDetail={handleOpenDetail} 
+                                />
+                            ) :
                             
                             /* 編集画面 (重複を削除して1つにしました) */
                             view === 'edit' && selectedEntry ? (

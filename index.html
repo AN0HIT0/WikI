@@ -3730,7 +3730,7 @@ const UserManagementView = ({ setView, allUsers, onChangeRole }) => {
 };
 
 // --- MainMenu コンポーネント (修正版: ログイン制限対応) ---
-const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, convertFileInputRef, currentUser, isAuthorized, handleLogin, handleLogout }) => {
+const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, convertFileInputRef, currentUser, isAuthorized, handleLogin, handleLogout, userRole }) => {
     
     // 権限がない場合の無効化スタイルクラス
     const disabledClass = !isAuthorized ? "opacity-40 grayscale pointer-events-none select-none" : "";
@@ -3766,14 +3766,29 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                 
                 {/* 上部アクションボタン群 (ログイン・保存・読込) */}
                 <div className="flex flex-wrap justify-center gap-4 items-center">
-                    {/* ログイン/ログアウトボタン */}
+{/* ログイン/ログアウト・ステータス表示 */}
                     {!currentUser ? (
                         <ActionBtn onClick={handleLogin} icon={Icons.Users} label="ログイン" className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" />
                     ) : (
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-gray-400 mr-2">
-                                {isAuthorized ? "管理者としてログイン中" : "ログイン中"}
-                            </span>
+                        <div className="flex items-center gap-3">
+                            {/* 役割に応じたステータス表示 */}
+                            <div className="flex flex-col items-end">
+                                {userRole === 'pending' ? (
+                                    <span className="text-xs font-bold text-yellow-600 bg-yellow-100 px-2 py-0.5 rounded border border-yellow-200 animate-pulse">
+                                        承認待ち
+                                    </span>
+                                ) : isAuthorized ? (
+                                    <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                                        編集可能
+                                    </span>
+                                ) : (
+                                    <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
+                                        ゲスト
+                                    </span>
+                                )}
+                                <span className="text-[10px] text-gray-400 mt-0.5">{currentUser.displayName || 'ユーザー'}</span>
+                            </div>
+
                             <ActionBtn onClick={handleLogout} icon={Icons.X} label="ログアウト" className="bg-gray-100 text-gray-600 hover:bg-gray-200" />
                         </div>
                     )}
@@ -3929,17 +3944,36 @@ function TimelineWiki() {
     const isAdmin = userRole === 'admin' || (currentUser && currentUser.email === ADMIN_EMAIL);
     const disabledClass = !canEdit ? "opacity-30 grayscale pointer-events-none select-none" : "";
 
-    // ログイン監視
+// ログイン監視 & 自動申請
     useEffect(() => {
         const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
             setCurrentUser(user);
             if (user) {
                 if (user.email === ADMIN_EMAIL) {
+                    // 特権管理者
                     setUserRole('admin');
                     db.collection('users').doc(user.uid).set({ email: user.email, role: 'admin', lastSeen: new Date().toISOString() }, { merge: true });
                 } else {
-                    const userDoc = await db.collection('users').doc(user.uid).get();
-                    setUserRole(userDoc.exists ? userDoc.data().role : 'guest');
+                    // 一般ユーザー
+                    const userRef = db.collection('users').doc(user.uid);
+                    const userDoc = await userRef.get();
+                    
+                    if (userDoc.exists) {
+                        // 既に登録済みならその権限を適用
+                        setUserRole(userDoc.data().role);
+                    } else {
+                        // ★データがない(新規)場合、自動的に「申請中(pending)」として登録
+                        await userRef.set({
+                            email: user.email,
+                            role: 'pending', // ここで自動申請
+                            displayName: user.displayName,
+                            photoURL: user.photoURL,
+                            appliedAt: new Date().toISOString(),
+                            lastSeen: new Date().toISOString()
+                        });
+                        setUserRole('pending');
+                        alert("ログインしました。\n編集権限の申請を自動送信しました。\n管理者の承認をお待ちください。");
+                    }
                 }
             } else {
                 setUserRole('guest');
@@ -3947,6 +3981,7 @@ function TimelineWiki() {
         });
         return () => unsubscribeAuth();
     }, []);
+
 
     // ユーザー管理 (管理者のみ)
     useEffect(() => {
@@ -4215,6 +4250,7 @@ function TimelineWiki() {
                     isAuthorized={canEdit}
                     handleLogin={handleLogin}
                     handleLogout={handleLogout}
+                    userRole={userRole}
                 />
             ) : (
                 <div className="min-h-screen bg-[#f0f2f5] font-sans text-gray-800 flex flex-col h-screen overflow-hidden">

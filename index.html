@@ -3921,14 +3921,13 @@ const UserManagementView = ({ setView, allUsers, onChangeRole }) => {
     );
 };
 
-// --- GlossaryView コンポーネント (修正版: 自動保存対応) ---
+// --- GlossaryView コンポーネント (修正版: 一括保存対応) ---
 const GlossaryView = ({ setView, nations, entries, characters, organizations, glossaryData, setGlossaryData, isAuthorized }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterTypes, setFilterTypes] = useState(['all']);
     const [selectedItem, setSelectedItem] = useState(null);
     const [history, setHistory] = useState([]);
 
-    // 自動タグ生成
     const getAutoTags = (item) => {
         const o = item.original;
         const tags = [];
@@ -3946,7 +3945,6 @@ const GlossaryView = ({ setView, nations, entries, characters, organizations, gl
         return tags.filter(t => t); 
     };
 
-    // 統合データリスト
     const allItems = useMemo(() => {
         const list = [];
         nations.forEach(n => list.push({ type: 'nation', id: n.id, name: n.name, image: n.flag, original: n, label: '国家', color: 'bg-orange-100 text-orange-800' }));
@@ -3959,7 +3957,6 @@ const GlossaryView = ({ setView, nations, entries, characters, organizations, gl
         return list.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
     }, [nations, entries, characters, organizations, glossaryData]);
 
-    // フィルタリング処理
     const toggleFilter = (type) => {
         if (type === 'all') { setFilterTypes(['all']); return; }
         let newFilters = [...filterTypes];
@@ -3981,7 +3978,6 @@ const GlossaryView = ({ setView, nations, entries, characters, organizations, gl
         });
     }, [allItems, filterTypes, searchTerm, glossaryData]);
 
-    // 詳細表示・遷移
     const openDetail = (item) => { setHistory([]); setSelectedItem(item); };
     const handleLinkClick = (targetName) => {
         const target = allItems.find(i => i.name === targetName);
@@ -4005,38 +4001,27 @@ const GlossaryView = ({ setView, nations, entries, characters, organizations, gl
         setSelectedItem(target);
     };
 
-    // --- 修正箇所: 各保存処理から saveToCloud 呼び出しを削除 ---
-
     const handleAddTerm = () => {
         const name = prompt("新しい用語名を入力してください:");
         if (!name) return;
         const newTerm = { id: `term_${Date.now()}`, name, desc: '', image: null };
         const newTerms = [...(glossaryData.terms || []), newTerm];
         const newData = { ...glossaryData, terms: newTerms };
-        
         setGlossaryData(newData);
-        // saveToCloudは削除 (親コンポーネントの自動保存に任せる)
-
         const itemStruct = { type: 'term', id: newTerm.id, name: newTerm.name, original: newTerm, label: '用語', color: 'bg-gray-100 text-gray-800' };
         openDetail(itemStruct);
     };
 
-    const handleSaveDescription = (id, content) => {
+    // ★修正: 説明文とタグを一括で更新する関数
+    const handleSaveTermData = (id, content, tags) => {
         const overrides = { ...(glossaryData.overrides || {}) };
-        overrides[id] = content;
-        const newData = { ...glossaryData, overrides };
+        if (content !== undefined) overrides[id] = content;
         
-        setGlossaryData(newData);
-        // saveToCloudは削除 (親コンポーネントの自動保存に任せる)
-    };
-
-    const handleSaveTags = (id, tags) => {
         const tagData = { ...(glossaryData.tags || {}) };
-        tagData[id] = tags;
-        const newData = { ...glossaryData, tags: tagData };
-        
+        if (tags !== undefined) tagData[id] = tags;
+
+        const newData = { ...glossaryData, overrides, tags: tagData };
         setGlossaryData(newData);
-        // saveToCloudは削除 (親コンポーネントの自動保存に任せる)
     };
 
     const handleDeleteTerm = (id) => {
@@ -4047,9 +4032,7 @@ const GlossaryView = ({ setView, nations, entries, characters, organizations, gl
         const newTags = { ...glossaryData.tags };
         delete newTags[id];
         const newData = { ...glossaryData, terms: newTerms, overrides: newOverrides, tags: newTags };
-        
         setGlossaryData(newData);
-        // saveToCloudは削除 (親コンポーネントの自動保存に任せる)
         setSelectedItem(null);
     }
 
@@ -4063,8 +4046,7 @@ const GlossaryView = ({ setView, nations, entries, characters, organizations, gl
                 onLinkClick={handleLinkClick}
                 allItems={allItems}
                 glossaryData={glossaryData}
-                onSaveDescription={handleSaveDescription}
-                onSaveTags={handleSaveTags}
+                onSaveTermData={handleSaveTermData} // 一括保存関数を渡す
                 onDeleteTerm={handleDeleteTerm}
                 isAuthorized={isAuthorized}
                 getAutoTags={getAutoTags}
@@ -4120,15 +4102,15 @@ const GlossaryView = ({ setView, nations, entries, characters, organizations, gl
 };
 
 
-// --- GlossaryDetail コンポーネント (タグ機能強化版) ---
-const GlossaryDetail = ({ item, history, onBack, onJumpHistory, onLinkClick, allItems, glossaryData, onSaveDescription, onSaveTags, onDeleteTerm, isAuthorized, getAutoTags }) => {
+// --- GlossaryDetail コンポーネント (修正版: 保存処理の競合解消) ---
+const GlossaryDetail = ({ item, history, onBack, onJumpHistory, onLinkClick, allItems, glossaryData, onSaveTermData, onDeleteTerm, isAuthorized, getAutoTags }) => {
     const [isEditing, setIsEditing] = useState(false);
     
     // データ取得
     const overrideDesc = glossaryData?.overrides?.[item.id];
     const savedTags = glossaryData?.tags?.[item.id];
     
-    // ★自動タグ生成または保存済みタグの使用
+    // 自動タグ生成または保存済みタグの使用
     const autoTags = useMemo(() => getAutoTags(item), [item, getAutoTags]);
     const displayTags = savedTags && savedTags.length > 0 ? savedTags : autoTags;
 
@@ -4168,11 +4150,9 @@ const GlossaryDetail = ({ item, history, onBack, onJumpHistory, onLinkClick, all
         return <div className="prose prose-lg max-w-none text-gray-800 font-serif leading-loose" dangerouslySetInnerHTML={{ __html: finalHtml }} onClick={(e) => { if (e.target.classList.contains('glossary-link')) { onLinkClick(e.target.getAttribute('data-term')); } }} />;
     };
 
-    // 固有情報表示（簡易版）
+    // 固有情報表示
     const renderSpecificInfo = () => {
-        // ... (前回と同じなので省略可ですが、一応そのまま使えます) ...
         const o = item.original;
-        // シンプルにタイプごとの重要情報を返す
         if(item.type === 'nation') return <div className="text-sm text-gray-500 mb-4 bg-gray-50 p-2 rounded border border-gray-100 flex gap-4"><span>📍 {LOCATIONS[o.location]?.label}</span><span style={{color:NATION_RANKS[o.rank]?.color}}>🏴 {NATION_RANKS[o.rank]?.label}</span></div>;
         if(item.type === 'event') return <div className="text-sm text-gray-500 mb-4 bg-gray-50 p-2 rounded border border-gray-100 flex gap-4"><span className="font-mono font-bold text-green-700">📅 {o.year}年</span><span>Lv.{o.importance}</span></div>;
         if(item.type === 'char') return <div className="text-sm text-gray-500 mb-4 bg-gray-50 p-2 rounded border border-gray-100 flex gap-4"><span>🧬 {o.race}</span><span className="font-mono text-blue-700">Lv.{o.level}</span></div>;
@@ -4208,7 +4188,6 @@ const GlossaryDetail = ({ item, history, onBack, onJumpHistory, onLinkClick, all
                 </div>
 
                 <div className="p-8">
-                    {/* ★タグ表示エリア */}
                     {!isEditing && (
                         <div className="flex flex-wrap gap-2 mb-4">
                             {displayTags.map((tag, i) => (
@@ -4220,40 +4199,25 @@ const GlossaryDetail = ({ item, history, onBack, onJumpHistory, onLinkClick, all
                         </div>
                     )}
 
-                    {/* 固有情報 */}
                     {renderSpecificInfo()}
 
-                    {/* 本文エリア */}
                     {isEditing ? (
                         <div className="animate-fade-in space-y-4">
-                            {/* ★タグ編集入力欄 */}
                             <div className="bg-gray-50 p-4 rounded border border-gray-200">
                                 <label className="block text-xs font-bold text-gray-500 mb-1">関連タグ (カンマ区切りで入力)</label>
                                 <div className="flex items-center gap-2 mb-2">
                                     <Icons.Tag size={16} className="text-gray-400"/>
-                                    <input 
-                                        type="text" 
-                                        value={tagInput} 
-                                        onChange={(e) => setTagInput(e.target.value)} 
-                                        className="w-full p-2 border rounded text-sm" 
-                                        placeholder="例: 戦争, 魔法, 重要人物"
-                                    />
+                                    <input type="text" value={tagInput} onChange={(e) => setTagInput(e.target.value)} className="w-full p-2 border rounded text-sm" placeholder="例: 戦争, 魔法, 重要人物"/>
                                 </div>
                                 <p className="text-[10px] text-gray-400">※初期値として元データ（地域、種族など）が自動入力されています。</p>
                             </div>
 
-                            <div className="bg-blue-50 p-3 rounded text-xs text-blue-800 flex items-center gap-2">
-                                <Icons.Zap size={14}/>
-                                <span>編集内容は「用語集」でのみ上書き保存されます。元のデータは変更されません。</span>
-                            </div>
-                            
                             <QuillEditor 
-                                initialContent={displayContent} // ★ここで元データの内容を初期値としてセット
+                                initialContent={displayContent} 
                                 onSave={(content) => {
-                                    onSaveDescription(item.id, content);
-                                    // ★タグも保存
                                     const newTags = tagInput.split(/,|、/).map(t => t.trim()).filter(t => t !== '');
-                                    onSaveTags(item.id, newTags);
+                                    // ★ここで一括保存！(これが修正の肝です)
+                                    onSaveTermData(item.id, content, newTags);
                                     setIsEditing(false);
                                 }}
                                 nationName={item.name}

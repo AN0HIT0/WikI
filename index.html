@@ -2543,7 +2543,7 @@ const NationOverviewView = ({ setView, nations, setNations, targetNation }) => {
 
 
 // --- 国家興亡系譜図ビュー (スマホ対応・ピンチズーム実装版) ---
-const GenealogyView = ({ setView, nations, stats, entries, setSelectedEntry }) => {
+const GenealogyView = ({ setView, nations, stats, entries, setSelectedEntry, uiScale, onOpenDetail}) => {
     // ビューポート状態
     const [zoom, setZoom] = useState(1.0);
     const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -2563,6 +2563,9 @@ const GenealogyView = ({ setView, nations, stats, entries, setSelectedEntry }) =
     const [laneWidth, setLaneWidth] = useState(100);
     const [showMarkers, setShowMarkers] = useState(true);
     const [showConnections, setShowConnections] = useState(true);
+
+// ★追加: コンテナの参照を作成
+    const containerRef = useRef(null);
 
     // --- データ計算ロジック (変更なし) ---
     const { nationBlocks, renderSegments, connections, minYear, maxYear, lanesCount, continentZones } = useMemo(() => {
@@ -2686,9 +2689,29 @@ const GenealogyView = ({ setView, nations, stats, entries, setSelectedEntry }) =
         setIsDragging(false);
         e.currentTarget.style.cursor = 'grab';
     };
+// ★修正: マウス位置基準のズームロジック
     const handleWheel = (e) => {
+        if (e.target.closest('.control-panel')) return;
+        // ページのスクロールを防ぐ（必要に応じて）
+        // e.preventDefault(); 
+
+        const rect = containerRef.current.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        // ズーム前の「世界座標（データ上の位置）」を計算
+        const worldX = (mouseX - pan.x) / zoom;
+        const worldY = (mouseY - pan.y) / zoom;
+
         const scaleAmount = -e.deltaY * 0.001;
-        setZoom(prev => Math.min(Math.max(0.1, prev + scaleAmount), 3.0));
+        const newZoom = Math.min(Math.max(0.1, zoom + scaleAmount), 3.0);
+
+        // 新しいズーム倍率で、同じ世界座標がマウスの下に来るようにPan（位置）を逆算
+        const newPanX = mouseX - worldX * newZoom;
+        const newPanY = mouseY - worldY * newZoom;
+
+        setZoom(newZoom);
+        setPan({ x: newPanX, y: newPanY });
     };
 
     // --- ★タッチイベント (スマホ: ピンチズーム対応) ---
@@ -2750,6 +2773,7 @@ const GenealogyView = ({ setView, nations, stats, entries, setSelectedEntry }) =
 
     return (
         <div 
+            ref={containerRef} // ★追加: ここにrefを設定
             className="h-full w-full bg-[#f0f2f5] overflow-hidden relative cursor-grab touch-none" // touch-none必須
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}
@@ -2937,10 +2961,137 @@ const StatsDisplay = ({ year, stats, expandedStatsYears, setExpandedStatsYears, 
 };
 
 const EditForm = ({ entry, onSave, onCancel, nations }) => {
-    const [formData, setFormData] = useState(entry); const [tagInput, setTagInput] = useState(entry.tags ? entry.tags.join(', ') : ''); const currentYear = parseInt(formData.year) || DEFAULT_YEAR;
-    const sortedNations = useMemo(() => { return [...nations].sort((a, b) => { const locA = LOCATIONS[a.location || 'unknown']?.order || 99; const locB = LOCATIONS[b.location || 'unknown']?.order || 99; if (locA !== locB) return locA - locB; const rankA = NATION_RANKS[a.rank || 'minor_power']?.order || 99; const rankB = NATION_RANKS[b.rank || 'minor_power']?.order || 99; return rankA - rankB; }); }, [nations]);
-    const addNationTag = (nationName) => { const currentTags = tagInput.split(',').map(t => t.trim()).filter(t => t !== ''); if (!currentTags.includes(nationName)) { const newTags = [...currentTags, nationName].join(', '); setTagInput(newTags); } };
-    return ( <div className="bg-white p-6 rounded-lg shadow-lg max-w-2xl mx-auto border-2 border-gray-800"> <h2 className="text-2xl font-bold mb-6 text-gray-800 flex items-center gap-2"><Icons.Edit2 size={24} /> 記録を編集</h2> <div className="space-y-6"> <div className="bg-gray-50 p-4 rounded border border-gray-200"> <div className="flex items-center gap-2 mb-2 text-sm font-bold text-gray-700"><Icons.Calendar size={16} /><span>時期設定</span></div> <div className="grid grid-cols-3 gap-4"> <div><label className="block text-xs text-gray-500 mb-1">英覇暦 (年)</label><input type="number" value={formData.year} onChange={e => setFormData({...formData, year: e.target.value})} className="w-full p-2 border rounded" placeholder="必須" /></div> <div><label className="block text-xs text-gray-500 mb-1">月 (任意)</label><select value={formData.month || ''} onChange={e => setFormData({...formData, month: e.target.value})} className="w-full p-2 border rounded"><option value="">-- 不明 --</option>{Object.entries(CUSTOM_MONTHS).map(([num, name]) => <option key={num} value={num}>{name} ({num}月)</option>)}</select></div> <div><label className="block text-xs text-gray-500 mb-1">日 (任意)</label><input type="number" min="1" max="31" value={formData.day || ''} onChange={e => setFormData({...formData, day: e.target.value})} className="w-full p-2 border rounded" placeholder="--" /></div> </div> </div> <div> <label className="block text-sm font-bold text-gray-700 mb-1">重要度</label> <select value={formData.importance || 2} onChange={e => setFormData({...formData, importance: parseInt(e.target.value)})} className="w-full p-2 border-2 border-gray-300 rounded font-bold"> {Object.entries(importanceLevels).map(([level, info]) => <option key={level} value={level}>Lv.{level} {info.label}</option>)} </select> </div> <div className="space-y-2"> <div><label className="block text-xs text-gray-500">ふりがな</label><input type="text" value={formData.reading || ''} onChange={e => setFormData({...formData, reading: e.target.value})} className="w-full p-1 border-b border-gray-300 outline-none text-sm" /></div> <div><label className="block text-sm font-bold text-gray-700 mb-1">タイトル</label><input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full p-2 border-2 border-gray-300 rounded text-lg font-bold" /></div> </div> <div> <label className="block text-sm font-bold text-gray-700 mb-1">タグ</label> <input type="text" value={tagInput} onChange={e => setTagInput(e.target.value)} className="w-full p-2 border border-gray-300 rounded" placeholder="政治, 戦争" /> <div className="mt-2"> <span className="text-xs text-gray-500 mr-2">国家タグを追加:</span> <div className="flex flex-wrap gap-1 mt-1 max-h-32 overflow-y-auto p-1 border rounded bg-gray-50"> <button onClick={() => addNationTag('世界')} className="text-xs bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 px-2 py-1 rounded flex items-center gap-1"><Icons.Globe size={12} /> 世界</button> {sortedNations.map(n => { const info = getNationInfo(n, currentYear); if (info.isCollapsed) return null; const rankColor = NATION_RANKS[n.rank || 'minor_power']?.color || '#ccc'; return ( <button key={n.id} onClick={() => addNationTag(info.name)} className="text-xs bg-white hover:bg-gray-100 border px-2 py-1 rounded flex items-center gap-1" style={{borderColor: rankColor}}> {info.flag && <img src={info.flag} className="w-4 h-3 object-cover border border-gray-200" />} <span style={{color: rankColor, fontWeight: 'bold'}}>{info.name}</span> </button> ); })} </div> </div> </div> <div><label className="block text-sm font-bold text-gray-700 mb-1">詳細記述</label><textarea value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} className="w-full p-2 border-2 border-gray-300 rounded min-h-[200px]" /></div> <div className="flex justify-end gap-4 pt-4 border-t"> <button onClick={onCancel} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-bold">破棄</button> <button onClick={() => {const tagsArray = tagInput.split(',').map(t => t.trim()).filter(t => t !== ''); onSave({ ...formData, tags: tagsArray });}} disabled={!formData.title} className="px-6 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 flex items-center gap-2 font-bold shadow-lg"><Icons.Save size={18} /> 記録する</button> </div> </div> </div> );
+    const [formData, setFormData] = useState(entry); 
+    const [tagInput, setTagInput] = useState(entry.tags ? entry.tags.join(', ') : ''); 
+    const currentYear = parseInt(formData.year) || DEFAULT_YEAR;
+    
+    // 国家リストのソート（地域順 > ランク順）
+    const sortedNations = useMemo(() => { 
+        return [...nations].sort((a, b) => { 
+            const locA = LOCATIONS[a.location || 'unknown']?.order || 99; 
+            const locB = LOCATIONS[b.location || 'unknown']?.order || 99; 
+            if (locA !== locB) return locA - locB; 
+            const rankA = NATION_RANKS[a.rank || 'minor_power']?.order || 99; 
+            const rankB = NATION_RANKS[b.rank || 'minor_power']?.order || 99; 
+            return rankA - rankB; 
+        }); 
+    }, [nations]);
+
+    // タグ追加ヘルパー
+    const addNationTag = (nationName) => { 
+        const currentTags = tagInput.split(',').map(t => t.trim()).filter(t => t !== ''); 
+        if (!currentTags.includes(nationName)) { 
+            const newTags = [...currentTags, nationName].join(', '); 
+            setTagInput(newTags); 
+        } 
+    };
+
+    return ( 
+        <div className="bg-[#f0f2f5] min-h-screen pb-20">
+            {/* ★ここに追加: ヘッダーと戻るボタン */}
+            <div className="sticky top-0 bg-white/90 backdrop-blur-sm border-b border-gray-200 p-4 flex justify-between items-center z-50 shadow-sm">
+                <div>
+                    <button onClick={onCancel} className="flex flex-col items-center justify-center text-gray-500 hover:text-blue-600 hover:bg-blue-50 px-3 py-1 rounded-lg transition-all group">
+                        <Icons.ArrowLeft size={20} className="mb-0.5 group-hover:-translate-x-1 transition-transform"/>
+                        <span className="text-[9px] font-bold leading-none">戻る</span>
+                    </button>
+                </div>
+                <h2 className="font-bold text-gray-700 flex items-center gap-2"><Icons.Edit2 size={18}/> 記録の編集</h2>
+                <div className="w-10"></div>{/* レイアウト調整用のダミー空白 */}
+            </div>
+
+            <div className="bg-white p-6 rounded-lg shadow-lg max-w-2xl mx-auto border-2 border-gray-800 mt-6"> 
+                <div className="space-y-6"> 
+                    
+                    {/* 時期設定エリア */}
+                    <div className="bg-gray-50 p-4 rounded border border-gray-200"> 
+                        <div className="flex items-center gap-2 mb-2 text-sm font-bold text-gray-700">
+                            <Icons.Calendar size={16} /><span>時期設定</span>
+                        </div> 
+                        <div className="grid grid-cols-3 gap-4"> 
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1">英覇暦 (年)</label>
+                                <input type="number" value={formData.year} onChange={e => setFormData({...formData, year: e.target.value})} className="w-full p-2 border rounded" placeholder="必須" />
+                            </div> 
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1">月 (任意)</label>
+                                <select value={formData.month || ''} onChange={e => setFormData({...formData, month: e.target.value})} className="w-full p-2 border rounded">
+                                    <option value="">-- 不明 --</option>
+                                    {Object.entries(CUSTOM_MONTHS).map(([num, name]) => <option key={num} value={num}>{name} ({num}月)</option>)}
+                                </select>
+                            </div> 
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1">日 (任意)</label>
+                                <input type="number" min="1" max="31" value={formData.day || ''} onChange={e => setFormData({...formData, day: e.target.value})} className="w-full p-2 border rounded" placeholder="--" />
+                            </div> 
+                        </div> 
+                    </div> 
+                    
+                    {/* 重要度設定 */}
+                    <div> 
+                        <label className="block text-sm font-bold text-gray-700 mb-1">重要度</label> 
+                        <select value={formData.importance || 2} onChange={e => setFormData({...formData, importance: parseInt(e.target.value)})} className="w-full p-2 border-2 border-gray-300 rounded font-bold"> 
+                            {Object.entries(importanceLevels).map(([level, info]) => <option key={level} value={level}>Lv.{level} {info.label}</option>)} 
+                        </select> 
+                    </div> 
+                    
+                    {/* タイトル・ふりがな */}
+                    <div className="space-y-2"> 
+                        <div>
+                            <label className="block text-xs text-gray-500">ふりがな</label>
+                            <input type="text" value={formData.reading || ''} onChange={e => setFormData({...formData, reading: e.target.value})} className="w-full p-1 border-b border-gray-300 outline-none text-sm" />
+                        </div> 
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">タイトル</label>
+                            <input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full p-2 border-2 border-gray-300 rounded text-lg font-bold" />
+                        </div> 
+                    </div> 
+                    
+                    {/* タグ設定 */}
+                    <div> 
+                        <label className="block text-sm font-bold text-gray-700 mb-1">タグ</label> 
+                        <input type="text" value={tagInput} onChange={e => setTagInput(e.target.value)} className="w-full p-2 border border-gray-300 rounded" placeholder="政治, 戦争" /> 
+                        <div className="mt-2"> 
+                            <span className="text-xs text-gray-500 mr-2">国家タグを追加:</span> 
+                            <div className="flex flex-wrap gap-1 mt-1 max-h-32 overflow-y-auto p-1 border rounded bg-gray-50"> 
+                                <button onClick={() => addNationTag('世界')} className="text-xs bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 px-2 py-1 rounded flex items-center gap-1">
+                                    <Icons.Globe size={12} /> 世界
+                                </button> 
+                                {sortedNations.map(n => { 
+                                    const info = getNationInfo(n, currentYear); 
+                                    if (info.isCollapsed) return null; 
+                                    const rankColor = NATION_RANKS[n.rank || 'minor_power']?.color || '#ccc'; 
+                                    return ( 
+                                        <button key={n.id} onClick={() => addNationTag(info.name)} className="text-xs bg-white hover:bg-gray-100 border px-2 py-1 rounded flex items-center gap-1" style={{borderColor: rankColor}}> 
+                                            {info.flag && <img src={info.flag} className="w-4 h-3 object-cover border border-gray-200" />} 
+                                            <span style={{color: rankColor, fontWeight: 'bold'}}>{info.name}</span> 
+                                        </button> 
+                                    ); 
+                                })} 
+                            </div> 
+                        </div> 
+                    </div> 
+                    
+                    {/* 詳細記述 */}
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">詳細記述</label>
+                        <textarea value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} className="w-full p-2 border-2 border-gray-300 rounded min-h-[200px]" />
+                    </div> 
+                    
+                    {/* フッターアクションボタン */}
+                    <div className="flex justify-end gap-4 pt-4 border-t"> 
+                        <button onClick={onCancel} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-bold">キャンセル</button> 
+                        <button onClick={() => {
+                            const tagsArray = tagInput.split(',').map(t => t.trim()).filter(t => t !== ''); 
+                            onSave({ ...formData, tags: tagsArray });
+                        }} disabled={!formData.title} className="px-6 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 flex items-center gap-2 font-bold shadow-lg">
+                            <Icons.Save size={18} /> 記録する
+                        </button> 
+                    </div> 
+                </div> 
+            </div> 
+        </div>
+    );
 };
 
 // ★引数に backLabel を追加
@@ -3637,7 +3788,7 @@ const NationProfileView = ({ isAuthorized, setView, nation: initialNation, natio
                                 <div key={entry.id} className="flex gap-6 p-4 hover:bg-gray-50 transition-all group border-b border-gray-100 last:border-0 relative">
                                     <div className="flex-shrink-0 w-28 pt-1 text-right"><div className="font-mono font-bold text-lg text-gray-700">{entry.year}年</div><div className="text-xs text-gray-400">{entry.month ? entry.month + '月' : ''}{entry.day ? entry.day + '日' : ''}</div></div>
                                     <div className="flex-grow relative pl-6 border-l-2 border-gray-200 group-hover:border-green-300 transition-colors"><div className={`absolute -left-[7px] top-2 w-3 h-3 rounded-full border-2 border-white shadow-sm ${importanceLevels[entry.importance||2].bg.replace('bg-', 'bg-').replace('-50', '-400')}`}></div><h4 className="font-bold text-lg text-gray-900 mb-1">{entry.title}</h4><p className="text-sm text-gray-600 leading-relaxed">{entry.content}</p></div>
-                                    {isAuthorized && <div className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => onEditEntry(entry)} className="p-2 bg-white text-gray-400 hover:text-blue-600 border border-gray-200 rounded-lg shadow-sm"><Icons.Edit2 size={16} /></button></div>}
+                                    {isAuthorized && <div className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => handleEditEntryTransition(entry, 'timeline')} className="p-2 bg-white text-gray-400 hover:text-blue-600 border border-gray-200 rounded-lg shadow-sm"><Icons.Edit2 size={16} /></button></div>}
                                 </div>
                             ))}
                         </div>
@@ -3962,8 +4113,10 @@ function TimelineWiki() {
     };
     
     // 編集画面を開くヘルパー関数
-    const handleEditEntryTransition = (entry) => {
-        setLastView(view);
+    // ★修正: sourceViewを引数で受け取れるように変更
+    const handleEditEntryTransition = (entry, sourceView = null) => {
+        // sourceViewが指定されていればそれを、なければ現在のviewを保存
+        setLastView(sourceView || view);
         setSelectedEntry(entry);
         setIsEditing(true);
         setView('edit');
@@ -4433,7 +4586,7 @@ function TimelineWiki() {
                                     organizations={organizations}
                                     onClose={() => { setView('nation_list'); setSelectedProfileNation(null); }} 
                                     onEdit={() => { setEditingNation(selectedProfileNation); setView('settings'); }}
-                                    onEditEntry={handleEditEntryTransition} 
+                                    onEditEntry={(entry) => handleEditEntryTransition(entry, 'nation_profile')} // ★明示的に指定
                                     onEditNation={() => { setTargetNation(selectedProfileNation); setView('settings'); }}
                                     onEditStats={() => { setTargetNation(selectedProfileNation); setView('statsEdit'); }}
                                     onEditOverview={() => { setTargetNation(selectedProfileNation); setView('nation_overview'); }}

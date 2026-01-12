@@ -4432,6 +4432,84 @@ function TimelineWiki() {
                     onEditEntry={handleEditEntryTransition} 
                 />
             ) :
+                             /* ★ここに追加: 編集画面 (EditForm) の表示処理 */
+                            view === 'edit' && selectedEntry ? (
+                                <EditForm 
+                                    entry={selectedEntry} 
+                                    nations={nations} 
+                                    onSave={(newData) => {
+                                        const newEntries = [...entries];
+                                        const idx = newEntries.findIndex(e => e.id === newData.id);
+                                        if (idx >= 0) newEntries[idx] = newData; else newEntries.push(newData);
+                                        setEntries(newEntries);
+                                        saveToCloud({ entries: newEntries });
+                                        setIsEditing(false);
+                                        // 元の画面に戻る
+                                        if(lastView === 'nation_profile') { setView('nation_profile'); }
+                                        else { setView('timeline'); setSelectedEntry(null); }
+                                    }}
+                                    onCancel={() => {
+                                        setIsEditing(false);
+                                        // キャンセル時の戻り先判定
+                                        if (lastView === 'detail') { setView('detail'); }
+                                        else if (lastView === 'nation_profile') { setView('nation_profile'); setSelectedEntry(null); }
+                                        else { setView('timeline'); setSelectedEntry(null); }
+                                    }}
+                                />
+                            ) :
+
+                             /* ★ここに追加: 編集画面 (EditForm) の表示処理 */
+                            view === 'edit' && selectedEntry ? (
+                                <EditForm 
+                                    entry={selectedEntry} 
+                                    nations={nations} 
+                                    onSave={(newData) => {
+                                        const newEntries = [...entries];
+                                        const idx = newEntries.findIndex(e => e.id === newData.id);
+                                        if (idx >= 0) newEntries[idx] = newData; else newEntries.push(newData);
+                                        setEntries(newEntries);
+                                        saveToCloud({ entries: newEntries });
+                                        setIsEditing(false);
+                                        // 元の画面に戻る
+                                        if(lastView === 'nation_profile') { setView('nation_profile'); }
+                                        else { setView('timeline'); setSelectedEntry(null); }
+                                    }}
+                                    onCancel={() => {
+                                        setIsEditing(false);
+                                        // キャンセル時の戻り先判定
+                                        if (lastView === 'detail') { setView('detail'); }
+                                        else if (lastView === 'nation_profile') { setView('nation_profile'); setSelectedEntry(null); }
+                                        else { setView('timeline'); setSelectedEntry(null); }
+                                    }}
+                                />
+                            ) :
+
+                             /* ★ここに追加: 編集画面 (EditForm) の表示処理 */
+                            view === 'edit' && selectedEntry ? (
+                                <EditForm 
+                                    entry={selectedEntry} 
+                                    nations={nations} 
+                                    onSave={(newData) => {
+                                        const newEntries = [...entries];
+                                        const idx = newEntries.findIndex(e => e.id === newData.id);
+                                        if (idx >= 0) newEntries[idx] = newData; else newEntries.push(newData);
+                                        setEntries(newEntries);
+                                        saveToCloud({ entries: newEntries });
+                                        setIsEditing(false);
+                                        // 元の画面に戻る
+                                        if(lastView === 'nation_profile') { setView('nation_profile'); }
+                                        else { setView('timeline'); setSelectedEntry(null); }
+                                    }}
+                                    onCancel={() => {
+                                        setIsEditing(false);
+                                        // キャンセル時の戻り先判定
+                                        if (lastView === 'detail') { setView('detail'); }
+                                        else if (lastView === 'nation_profile') { setView('nation_profile'); setSelectedEntry(null); }
+                                        else { setView('timeline'); setSelectedEntry(null); }
+                                    }}
+                                />
+                            ) :
+
                              view === 'help' ? <HelpView setView={setView} /> : 
                              view === 'timeline' ? (
                                 <div className="animate-fade-in">

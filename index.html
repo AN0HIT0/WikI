@@ -3536,7 +3536,7 @@ const ItemDetailModal = ({ item, type, onClose, parseRuby }) => {
 };
 
 // --- NationProfileView コンポーネント (修正版: 権限チェック追加) ---
-const NationProfileView = ({ isAuthorized, setView, nation: initialNation, nations, entries, stats, characters, organizations, onEditEntry, onEditNation, onEditStats, onEditOverview, updateNation }) => {
+const NationProfileView = ({ isAuthorized, setView, nation: initialNation, nations, entries, stats, characters, organizations, onEditEntry, onEditNation, onEditStats, onEditOverview, updateNation, onOpenDetail }) => {
     const [activeTab, setActiveTab] = useState('overview');
     const [isKeyCharModalOpen, setIsKeyCharModalOpen] = useState(false);
     const [isKeyOrgModalOpen, setIsKeyOrgModalOpen] = useState(false);
@@ -3785,15 +3785,35 @@ const NationProfileView = ({ isAuthorized, setView, nation: initialNation, natio
                         <div className="flex items-center justify-between mb-6 border-b pb-4"><h3 className="font-bold text-xl text-gray-800 flex items-center gap-2"><Icons.List size={24} className="text-green-600"/> 関連年表</h3><span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-bold">{relatedEntries.length} 件の記録</span></div>
                         <div className="space-y-0">
                             {relatedEntries.map((entry, idx) => (
-                                <div key={entry.id} className="flex gap-6 p-4 hover:bg-gray-50 transition-all group border-b border-gray-100 last:border-0 relative">
+                                /* ★修正: 全体にonClickを追加し、詳細画面を開くように変更 */
+                                <div 
+                                    key={entry.id} 
+                                    onClick={() => onOpenDetail(entry)}
+                                    className="flex gap-6 p-4 hover:bg-gray-50 transition-all group border-b border-gray-100 last:border-0 relative cursor-pointer"
+                                >
                                     <div className="flex-shrink-0 w-28 pt-1 text-right"><div className="font-mono font-bold text-lg text-gray-700">{entry.year}年</div><div className="text-xs text-gray-400">{entry.month ? entry.month + '月' : ''}{entry.day ? entry.day + '日' : ''}</div></div>
                                     <div className="flex-grow relative pl-6 border-l-2 border-gray-200 group-hover:border-green-300 transition-colors"><div className={`absolute -left-[7px] top-2 w-3 h-3 rounded-full border-2 border-white shadow-sm ${importanceLevels[entry.importance||2].bg.replace('bg-', 'bg-').replace('-50', '-400')}`}></div><h4 className="font-bold text-lg text-gray-900 mb-1">{entry.title}</h4><p className="text-sm text-gray-600 leading-relaxed">{entry.content}</p></div>
-                                    {isAuthorized && <div className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => handleEditEntryTransition(entry, 'timeline')} className="p-2 bg-white text-gray-400 hover:text-blue-600 border border-gray-200 rounded-lg shadow-sm"><Icons.Edit2 size={16} /></button></div>}
+                                    
+                                    {/* ★修正: 編集ボタンのクリックイベント伝播を停止 (stopPropagation) */}
+                                    {isAuthorized && (
+                                        <div className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                            <button 
+                                                onClick={(e) => { 
+                                                    e.stopPropagation(); // これでカードクリック(詳細表示)を防ぐ
+                                                    onEditEntry(entry); 
+                                                }} 
+                                                className="p-2 bg-white text-gray-400 hover:text-blue-600 border border-gray-200 rounded-lg shadow-sm"
+                                            >
+                                                <Icons.Edit2 size={16} />
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
                     </div>
                 )}
+
             </div>
         </div>
     );
@@ -4575,29 +4595,32 @@ function TimelineWiki() {
                              view === 'table' ? <NationTableView isAuthorized={canEdit} setView={setView} nations={nations} stats={stats} onEditNation={openSettings} onAddNation={() => openSettings(null)}/> : 
                              view === 'nation_list' ? <NationListView setView={setView} nations={nations} onSelectNation={(n) => { setSelectedProfileNation(n); setView('nation_profile'); }} /> : 
                              view === 'nation_profile' && selectedProfileNation ? (
-                                <NationProfileView 
-                                    isAuthorized={canEdit} 
-                                    nation={selectedProfileNation} 
-                                    entries={entries} 
-                                    stats={stats}
-                                    /* ★以下を追加・修正しました */
-                                    nations={nations}
-                                    characters={characters}
-                                    organizations={organizations}
-                                    onClose={() => { setView('nation_list'); setSelectedProfileNation(null); }} 
-                                    onEdit={() => { setEditingNation(selectedProfileNation); setView('settings'); }}
-                                    onEditEntry={(entry) => handleEditEntryTransition(entry, 'nation_profile')} // ★明示的に指定
-                                    onEditNation={() => { setTargetNation(selectedProfileNation); setView('settings'); }}
-                                    onEditStats={() => { setTargetNation(selectedProfileNation); setView('statsEdit'); }}
-                                    onEditOverview={() => { setTargetNation(selectedProfileNation); setView('nation_overview'); }}
-                                    updateNation={(updated) => {
-                                        const newNations = nations.map(n => n.id === updated.id ? updated : n);
-                                        setNations(newNations);
-                                        saveToCloud({ nations: newNations });
-                                        setSelectedProfileNation(updated);
-                                    }}
-                                />
-                            ) :
+                <NationProfileView 
+                    isAuthorized={canEdit} 
+                    nation={selectedProfileNation} 
+                    entries={entries}
+                    stats={stats}
+                    /* ★以下3行は既存のコードにあるはずですが、念のため確認 */
+                    nations={nations}
+                    characters={characters}
+                    organizations={organizations}
+                    /* ------------------------------------------- */
+                    onClose={() => { setView('nation_list'); setSelectedProfileNation(null); }} 
+                    onEdit={() => { setEditingNation(selectedProfileNation); setView('settings'); }}
+                    onEditEntry={handleEditEntryTransition} 
+                    onEditNation={() => { setTargetNation(selectedProfileNation); setView('settings'); }}
+                    onEditStats={() => { setTargetNation(selectedProfileNation); setView('statsEdit'); }}
+                    onEditOverview={() => { setTargetNation(selectedProfileNation); setView('nation_overview'); }}
+                    updateNation={(updated) => {
+                        const newNations = nations.map(n => n.id === updated.id ? updated : n);
+                        setNations(newNations);
+                        saveToCloud({ nations: newNations });
+                        setSelectedProfileNation(updated);
+                    }}
+                    /* ★ここに追加: 詳細画面を開くための関数を渡す */
+                    onOpenDetail={handleOpenDetail} 
+                />
+            ) :
                             
                             /* 編集画面 (重複を削除して1つにしました) */
                             view === 'edit' && selectedEntry ? (

@@ -3921,14 +3921,14 @@ const UserManagementView = ({ setView, allUsers, onChangeRole }) => {
     );
 };
 
-// --- GlossaryView コンポーネント (タグ対応版) ---
-const GlossaryView = ({ setView, nations, entries, characters, organizations, glossaryData, setGlossaryData, isAuthorized }) => {
+// --- GlossaryView コンポーネント (編集保存対応版) ---
+const GlossaryView = ({ setView, nations, entries, characters, organizations, glossaryData, setGlossaryData, isAuthorized, saveToCloud }) => {
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterType, setFilterType] = useState('all');
+    const [filterTypes, setFilterTypes] = useState(['all']);
     const [selectedItem, setSelectedItem] = useState(null);
     const [history, setHistory] = useState([]);
 
-    // ★追加: 自動タグ生成ヘルパー
+    // 自動タグ生成
     const getAutoTags = (item) => {
         const o = item.original;
         const tags = [];
@@ -3943,7 +3943,7 @@ const GlossaryView = ({ setView, nations, entries, characters, organizations, gl
         } else if (item.type === 'org') {
             if (o.type) tags.push(ORG_TYPES.find(t=>t.key===o.type)?.label || o.type);
         }
-        return tags.filter(t => t); // 空を除外
+        return tags.filter(t => t); 
     };
 
     // 統合データリスト
@@ -3959,23 +3959,29 @@ const GlossaryView = ({ setView, nations, entries, characters, organizations, gl
         return list.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
     }, [nations, entries, characters, organizations, glossaryData]);
 
-    // フィルタリング
+    // フィルタリング処理
+    const toggleFilter = (type) => {
+        if (type === 'all') { setFilterTypes(['all']); return; }
+        let newFilters = [...filterTypes];
+        if (newFilters.includes('all')) { newFilters = [type]; } 
+        else { if (newFilters.includes(type)) { newFilters = newFilters.filter(t => t !== type); } else { newFilters.push(type); } }
+        if (newFilters.length === 0) { newFilters = ['all']; }
+        setFilterTypes(newFilters);
+    };
+
     const filteredItems = useMemo(() => {
         return allItems.filter(item => {
-            const matchesType = filterType === 'all' || item.type === filterType;
-            // ★修正: タグも検索対象に含める
+            const matchesType = filterTypes.includes('all') || filterTypes.includes(item.type);
             const savedTags = glossaryData.tags?.[item.id] || [];
             const autoTags = getAutoTags(item);
             const displayTags = savedTags.length > 0 ? savedTags : autoTags;
             const tagsString = displayTags.join(' ');
-            
-            const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                                  tagsString.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || tagsString.toLowerCase().includes(searchTerm.toLowerCase());
             return matchesType && matchesSearch;
         });
-    }, [allItems, filterType, searchTerm, glossaryData]);
+    }, [allItems, filterTypes, searchTerm, glossaryData]);
 
-    // 詳細表示関連
+    // 詳細表示・遷移
     const openDetail = (item) => { setHistory([]); setSelectedItem(item); };
     const handleLinkClick = (targetName) => {
         const target = allItems.find(i => i.name === targetName);
@@ -3999,35 +4005,50 @@ const GlossaryView = ({ setView, nations, entries, characters, organizations, gl
         setSelectedItem(target);
     };
 
-    // 編集・保存関連
+    // ★修正: 編集・保存処理 (saveToCloudを呼び出すように変更)
     const handleAddTerm = () => {
         const name = prompt("新しい用語名を入力してください:");
         if (!name) return;
         const newTerm = { id: `term_${Date.now()}`, name, desc: '', image: null };
         const newTerms = [...(glossaryData.terms || []), newTerm];
-        setGlossaryData({ ...glossaryData, terms: newTerms });
+        const newData = { ...glossaryData, terms: newTerms };
+        
+        setGlossaryData(newData);
+        if(saveToCloud) saveToCloud({ glossary: newData }); // ★保存実行
+
         const itemStruct = { type: 'term', id: newTerm.id, name: newTerm.name, original: newTerm, label: '用語', color: 'bg-gray-100 text-gray-800' };
         openDetail(itemStruct);
     };
+
     const handleSaveDescription = (id, content) => {
         const overrides = { ...(glossaryData.overrides || {}) };
         overrides[id] = content;
-        setGlossaryData({ ...glossaryData, overrides });
+        const newData = { ...glossaryData, overrides };
+        
+        setGlossaryData(newData);
+        if(saveToCloud) saveToCloud({ glossary: newData }); // ★保存実行
     };
-    // ★追加: タグ保存処理
+
     const handleSaveTags = (id, tags) => {
         const tagData = { ...(glossaryData.tags || {}) };
         tagData[id] = tags;
-        setGlossaryData({ ...glossaryData, tags: tagData });
+        const newData = { ...glossaryData, tags: tagData };
+        
+        setGlossaryData(newData);
+        if(saveToCloud) saveToCloud({ glossary: newData }); // ★保存実行
     };
+
     const handleDeleteTerm = (id) => {
         if(!window.confirm("この用語を削除しますか？")) return;
         const newTerms = (glossaryData.terms || []).filter(t => t.id !== id);
         const newOverrides = { ...glossaryData.overrides };
         delete newOverrides[id];
-        const newTags = { ...glossaryData.tags }; // タグも削除
+        const newTags = { ...glossaryData.tags };
         delete newTags[id];
-        setGlossaryData({ ...glossaryData, terms: newTerms, overrides: newOverrides, tags: newTags });
+        const newData = { ...glossaryData, terms: newTerms, overrides: newOverrides, tags: newTags };
+        
+        setGlossaryData(newData);
+        if(saveToCloud) saveToCloud({ glossary: newData }); // ★保存実行
         setSelectedItem(null);
     }
 
@@ -4042,10 +4063,10 @@ const GlossaryView = ({ setView, nations, entries, characters, organizations, gl
                 allItems={allItems}
                 glossaryData={glossaryData}
                 onSaveDescription={handleSaveDescription}
-                onSaveTags={handleSaveTags} // ★追加
+                onSaveTags={handleSaveTags}
                 onDeleteTerm={handleDeleteTerm}
                 isAuthorized={isAuthorized}
-                getAutoTags={getAutoTags} // ★追加
+                getAutoTags={getAutoTags}
             />
         );
     }
@@ -4060,44 +4081,38 @@ const GlossaryView = ({ setView, nations, entries, characters, organizations, gl
                     <input type="text" placeholder="キーワード検索 (タグ含む)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none" />
                 </div>
                 <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0 custom-scrollbar">
-                    {[{ k: 'all', l: 'すべて' }, { k: 'nation', l: '国家' }, { k: 'event', l: '出来事' }, { k: 'char', l: '人物' }, { k: 'org', l: '組織' }, { k: 'term', l: '用語' }].map(f => (
-                        <button key={f.k} onClick={() => setFilterType(f.k)} className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-colors ${filterType === f.k ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{f.l}</button>
-                    ))}
+                    {[{ k: 'all', l: 'すべて' }, { k: 'nation', l: '国家' }, { k: 'event', l: '出来事' }, { k: 'char', l: '人物' }, { k: 'org', l: '組織' }, { k: 'term', l: '用語' }].map(f => {
+                        const isActive = filterTypes.includes(f.k);
+                        return (
+                            <button key={f.k} onClick={() => toggleFilter(f.k)} className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-colors border ${isActive ? 'bg-gray-800 text-white border-gray-800 shadow-inner' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>
+                                {isActive && f.k !== 'all' ? <span className="mr-1 text-yellow-400">✔</span> : null}{f.l}
+                            </button>
+                        );
+                    })}
                 </div>
                 {isAuthorized && <button onClick={handleAddTerm} className="px-4 py-2 bg-yellow-500 text-white font-bold rounded-lg hover:bg-yellow-600 flex items-center gap-2 whitespace-nowrap shadow"><Icons.Plus size={18}/> 用語登録</button>}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredItems.map(item => {
-                    // ★追加: カード内でのタグ表示用
                     const savedTags = glossaryData.tags?.[item.id] || [];
                     const autoTags = getAutoTags(item);
                     const displayTags = savedTags.length > 0 ? savedTags : autoTags;
-
                     return (
-                        <div key={`${item.type}_${item.id}`} onClick={() => openDetail(item)} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group relative flex flex-col h-full">
-                            <div className="h-24 bg-gray-100 relative overflow-hidden flex-shrink-0">
-                                {item.image ? <img src={item.image} className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-500" /> : <div className="w-full h-full flex items-center justify-center opacity-10"><Icons.BookOpen size={48} /></div>}
-                                <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent"></div>
-                                <span className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-1 rounded shadow-sm border border-white/50 ${item.color}`}>{item.label}</span>
+                        <div key={`${item.type}_${item.id}`} onClick={() => openDetail(item)} className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group flex items-center p-3 gap-3 h-24 overflow-hidden relative">
+                            <div className="w-16 h-16 bg-gray-100 rounded-md border border-gray-200 flex-shrink-0 flex items-center justify-center overflow-hidden relative">
+                                {item.image ? <img src={item.image} className="w-full h-full object-cover" /> : <div className="opacity-30"><Icons.BookOpen size={24} /></div>}
+                                <div className={`absolute top-0 left-0 text-[9px] font-bold px-1.5 py-0.5 rounded-br-md text-white shadow-sm z-10 ${item.color.replace('bg-', 'bg-').replace('text-', '').split(' ')[0].replace('100', '500')}`}>{item.label}</div>
                             </div>
-                            <div className="p-4 relative flex-grow flex flex-col">
-                                <div className="absolute -top-8 left-4 w-14 h-14 rounded-xl border-4 border-white bg-white shadow-md flex items-center justify-center overflow-hidden">
-                                    {item.image ? <img src={item.image} className="w-full h-full object-cover"/> : <span className="text-gray-400 font-bold text-xs">{item.label}</span>}
-                                </div>
-                                <div className="mt-6 mb-2">
-                                    <h3 className="font-bold text-lg text-gray-800 leading-tight mb-1 group-hover:text-blue-600 transition-colors">{item.name}</h3>
-                                    {item.sub && <p className="text-xs text-gray-500 font-mono">{item.sub}</p>}
-                                </div>
-                                {/* ★追加: タグ表示 */}
-                                <div className="mt-auto pt-2 flex flex-wrap gap-1">
-                                    {displayTags.slice(0, 3).map((tag, i) => <span key={i} className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200">{tag}</span>)}
-                                    {displayTags.length > 3 && <span className="text-[10px] text-gray-400 px-1">...</span>}
-                                </div>
+                            <div className="flex-grow min-w-0 flex flex-col justify-center h-full">
+                                <div className="flex justify-between items-start"><h3 className="font-bold text-gray-800 leading-tight truncate pr-2 group-hover:text-blue-600 transition-colors">{item.name}</h3>{item.sub && <span className="text-[10px] text-gray-400 font-mono bg-gray-50 px-1 rounded flex-shrink-0">{item.sub}</span>}</div>
+                                <div className="mt-2 flex flex-wrap gap-1 h-5 overflow-hidden">{displayTags.slice(0, 3).map((tag, i) => <span key={i} className="text-[9px] bg-gray-50 text-gray-500 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap">{tag}</span>)}{displayTags.length === 0 && <span className="text-[9px] text-gray-300 italic">タグなし</span>}{displayTags.length > 3 && <span className="text-[9px] text-gray-400">...</span>}</div>
                             </div>
+                            <div className="absolute right-2 opacity-0 group-hover:opacity-100 transition-opacity text-blue-400"><Icons.ChevronRight size={16} /></div>
                         </div>
                     );
                 })}
+                {filteredItems.length === 0 && <div className="col-span-full text-center py-20 text-gray-400">該当する用語が見つかりません</div>}
             </div>
         </div>
     );
@@ -4953,6 +4968,8 @@ function TimelineWiki() {
                                     organizations={organizations} 
                                     glossaryData={glossaryData} 
                                     setGlossaryData={setGlossaryData} 
+                                    /* ★これを追加: 保存関数を渡す */
+                                    saveToCloud={saveToCloud} 
                                     isAuthorized={canEdit}
                                 />
                             ) :

@@ -3921,203 +3921,8 @@ const UserManagementView = ({ setView, allUsers, onChangeRole }) => {
     );
 };
 
-// --- GlossaryView コンポーネント (修正版: 自動保存対応) ---
-const GlossaryView = ({ setView, nations, entries, characters, organizations, glossaryData, setGlossaryData, isAuthorized }) => {
-    const [searchTerm, setSearchTerm] = useState('');
-    const [filterTypes, setFilterTypes] = useState(['all']);
-    const [selectedItem, setSelectedItem] = useState(null);
-    const [history, setHistory] = useState([]);
 
-    // 自動タグ生成
-    const getAutoTags = (item) => {
-        const o = item.original;
-        const tags = [];
-        if (item.type === 'nation') {
-            if (o.location) tags.push(LOCATIONS[o.location]?.label || o.location);
-            if (o.rank) tags.push(NATION_RANKS[o.rank]?.label || o.rank);
-        } else if (item.type === 'event') {
-            if (o.tags) tags.push(...o.tags);
-        } else if (item.type === 'char') {
-            if (o.race) tags.push(o.race);
-            if (o.affiliations) o.affiliations.forEach(a => tags.push(typeof a === 'string' ? a : a.name));
-        } else if (item.type === 'org') {
-            if (o.type) tags.push(ORG_TYPES.find(t=>t.key===o.type)?.label || o.type);
-        }
-        return tags.filter(t => t); 
-    };
 
-    // 統合データリスト
-    const allItems = useMemo(() => {
-        const list = [];
-        nations.forEach(n => list.push({ type: 'nation', id: n.id, name: n.name, image: n.flag, original: n, label: '国家', color: 'bg-orange-100 text-orange-800' }));
-        entries.forEach(e => list.push({ type: 'event', id: e.id, name: e.title, image: null, original: e, label: '出来事', color: 'bg-green-100 text-green-800', sub: `${e.year}年` }));
-        characters.forEach(c => list.push({ type: 'char', id: c.id, name: c.name, image: c.portrait, original: c, label: '人物', color: 'bg-blue-100 text-blue-800', sub: `Lv.${c.level||'?'}` }));
-        organizations.forEach(o => list.push({ type: 'org', id: o.id, name: o.name, image: o.logo, original: o, label: '組織', color: 'bg-purple-100 text-purple-800' }));
-        if (glossaryData && glossaryData.terms) {
-            glossaryData.terms.forEach(t => list.push({ type: 'term', id: t.id, name: t.name, image: t.image, original: t, label: '用語', color: 'bg-gray-100 text-gray-800' }));
-        }
-        return list.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
-    }, [nations, entries, characters, organizations, glossaryData]);
-
-    // フィルタリング処理
-    const toggleFilter = (type) => {
-        if (type === 'all') { setFilterTypes(['all']); return; }
-        let newFilters = [...filterTypes];
-        if (newFilters.includes('all')) { newFilters = [type]; } 
-        else { if (newFilters.includes(type)) { newFilters = newFilters.filter(t => t !== type); } else { newFilters.push(type); } }
-        if (newFilters.length === 0) { newFilters = ['all']; }
-        setFilterTypes(newFilters);
-    };
-
-    const filteredItems = useMemo(() => {
-        return allItems.filter(item => {
-            const matchesType = filterTypes.includes('all') || filterTypes.includes(item.type);
-            const savedTags = glossaryData.tags?.[item.id] || [];
-            const autoTags = getAutoTags(item);
-            const displayTags = savedTags.length > 0 ? savedTags : autoTags;
-            const tagsString = displayTags.join(' ');
-            const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || tagsString.toLowerCase().includes(searchTerm.toLowerCase());
-            return matchesType && matchesSearch;
-        });
-    }, [allItems, filterTypes, searchTerm, glossaryData]);
-
-    // 詳細表示・遷移
-    const openDetail = (item) => { setHistory([]); setSelectedItem(item); };
-    const handleLinkClick = (targetName) => {
-        const target = allItems.find(i => i.name === targetName);
-        if (target && target.id !== selectedItem.id) {
-            setHistory(prev => [...prev, selectedItem]);
-            setSelectedItem(target);
-        }
-    };
-    const handleBack = () => {
-        if (history.length > 0) {
-            const prev = history[history.length - 1];
-            setHistory(prevHist => prevHist.slice(0, -1));
-            setSelectedItem(prev);
-        } else {
-            setSelectedItem(null);
-        }
-    };
-    const handleJumpHistory = (index) => {
-        const target = history[index];
-        setHistory(history.slice(0, index));
-        setSelectedItem(target);
-    };
-
-    // --- 修正箇所: 各保存処理から saveToCloud 呼び出しを削除 ---
-
-    const handleAddTerm = () => {
-        const name = prompt("新しい用語名を入力してください:");
-        if (!name) return;
-        const newTerm = { id: `term_${Date.now()}`, name, desc: '', image: null };
-        const newTerms = [...(glossaryData.terms || []), newTerm];
-        const newData = { ...glossaryData, terms: newTerms };
-        
-        setGlossaryData(newData);
-        // saveToCloudは削除 (親コンポーネントの自動保存に任せる)
-
-        const itemStruct = { type: 'term', id: newTerm.id, name: newTerm.name, original: newTerm, label: '用語', color: 'bg-gray-100 text-gray-800' };
-        openDetail(itemStruct);
-    };
-
-    const handleSaveDescription = (id, content) => {
-        const overrides = { ...(glossaryData.overrides || {}) };
-        overrides[id] = content;
-        const newData = { ...glossaryData, overrides };
-        
-        setGlossaryData(newData);
-        // saveToCloudは削除 (親コンポーネントの自動保存に任せる)
-    };
-
-    const handleSaveTags = (id, tags) => {
-        const tagData = { ...(glossaryData.tags || {}) };
-        tagData[id] = tags;
-        const newData = { ...glossaryData, tags: tagData };
-        
-        setGlossaryData(newData);
-        // saveToCloudは削除 (親コンポーネントの自動保存に任せる)
-    };
-
-    const handleDeleteTerm = (id) => {
-        if(!window.confirm("この用語を削除しますか？")) return;
-        const newTerms = (glossaryData.terms || []).filter(t => t.id !== id);
-        const newOverrides = { ...glossaryData.overrides };
-        delete newOverrides[id];
-        const newTags = { ...glossaryData.tags };
-        delete newTags[id];
-        const newData = { ...glossaryData, terms: newTerms, overrides: newOverrides, tags: newTags };
-        
-        setGlossaryData(newData);
-        // saveToCloudは削除 (親コンポーネントの自動保存に任せる)
-        setSelectedItem(null);
-    }
-
-    if (selectedItem) {
-        return (
-            <GlossaryDetail 
-                item={selectedItem} 
-                history={history} 
-                onBack={handleBack} 
-                onJumpHistory={handleJumpHistory}
-                onLinkClick={handleLinkClick}
-                allItems={allItems}
-                glossaryData={glossaryData}
-                onSaveDescription={handleSaveDescription}
-                onSaveTags={handleSaveTags}
-                onDeleteTerm={handleDeleteTerm}
-                isAuthorized={isAuthorized}
-                getAutoTags={getAutoTags}
-            />
-        );
-    }
-
-    return (
-        <div className="space-y-6 animate-fade-in pb-20">
-            <SectionHeader icon={Icons.BookOpen} title="用語集・百科事典" desc="世界に存在する国家、人物、出来事、用語を網羅したデータベースです。" />
-            
-            <div className="flex flex-col md:flex-row gap-4 bg-white p-4 rounded-lg shadow border border-gray-200 sticky top-0 z-20">
-                <div className="relative flex-grow">
-                    <Icons.Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
-                    <input type="text" placeholder="キーワード検索 (タグ含む)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none" />
-                </div>
-                <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0 custom-scrollbar">
-                    {[{ k: 'all', l: 'すべて' }, { k: 'nation', l: '国家' }, { k: 'event', l: '出来事' }, { k: 'char', l: '人物' }, { k: 'org', l: '組織' }, { k: 'term', l: '用語' }].map(f => {
-                        const isActive = filterTypes.includes(f.k);
-                        return (
-                            <button key={f.k} onClick={() => toggleFilter(f.k)} className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-colors border ${isActive ? 'bg-gray-800 text-white border-gray-800 shadow-inner' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>
-                                {isActive && f.k !== 'all' ? <span className="mr-1 text-yellow-400">✔</span> : null}{f.l}
-                            </button>
-                        );
-                    })}
-                </div>
-                {isAuthorized && <button onClick={handleAddTerm} className="px-4 py-2 bg-yellow-500 text-white font-bold rounded-lg hover:bg-yellow-600 flex items-center gap-2 whitespace-nowrap shadow"><Icons.Plus size={18}/> 用語登録</button>}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredItems.map(item => {
-                    const savedTags = glossaryData.tags?.[item.id] || [];
-                    const autoTags = getAutoTags(item);
-                    const displayTags = savedTags.length > 0 ? savedTags : autoTags;
-                    return (
-                        <div key={`${item.type}_${item.id}`} onClick={() => openDetail(item)} className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group flex items-center p-3 gap-3 h-24 overflow-hidden relative">
-                            <div className="w-16 h-16 bg-gray-100 rounded-md border border-gray-200 flex-shrink-0 flex items-center justify-center overflow-hidden relative">
-                                {item.image ? <img src={item.image} className="w-full h-full object-cover" /> : <div className="opacity-30"><Icons.BookOpen size={24} /></div>}
-                                <div className={`absolute top-0 left-0 text-[9px] font-bold px-1.5 py-0.5 rounded-br-md text-white shadow-sm z-10 ${item.color.replace('bg-', 'bg-').replace('text-', '').split(' ')[0].replace('100', '500')}`}>{item.label}</div>
-                            </div>
-                            <div className="flex-grow min-w-0 flex flex-col justify-center h-full">
-                                <div className="flex justify-between items-start"><h3 className="font-bold text-gray-800 leading-tight truncate pr-2 group-hover:text-blue-600 transition-colors">{item.name}</h3>{item.sub && <span className="text-[10px] text-gray-400 font-mono bg-gray-50 px-1 rounded flex-shrink-0">{item.sub}</span>}</div>
-                                <div className="mt-2 flex flex-wrap gap-1 h-5 overflow-hidden">{displayTags.slice(0, 3).map((tag, i) => <span key={i} className="text-[9px] bg-gray-50 text-gray-500 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap">{tag}</span>)}{displayTags.length === 0 && <span className="text-[9px] text-gray-300 italic">タグなし</span>}{displayTags.length > 3 && <span className="text-[9px] text-gray-400">...</span>}</div>
-                            </div>
-                            <div className="absolute right-2 opacity-0 group-hover:opacity-100 transition-opacity text-blue-400"><Icons.ChevronRight size={16} /></div>
-                        </div>
-                    );
-                })}
-                {filteredItems.length === 0 && <div className="col-span-full text-center py-20 text-gray-400">該当する用語が見つかりません</div>}
-            </div>
-        </div>
-    );
-};
 
 // --- GlossaryDetail コンポーネント (タグ機能強化版) ---
 const GlossaryDetail = ({ item, history, onBack, onJumpHistory, onLinkClick, allItems, glossaryData, onSaveDescription, onSaveTags, onDeleteTerm, isAuthorized, getAutoTags }) => {
@@ -4457,15 +4262,20 @@ const ProgressToast = ({ tasks }) => {
     );
 };
 
+// --- TimelineWiki (Main App) ---
 function TimelineWiki() {
+    // --- State Definitions ---
     const [entries, setEntries] = useState([]);
     const [nations, setNations] = useState([]);
     const [stats, setStats] = useState([]);
-    const [characters, setCharacters] = useState([]); 
-    const [organizations, setOrganizations] = useState([]); 
+    const [characters, setCharacters] = useState([]);
+    const [organizations, setOrganizations] = useState([]);
+    const [glossaryData, setGlossaryData] = useState({ terms: [], overrides: {}, tags: {} }); // 用語集データ
     
-    const [view, setView] = useState('menu'); 
+    const [view, setView] = useState('menu');
+    const [uiScale, setUiScale] = useState(100); // 100%基準
     
+    // Selection & Edit States
     const [selectedEntry, setSelectedEntry] = useState(null);
     const [selectedProfileNation, setSelectedProfileNation] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
@@ -4476,90 +4286,30 @@ function TimelineWiki() {
     const [filterTags, setFilterTags] = useState([]);
     const [filterImportance, setFilterImportance] = useState([]);
     const [targetNation, setTargetNation] = useState(null);
-    const [uiScale, setUiScale] = useState(100);
 
+    // User & Auth States
     const [currentUser, setCurrentUser] = useState(null);
     const [userRole, setUserRole] = useState('guest'); 
     const [allUsers, setallUsers] = useState([]);
-    const [glossaryData, setGlossaryData] = useState({ terms: [], overrides: {} });
-// --- ★追加: 直前の画面を記憶するためのState ---
+    
+    // Navigation History
     const [lastView, setLastView] = useState('timeline'); 
 
-    // 詳細画面を開くヘルパー関数
-    const handleOpenDetail = (entry) => {
-        setLastView(view); // 現在の画面を記録
-        setSelectedEntry(entry);
-        setView('detail');
-    };
-    
-    // 編集画面を開くヘルパー関数
-    // ★修正: sourceViewを引数で受け取れるように変更
-    const handleEditEntryTransition = (entry, sourceView = null) => {
-        // sourceViewが指定されていればそれを、なければ現在のviewを保存
-        setLastView(sourceView || view);
-        setSelectedEntry(entry);
-        setIsEditing(true);
-        setView('edit');
-    };
-    // ★進捗管理ステート
+    // Async Task Management (Gauge)
     const [activeTasks, setActiveTasks] = useState({});
     
-    // ★修正1: 同期ループ防止のため、booleanではなくカウンター(数値)で管理
+    // Loop Prevention
     const isRemoteUpdate = useRef(0);
     
     const fileInputRef = useRef(null);
     const convertFileInputRef = useRef(null);
 
+    // Permissions
     const canEdit = userRole === 'admin' || userRole === 'writer' || (currentUser && currentUser.email === ADMIN_EMAIL);
     const isAdmin = userRole === 'admin' || (currentUser && currentUser.email === ADMIN_EMAIL);
     const disabledClass = !canEdit ? "opacity-30 grayscale pointer-events-none select-none" : "";
 
-// ログイン監視 & 自動申請
-    useEffect(() => {
-        const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
-            setCurrentUser(user);
-            if (user) {
-                if (user.email === ADMIN_EMAIL) {
-                    // 特権管理者
-                    setUserRole('admin');
-                    db.collection('users').doc(user.uid).set({ email: user.email, role: 'admin', lastSeen: new Date().toISOString() }, { merge: true });
-                } else {
-                    // 一般ユーザー
-                    const userRef = db.collection('users').doc(user.uid);
-                    const userDoc = await userRef.get();
-                    
-                    if (userDoc.exists) {
-                        // 既に登録済みならその権限を適用
-                        setUserRole(userDoc.data().role);
-                    } else {
-                        // ★データがない(新規)場合、自動的に「申請中(pending)」として登録
-                        await userRef.set({
-                            email: user.email,
-                            role: 'pending', // ここで自動申請
-                            displayName: user.displayName,
-                            photoURL: user.photoURL,
-                            appliedAt: new Date().toISOString(),
-                            lastSeen: new Date().toISOString()
-                        });
-                        setUserRole('pending');
-                        alert("ログインしました。\n編集権限の申請を自動送信しました。\n管理者の承認をお待ちください。");
-                    }
-                }
-            } else {
-                setUserRole('guest');
-            }
-        });
-        return () => unsubscribeAuth();
-    }, []);
-
-
-    // ユーザー管理 (管理者のみ)
-    useEffect(() => {
-        if (!isAdmin) return;
-        return db.collection('users').onSnapshot(snap => setallUsers(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    }, [isAdmin]);
-
-    // タスク管理ヘルパー
+    // --- Helper Functions ---
     const updateTask = (key, data) => {
         setActiveTasks(prev => {
             if (data === null) {
@@ -4571,30 +4321,74 @@ function TimelineWiki() {
         });
     };
 
-    // ★修正2: データ読み込み (カウンター処理によりループを防止)
+    const handleOpenDetail = (entry) => {
+        setLastView(view);
+        setSelectedEntry(entry);
+        setView('detail');
+    };
+    
+    const handleEditEntryTransition = (entry, sourceView = null) => {
+        setLastView(sourceView || view);
+        setSelectedEntry(entry);
+        setIsEditing(true);
+        setView('edit');
+    };
+
+    // --- Effects: Auth ---
+    useEffect(() => {
+        const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
+            setCurrentUser(user);
+            if (user) {
+                if (user.email === ADMIN_EMAIL) {
+                    setUserRole('admin');
+                    db.collection('users').doc(user.uid).set({ email: user.email, role: 'admin', lastSeen: new Date().toISOString() }, { merge: true });
+                } else {
+                    const userRef = db.collection('users').doc(user.uid);
+                    const userDoc = await userRef.get();
+                    if (userDoc.exists) {
+                        setUserRole(userDoc.data().role);
+                    } else {
+                        await userRef.set({ email: user.email, role: 'pending', displayName: user.displayName, photoURL: user.photoURL, appliedAt: new Date().toISOString(), lastSeen: new Date().toISOString() });
+                        setUserRole('pending');
+                        alert("ログインしました。\n編集権限の申請を自動送信しました。\n管理者の承認をお待ちください。");
+                    }
+                }
+            } else {
+                setUserRole('guest');
+            }
+        });
+        return () => unsubscribeAuth();
+    }, []);
+
+    // --- Effects: User Management ---
+    useEffect(() => {
+        if (!isAdmin) return;
+        return db.collection('users').onSnapshot(snap => setallUsers(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    }, [isAdmin]);
+
+    // --- Effects: Data Sync (Load) ---
     useEffect(() => {
         const unsubscribers = [];
+        
+        // ★修正: ここに 'glossary' を追加！
         const categories = [
             { key: 'entries', label: '年表データ', setter: setEntries },
             { key: 'nations', label: '国家データ', setter: setNations },
             { key: 'stats', label: '統計データ', setter: setStats },
             { key: 'characters', label: '人物図鑑', setter: setCharacters },
             { key: 'organizations', label: '組織図鑑', setter: setOrganizations },
-            { key: 'glossary', label: '用語集データ', setter: setGlossaryData }
+            { key: 'glossary', label: '用語集データ', setter: setGlossaryData } // ← 追加
         ];
 
         categories.forEach(({ key, label, setter }) => {
             const unsub = db.collection("wiki_data").doc(`meta_${key}`)
                 .onSnapshot(async (doc) => {
-                    // 自分の書き込み直後の通知は無視
                     if (!doc.exists || doc.metadata.hasPendingWrites) return;
 
                     const meta = doc.data();
                     const totalChunks = meta.totalChunks || 0;
                     
-                    // ★受信開始：カウンターを増やす
-                    isRemoteUpdate.current++;
-                    
+                    isRemoteUpdate.current++; // 受信中フラグON
                     updateTask(key, { label: `受信中: ${label}`, current: 0, total: totalChunks });
 
                     try {
@@ -4618,17 +4412,16 @@ function TimelineWiki() {
                     } catch (error) {
                         console.error(`${label} load error:`, error);
                     } finally {
-                        // ★受信完了：少し待ってからカウンターを減らす (タスク表示消去と同期)
                         setTimeout(() => {
                             updateTask(key, null);
-                            isRemoteUpdate.current = Math.max(0, isRemoteUpdate.current - 1);
+                            isRemoteUpdate.current = Math.max(0, isRemoteUpdate.current - 1); // 受信中フラグOFF
                         }, 1000);
                     }
                 });
             unsubscribers.push(unsub);
         });
 
-        // 設定同期
+        // Config Sync
         unsubscribers.push(db.collection("wiki_data").doc("db_config").onSnapshot(d => {
             if(d.exists && !d.metadata.hasPendingWrites) { 
                 isRemoteUpdate.current++;
@@ -4640,9 +4433,11 @@ function TimelineWiki() {
         return () => unsubscribers.forEach(u => u());
     }, []);
 
-    // クラウド保存
+    // --- Save Logic ---
     const saveToCloud = async (newData = {}) => {
         if (!canEdit) return;
+        // 受信中は保存しない（無限ループ防止）
+        if (isRemoteUpdate.current > 0) return;
 
         const currentData = {
             entries: newData.entries || entries,
@@ -4655,7 +4450,8 @@ function TimelineWiki() {
         };
 
         const saveCategory = async (key, label, dataObj) => {
-            if (!dataObj || (Array.isArray(dataObj) && dataObj.length === 0)) return;
+            if (!dataObj) return;
+            if (Array.isArray(dataObj) && dataObj.length === 0) return;
 
             updateTask(key, { label: `準備中: ${label}`, current: 0, total: 100 });
 
@@ -4694,10 +4490,13 @@ function TimelineWiki() {
             if (newData.characters || characters.length > 0) promises.push(saveCategory('characters', '人物', currentData.characters));
             if (newData.organizations || organizations.length > 0) promises.push(saveCategory('organizations', '組織', currentData.organizations));
             
+            // ★修正: 用語集も saveCategory で保存する（これでゲージが出る & ガードが効く）
+            if (newData.glossary || (glossaryData.terms && glossaryData.terms.length > 0) || Object.keys(glossaryData.overrides || {}).length > 0) {
+                promises.push(saveCategory('glossary', '用語集', currentData.glossary));
+            }
+            
             if (newData.uiScale) {
                 db.collection("wiki_data").doc("db_config").set({ uiScale: currentData.uiScale }, { merge: true });
-            }
-            if (newData.glossary || (glossaryData.terms && glossaryData.terms.length > 0) || Object.keys(glossaryData.overrides || {}).length > 0) {promises.push(saveCategory('glossary', '用語集', currentData.glossary));
             }
 
             await Promise.all(promises);
@@ -4706,26 +4505,27 @@ function TimelineWiki() {
         }
     };
 
-    // ★修正3: 自動保存 (受信中は保存しない)
+    // --- Auto Save ---
     useEffect(() => {
         if (!canEdit) return;
-        // 受信中(カウントが1以上)なら保存せずリターン
         if (isRemoteUpdate.current > 0) return;
         
         const timer = setTimeout(() => {
-            if (entries.length > 0 || nations.length > 0) saveToCloud();
+            if (entries.length > 0 || nations.length > 0 || (glossaryData.terms && glossaryData.terms.length > 0)) saveToCloud();
         }, 800); 
         return () => clearTimeout(timer);
+    // ★修正: glossaryData を依存配列に追加
     }, [entries, nations, stats, characters, organizations, glossaryData, uiScale, canEdit]);
 
-    // ハンドラ群
+
+    // --- Handlers ---
     const handleApplyAccount = async () => { if(!currentUser) return; try { await db.collection('users').doc(currentUser.uid).set({ email: currentUser.email, role: 'pending', appliedAt: new Date().toISOString() }, { merge: true }); alert("申請しました。管理者の承認をお待ちください。"); } catch(e) { alert("エラー: " + e.message); } };
     const handleApproveUser = async (uid, newRole) => { try { if (newRole === 'reject') { await db.collection('users').doc(uid).update({ role: 'rejected' }); } else { await db.collection('users').doc(uid).update({ role: newRole }); } } catch(e) { alert("更新エラー"); } };
     const handleLogin = async () => { try { await auth.signInWithPopup(googleProvider); } catch (e) { alert(e.message); } };
     const handleLogout = async () => { try { await auth.signOut(); setView('menu'); } catch (e) { console.error(e); } };
 
     const handleExport = () => { 
-        const fullData = { entries, nations, stats, characters, organizations }; 
+        const fullData = { entries, nations, stats, characters, organizations, glossary: glossaryData }; 
         const blob = new Blob([JSON.stringify(fullData, null, 2)], { type: 'application/json' }); 
         const link = document.createElement('a'); 
         link.href = URL.createObjectURL(blob); link.download = `英覇歴代記_Backup_${new Date().toISOString().slice(0,10)}.json`; 
@@ -4745,10 +4545,11 @@ function TimelineWiki() {
                         nations: !Array.isArray(data) && data.nations ? data.nations : [],
                         stats: !Array.isArray(data) && data.stats ? data.stats : [],
                         characters: !Array.isArray(data) && data.characters ? data.characters : [],
-                        organizations: !Array.isArray(data) && data.organizations ? data.organizations : []
+                        organizations: !Array.isArray(data) && data.organizations ? data.organizations : [],
+                        glossary: !Array.isArray(data) && data.glossary ? data.glossary : { terms: [], overrides: {}, tags: {} }
                     };
-                    isRemoteUpdate.current = 0; // 手動インポート時は強制リセット
-                    setEntries(d.entries); setNations(d.nations); setStats(d.stats); setCharacters(d.characters); setOrganizations(d.organizations);
+                    isRemoteUpdate.current = 0; 
+                    setEntries(d.entries); setNations(d.nations); setStats(d.stats); setCharacters(d.characters); setOrganizations(d.organizations); setGlossaryData(d.glossary);
                     saveToCloud(d);
                 } 
             } catch (error) { alert('読み込み失敗'); } 
@@ -4765,7 +4566,6 @@ function TimelineWiki() {
             try { 
                 const data = JSON.parse(e.target.result); 
                 if (!window.confirm('既存データを維持してマージしますか？')) return; 
-                // 簡易マージ
                 const mergedEntries = [...entries, ...(Array.isArray(data) ? data : (data.entries || []))];
                 setEntries(mergedEntries);
                 saveToCloud({ entries: mergedEntries });
@@ -4779,7 +4579,7 @@ function TimelineWiki() {
     const handleCreateNew = () => { if (!canEdit) return; setSelectedEntry({ id: Date.now().toString(), title: '', reading: '', year: DEFAULT_YEAR, tags: [], importance: 2 }); setIsEditing(true); setView('edit'); };
     const openSettings = (n) => { setTargetNation(n); setView('settings'); };
     
-    // UI構築用ロジック
+    // --- View Logic ---
     const timelineItems = useMemo(() => {
         const items = []; 
         let filteredEntries = entries; 
@@ -4814,28 +4614,13 @@ function TimelineWiki() {
             <ProgressToast tasks={activeTasks} />
 
             {view === 'menu' ? (
-                <MainMenu 
-                    setView={setView} 
-                    handleCreateNew={handleCreateNew} 
-                    handleExport={handleExport} 
-                    fileInputRef={fileInputRef} 
-                    convertFileInputRef={convertFileInputRef}
-                    currentUser={currentUser}
-                    isAuthorized={canEdit}
-                    handleLogin={handleLogin}
-                    handleLogout={handleLogout}
-                    userRole={userRole}
-                />
+                <MainMenu setView={setView} handleCreateNew={handleCreateNew} handleExport={handleExport} fileInputRef={fileInputRef} convertFileInputRef={convertFileInputRef} currentUser={currentUser} isAuthorized={canEdit} handleLogin={handleLogin} handleLogout={handleLogout} userRole={userRole} />
             ) : (
                 <div className="min-h-screen bg-[#f0f2f5] font-sans text-gray-800 flex flex-col h-screen overflow-hidden">
                     <header className="bg-[#1a1a1a] text-white p-2 shadow-lg shrink-0 z-50 border-b-4 border-yellow-600">
                         <div className="max-w-7xl mx-auto flex justify-between items-center overflow-x-auto custom-scrollbar pb-1 gap-4">
-                            
-                            {/* 左側: ロゴとMENUボタン */}
                             <div className="flex items-center gap-4 shrink-0">
-                                <button onClick={() => setView('menu')} className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors border border-gray-600">
-                                    <Icons.ArrowLeft size={16} /> MENU
-                                </button>
+                                <button onClick={() => setView('menu')} className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors border border-gray-600"><Icons.ArrowLeft size={16} /> MENU</button>
                                 <div className="h-8 w-px bg-gray-700 hidden sm:block"></div>
                                 <div className="flex items-center gap-2 cursor-pointer group hidden sm:flex" onClick={() => {setView('timeline'); setSelectedEntry(null);}}>
                                     <div className="bg-yellow-600 p-1.5 rounded-md text-black shrink-0"><Icons.BookOpen size={18} /></div>
@@ -4843,10 +4628,7 @@ function TimelineWiki() {
                                 </div>
                             </div>
 
-                            {/* 中央〜右側: コントロール群 */}
                             <div className="flex items-center gap-3 shrink-0">
-                                
-                                {/* ZOOM */}
                                 <div className="flex flex-col items-center gap-0.5">
                                     <span className="text-[8px] text-gray-500 font-bold uppercase tracking-widest">ZOOM</span>
                                     <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 h-9">
@@ -4856,94 +4638,40 @@ function TimelineWiki() {
                                     </div>
                                 </div>
 
-                                {/* MANAGE (編集) */}
                                 <div className={`flex flex-col items-center gap-0.5 ${disabledClass}`}>
                                     <span className="text-[8px] text-yellow-600/80 font-bold uppercase tracking-widest">MANAGE</span>
                                     <div className="flex items-center bg-gray-800/80 p-1 rounded-xl border border-gray-700 gap-1">
-                                        {[
-                                            { id: 'edit', label: '歴史記録', icon: Icons.Edit2, onClick: handleCreateNew, active: view === 'edit' },
-                                            { id: 'settings', label: '国家編成', icon: Icons.Globe, onClick: () => setView('settings'), active: view === 'settings' },
-                                            { id: 'characters', label: '人物管理', icon: Icons.User, onClick: () => setView('characters'), active: view === 'characters' },
-                                            { id: 'organizations', label: '組織管理', icon: Icons.Briefcase, onClick: () => setView('organizations'), active: view === 'organizations' },
-                                            { id: 'statsEdit', label: '統計編集', icon: Icons.BarChart2, onClick: () => setView('statsEdit'), active: view === 'statsEdit' },
-                                            { id: 'power_structure', label: '権力構造', icon: Icons.Structure, onClick: () => setView('power_structure'), active: view === 'power_structure' },
-                                        ].map(btn => (
-                                            <button 
-                                                key={btn.id} 
-                                                onClick={btn.onClick}
-                                                className={`flex flex-col items-center justify-center w-12 h-10 rounded-lg transition-all duration-200 group relative
-                                                    ${btn.active 
-                                                        ? 'bg-yellow-600 text-black shadow-inner' 
-                                                        : 'bg-transparent text-gray-400 hover:bg-gray-700 hover:text-white'
-                                                    }`}
-                                                title={btn.label}
-                                            >
-                                                <btn.icon size={16} className="mb-0.5" />
-                                                <span className="text-[8px] font-bold leading-none scale-90 origin-top whitespace-nowrap">{btn.label}</span>
-                                            </button>
-                                        ))}
+                                        {[ { id: 'edit', label: '歴史記録', icon: Icons.Edit2, onClick: handleCreateNew, active: view === 'edit' }, { id: 'settings', label: '国家編成', icon: Icons.Globe, onClick: () => setView('settings'), active: view === 'settings' }, { id: 'characters', label: '人物管理', icon: Icons.User, onClick: () => setView('characters'), active: view === 'characters' }, { id: 'organizations', label: '組織管理', icon: Icons.Briefcase, onClick: () => setView('organizations'), active: view === 'organizations' }, { id: 'statsEdit', label: '統計編集', icon: Icons.BarChart2, onClick: () => setView('statsEdit'), active: view === 'statsEdit' }, { id: 'power_structure', label: '権力構造', icon: Icons.Structure, onClick: () => setView('power_structure'), active: view === 'power_structure' } ].map(btn => ( <button key={btn.id} onClick={btn.onClick} className={`flex flex-col items-center justify-center w-12 h-10 rounded-lg transition-all duration-200 group relative ${btn.active ? 'bg-yellow-600 text-black shadow-inner' : 'bg-transparent text-gray-400 hover:bg-gray-700 hover:text-white'}`} title={btn.label}> <btn.icon size={16} className="mb-0.5" /> <span className="text-[8px] font-bold leading-none scale-90 origin-top whitespace-nowrap">{btn.label}</span> </button> ))}
                                     </div>
                                 </div>
 
-                                {/* VIEW (閲覧) */}
                                 <div className="flex flex-col items-center gap-0.5">
                                     <span className="text-[8px] text-blue-400/60 font-bold uppercase tracking-widest">VIEW</span>
                                     <div className="flex items-center bg-gray-800/80 p-1 rounded-xl border border-gray-700 gap-1">
-                                        {[
-                                            { id: 'timeline', label: '年表閲覧', icon: Icons.History, onClick: () => setView('timeline'), active: view === 'timeline' },
-                                            { id: 'nation_list', label: '国家一覧', icon: Icons.LayoutGrid, onClick: () => setView('nation_list'), active: view === 'nation_list' || view === 'nation_profile' },
-                                            { id: 'genealogy', label: '興亡系譜', icon: Icons.GitMerge, onClick: () => setView('genealogy'), active: view === 'genealogy' },
-                                            { id: 'graph', label: '統計グラフ', icon: Icons.Activity, onClick: () => setView('graph'), active: view === 'graph' },
-                                            { id: 'table', label: '体制一覧', icon: Icons.List, onClick: () => setView('table'), active: view === 'table' },
-                                            { id: 'glossary', label: '用語集', icon: Icons.BookOpen, onClick: () => setView('glossary'), active: view === 'glossary' },
-                                        ].map(btn => (
-                                            <button 
-                                                key={btn.id} 
-                                                onClick={btn.onClick}
-                                                className={`flex flex-col items-center justify-center w-12 h-10 rounded-lg transition-all duration-200 group relative
-                                                    ${btn.active 
-                                                        ? 'bg-yellow-600 text-black shadow-inner' 
-                                                        : 'bg-transparent text-gray-400 hover:bg-gray-700 hover:text-white'
-                                                    }`}
-                                                title={btn.label}
-                                            >
-                                                <btn.icon size={16} className="mb-0.5" />
-                                                <span className="text-[8px] font-bold leading-none scale-90 origin-top whitespace-nowrap">{btn.label}</span>
-                                            </button>
-                                        ))}
+                                        {[ { id: 'timeline', label: '年表閲覧', icon: Icons.History, onClick: () => setView('timeline'), active: view === 'timeline' }, { id: 'nation_list', label: '国家一覧', icon: Icons.LayoutGrid, onClick: () => setView('nation_list'), active: view === 'nation_list' || view === 'nation_profile' }, { id: 'genealogy', label: '興亡系譜', icon: Icons.GitMerge, onClick: () => setView('genealogy'), active: view === 'genealogy' }, { id: 'graph', label: '統計グラフ', icon: Icons.Activity, onClick: () => setView('graph'), active: view === 'graph' }, { id: 'table', label: '体制一覧', icon: Icons.List, onClick: () => setView('table'), active: view === 'table' }, { id: 'glossary', label: '用語集', icon: Icons.BookOpen, onClick: () => setView('glossary'), active: view === 'glossary' } ].map(btn => ( <button key={btn.id} onClick={btn.onClick} className={`flex flex-col items-center justify-center w-12 h-10 rounded-lg transition-all duration-200 group relative ${btn.active ? 'bg-yellow-600 text-black shadow-inner' : 'bg-transparent text-gray-400 hover:bg-gray-700 hover:text-white'}`} title={btn.label}> <btn.icon size={16} className="mb-0.5" /> <span className="text-[8px] font-bold leading-none scale-90 origin-top whitespace-nowrap">{btn.label}</span> </button> ))}
                                     </div>
                                 </div>
                                 
-                                {/* DATA / USER (右側固定) */}
                                 <div className="flex items-center gap-3 pl-2 border-l border-gray-700 ml-1">
-                                    {/* DATA */}
                                     <div className="flex flex-col items-center gap-0.5">
                                         <span className="text-[8px] text-gray-500 font-bold uppercase tracking-widest">DATA</span>
                                         <div className="flex items-center gap-1">
                                             <button onClick={handleExport} className="w-8 h-9 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors" title="エクスポート"><Icons.Upload size={18} /></button>
-                                            <div className={`flex gap-1 ${disabledClass}`}>
-                                                <button onClick={() => fileInputRef.current.click()} className="w-8 h-9 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors" title="インポート"><Icons.Download size={18} /></button>
-                                            </div>
+                                            <div className={`flex gap-1 ${disabledClass}`}><button onClick={() => fileInputRef.current.click()} className="w-8 h-9 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors" title="インポート"><Icons.Download size={18} /></button></div>
                                             <button onClick={() => setView('help')} className={`w-8 h-9 flex items-center justify-center rounded transition-colors ${view === 'help' ? 'bg-yellow-600 text-black' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`} title="ヘルプ"><Icons.HelpCircle size={18} /></button>
                                         </div>
                                     </div>
 
-                                    {/* USER */}
                                     <div className="flex flex-col items-center gap-0.5">
                                         <span className="text-[8px] text-gray-500 font-bold uppercase tracking-widest">USER</span>
                                         {currentUser ? (
                                             <div className="flex items-center gap-2 h-9">
                                                 {isAdmin && <button onClick={() => setView('user_management')} className="w-8 h-8 flex items-center justify-center bg-gray-700 text-yellow-400 rounded hover:bg-gray-600" title="ユーザー管理"><Icons.Users size={16} /></button>}
-                                                <button onClick={handleLogout} className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors border-2 ${canEdit ? 'border-green-600' : 'border-gray-600'} overflow-hidden`}>
-                                                    {currentUser.photoURL ? <img src={currentUser.photoURL} className="w-full h-full object-cover" /> : <Icons.User size={16} className="text-gray-300"/>}
-                                                </button>
+                                                <button onClick={handleLogout} className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors border-2 ${canEdit ? 'border-green-600' : 'border-gray-600'} overflow-hidden`}>{currentUser.photoURL ? <img src={currentUser.photoURL} className="w-full h-full object-cover" /> : <Icons.User size={16} className="text-gray-300"/>}</button>
                                             </div>
-                                        ) : (
-                                            <button onClick={handleLogin} className="h-9 bg-blue-600 hover:bg-blue-500 text-white px-3 rounded font-bold text-xs flex items-center gap-1 transition-colors"><Icons.Users size={14}/> Login</button>
-                                        )}
+                                        ) : ( <button onClick={handleLogin} className="h-9 bg-blue-600 hover:bg-blue-500 text-white px-3 rounded font-bold text-xs flex items-center gap-1 transition-colors"><Icons.Users size={14}/> Login</button> )}
                                     </div>
                                 </div>
-
                             </div>
                         </div>
                     </header>
@@ -4954,76 +4682,15 @@ function TimelineWiki() {
                              view === 'characters' ? (canEdit ? <CharacterManager setView={setView} nations={nations} characters={characters} setCharacters={setCharacters} organizations={organizations} setOrganizations={setOrganizations} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
                              view === 'organizations' ? (canEdit ? <OrganizationManager setView={setView} nations={nations} organizations={organizations} setOrganizations={setOrganizations} characters={characters} setCharacters={setCharacters} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
                              view === 'statsEdit' ? (canEdit ? <StatsEditView setView={setView} nations={nations} stats={stats} setStats={setStats} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
-                             view === 'power_structure' ? (canEdit ? <PowerStructureView setView={setView} nations={nations} setNations={setNations} organizations={organizations} characters={characters} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) :                             view === 'user_management' && isAdmin ? <UserManagementView setView={setView} allUsers={allUsers} onChangeRole={handleApproveUser} /> : 
+                             view === 'power_structure' ? (canEdit ? <PowerStructureView setView={setView} nations={nations} setNations={setNations} organizations={organizations} characters={characters} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) :                             
+                             view === 'user_management' && isAdmin ? <UserManagementView setView={setView} allUsers={allUsers} onChangeRole={handleApproveUser} /> : 
                              view === 'graph' ? <GraphView setView={setView} stats={stats} nations={nations} /> : 
                              view === 'genealogy' ? <GenealogyView setView={setView} nations={nations} stats={stats} entries={entries} setSelectedEntry={setSelectedEntry} uiScale={uiScale} onOpenDetail={handleOpenDetail} /> : 
                              view === 'table' ? <NationTableView isAuthorized={canEdit} setView={setView} nations={nations} stats={stats} onEditNation={openSettings} onAddNation={() => openSettings(null)}/> : 
                              view === 'nation_list' ? <NationListView setView={setView} nations={nations} onSelectNation={(n) => { setSelectedProfileNation(n); setView('nation_profile'); }} /> : 
-                            /* ★修正: 用語集 (Glossary) を独立した分岐として配置 */
-                             view === 'glossary' ? (
-                                <GlossaryView 
-                                    setView={setView} 
-                                    nations={nations} 
-                                    entries={entries} 
-                                    characters={characters} 
-                                    organizations={organizations} 
-                                    glossaryData={glossaryData} 
-                                    setGlossaryData={setGlossaryData} 
-                                    saveToCloud={saveToCloud}  // ★これを追加！
-                                    isAuthorized={canEdit}
-                                />
-                            ) :
-
-                            /* 国家プロフィール */
-                            view === 'nation_profile' && selectedProfileNation ? (
-                                <NationProfileView 
-                                    isAuthorized={canEdit} 
-                                    nation={selectedProfileNation} 
-                                    entries={entries} 
-                                    stats={stats}
-                                    nations={nations}
-                                    characters={characters}
-                                    organizations={organizations}
-                                    onClose={() => { setView('nation_list'); setSelectedProfileNation(null); }} 
-                                    onEdit={() => { setEditingNation(selectedProfileNation); setView('settings'); }}
-                                    onEditEntry={handleEditEntryTransition} 
-                                    onEditNation={() => { setTargetNation(selectedProfileNation); setView('settings'); }}
-                                    onEditStats={() => { setTargetNation(selectedProfileNation); setView('statsEdit'); }}
-                                    onEditOverview={() => { setTargetNation(selectedProfileNation); setView('nation_overview'); }}
-                                    updateNation={(updated) => {
-                                        const newNations = nations.map(n => n.id === updated.id ? updated : n);
-                                        setNations(newNations);
-                                        saveToCloud({ nations: newNations });
-                                        setSelectedProfileNation(updated);
-                                    }}
-                                    onOpenDetail={handleOpenDetail} 
-                                />
-                            ) :
-                            
-                            /* 編集画面 (重複を削除して1つにしました) */
-                            view === 'edit' && selectedEntry ? (
-                                <EditForm 
-                                    entry={selectedEntry} 
-                                    nations={nations} 
-                                    onSave={(newData) => {
-                                        const newEntries = [...entries];
-                                        const idx = newEntries.findIndex(e => e.id === newData.id);
-                                        if (idx >= 0) newEntries[idx] = newData; else newEntries.push(newData);
-                                        setEntries(newEntries);
-                                        saveToCloud({ entries: newEntries });
-                                        setIsEditing(false);
-                                        if(lastView === 'nation_profile') { setView('nation_profile'); }
-                                        else { setView('timeline'); setSelectedEntry(null); }
-                                    }}
-                                    onCancel={() => {
-                                        setIsEditing(false);
-                                        if (lastView === 'detail') { setView('detail'); }
-                                        else if (lastView === 'nation_profile') { setView('nation_profile'); setSelectedEntry(null); }
-                                        else { setView('timeline'); setSelectedEntry(null); }
-                                    }}
-                                />
-                            ) :
-
+                             view === 'glossary' ? <GlossaryView setView={setView} nations={nations} entries={entries} characters={characters} organizations={organizations} glossaryData={glossaryData} setGlossaryData={setGlossaryData} isAuthorized={canEdit} /> :
+                             view === 'nation_profile' && selectedProfileNation ? <NationProfileView isAuthorized={canEdit} nation={selectedProfileNation} entries={entries} stats={stats} nations={nations} characters={characters} organizations={organizations} onClose={() => { setView('nation_list'); setSelectedProfileNation(null); }} onEdit={() => { setEditingNation(selectedProfileNation); setView('settings'); }} onEditEntry={handleEditEntryTransition} onEditNation={() => { setTargetNation(selectedProfileNation); setView('settings'); }} onEditStats={() => { setTargetNation(selectedProfileNation); setView('statsEdit'); }} onEditOverview={() => { setTargetNation(selectedProfileNation); setView('nation_overview'); }} updateNation={(updated) => { const newNations = nations.map(n => n.id === updated.id ? updated : n); setNations(newNations); saveToCloud({ nations: newNations }); setSelectedProfileNation(updated); }} onOpenDetail={handleOpenDetail} /> :
+                             view === 'edit' && selectedEntry ? <EditForm entry={selectedEntry} nations={nations} onSave={(newData) => { const newEntries = [...entries]; const idx = newEntries.findIndex(e => e.id === newData.id); if (idx >= 0) newEntries[idx] = newData; else newEntries.push(newData); setEntries(newEntries); saveToCloud({ entries: newEntries }); setIsEditing(false); if(lastView === 'nation_profile') { setView('nation_profile'); } else { setView('timeline'); setSelectedEntry(null); } }} onCancel={() => { setIsEditing(false); if (lastView === 'detail') { setView('detail'); } else if (lastView === 'nation_profile') { setView('nation_profile'); setSelectedEntry(null); } else { setView('timeline'); setSelectedEntry(null); } }} /> :
                              view === 'help' ? <HelpView setView={setView} /> : 
                              view === 'timeline' ? (
                                 <div className="animate-fade-in">
@@ -5040,43 +4707,29 @@ function TimelineWiki() {
                                             {timelineItems.map((item, index) => {
                                                 if (item.type === 'stats_marker') {
                                                     const hasEntryInSameYear = timelineItems.some(i => i.type === 'entry' && i.year === item.year);
-                                                    return (
-                                                        <div key={item.id} className="relative z-10">{!hasEntryInSameYear && (<><div className="absolute left-1/2 transform -translate-x-1/2 top-4 w-3 h-3 bg-gray-300 rounded-full border-2 border-white"></div><div className="absolute left-1/2 transform -translate-x-1/2 top-8 bg-gray-100 text-gray-500 text-xs font-bold px-2 py-1 rounded shadow-sm border border-gray-200">{item.year}年</div></>)}<StatsDisplay year={item.year} stats={stats} expandedStatsYears={expandedStatsYears} setExpandedStatsYears={setExpandedStatsYears} nations={nations} /></div>
-                                                    );
+                                                    return ( <div key={item.id} className="relative z-10">{!hasEntryInSameYear && (<><div className="absolute left-1/2 transform -translate-x-1/2 top-4 w-3 h-3 bg-gray-300 rounded-full border-2 border-white"></div><div className="absolute left-1/2 transform -translate-x-1/2 top-8 bg-gray-100 text-gray-500 text-xs font-bold px-2 py-1 rounded shadow-sm border border-gray-200">{item.year}年</div></>)}<StatsDisplay year={item.year} stats={stats} expandedStatsYears={expandedStatsYears} setExpandedStatsYears={setExpandedStatsYears} nations={nations} /></div> );
                                                 }
                                                 const entry = item.data; const level = entry.importance || 2; const style = importanceLevels[level]; const isRight = entryCounter % 2 !== 0; entryCounter++;
                                                 let dotStyle = 'w-4 h-4 bg-gray-800 ring-4 ring-gray-200'; if (level === 6) { dotStyle = 'w-8 h-8 bg-rose-600 ring-4 ring-rose-200 shadow-xl'; } else if (level === 5) { dotStyle = 'w-6 h-6 bg-yellow-500 ring-4 ring-yellow-200'; } else if (level === 4) { dotStyle = 'w-5 h-5 bg-purple-600 ring-4 ring-purple-200'; }
-                                                return (
-                                                    <div key={item.data.id} className={`relative flex flex-col md:flex-row items-center ${isRight ? 'md:flex-row-reverse' : ''}`}>
-                                                        <div className="absolute left-8 md:left-1/2 transform -translate-x-1/2 z-10 flex flex-col items-center group/date"><div className={`${dotStyle} rounded-full shadow-lg mb-2 transition-all`}></div><div className={`bg-[#1a1a1a] text-xs font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap border flex flex-col items-center ${level === 6 ? 'border-rose-500 text-rose-400' : 'border-gray-700 text-yellow-500'}`}><span>{entry.year}年</span>{entry.month && <span className="text-[10px] text-gray-300 font-normal mt-0.5">{CUSTOM_MONTHS[entry.month]}({entry.month}月){entry.day ? ` ${entry.day}日` : ''}</span>}</div></div>
-                                                        <div className={`hidden md:block absolute w-[calc(50%-2rem)] border-t-2 ${level >= 4 ? 'border-yellow-500' : 'border-gray-300'} border-dashed ${isRight ? 'left-8' : 'right-8'}`}></div><div className="hidden md:block w-1/2"></div>
-                                                        <div className={`w-full md:w-1/2 pl-16 md:pl-0 p-2 transition-all duration-300 ease-out hover:z-10 ${style.scale} ${isRight ? 'md:pr-12 md:pl-8' : 'md:pl-12 md:pr-8'}`}><div onClick={() => { setSelectedEntry(entry); setView('detail'); }} className={`relative cursor-pointer overflow-hidden rounded-lg shadow-md ${style.bg} border-l-4 ${style.color} hover:shadow-xl hover:-translate-y-1 transition-all p-5`}><div className="mb-2">{entry.reading && <p className="text-xs text-gray-500 mb-0.5 leading-none">{entry.reading}</p>}<h3 className={`font-bold text-gray-900 leading-tight ${level >= 4 ? 'text-2xl' : 'text-lg'}`}>{entry.title}</h3></div><p className="text-gray-600 text-sm line-clamp-3 mb-3">{entry.content || '...'}</p><div className="flex flex-wrap gap-1">{entry.tags?.map(tag => <NationTag key={tag} text={tag} nations={nations} year={entry.year} />)}</div></div></div>
-                                                    </div>
-                                                );
+                                                return ( <div key={item.data.id} className={`relative flex flex-col md:flex-row items-center ${isRight ? 'md:flex-row-reverse' : ''}`}> <div className="absolute left-8 md:left-1/2 transform -translate-x-1/2 z-10 flex flex-col items-center group/date"><div className={`${dotStyle} rounded-full shadow-lg mb-2 transition-all`}></div><div className={`bg-[#1a1a1a] text-xs font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap border flex flex-col items-center ${level === 6 ? 'border-rose-500 text-rose-400' : 'border-gray-700 text-yellow-500'}`}><span>{entry.year}年</span>{entry.month && <span className="text-[10px] text-gray-300 font-normal mt-0.5">{CUSTOM_MONTHS[entry.month]}({entry.month}月){entry.day ? ` ${entry.day}日` : ''}</span>}</div></div> <div className={`hidden md:block absolute w-[calc(50%-2rem)] border-t-2 ${level >= 4 ? 'border-yellow-500' : 'border-gray-300'} border-dashed ${isRight ? 'left-8' : 'right-8'}`}></div><div className="hidden md:block w-1/2"></div> <div className={`w-full md:w-1/2 pl-16 md:pl-0 p-2 transition-all duration-300 ease-out hover:z-10 ${style.scale} ${isRight ? 'md:pr-12 md:pl-8' : 'md:pl-12 md:pr-8'}`}><div onClick={() => { setSelectedEntry(entry); setView('detail'); }} className={`relative cursor-pointer overflow-hidden rounded-lg shadow-md ${style.bg} border-l-4 ${style.color} hover:shadow-xl hover:-translate-y-1 transition-all p-5`}><div className="mb-2">{entry.reading && <p className="text-xs text-gray-500 mb-0.5 leading-none">{entry.reading}</p>}<h3 className={`font-bold text-gray-900 leading-tight ${level >= 4 ? 'text-2xl' : 'text-lg'}`}>{entry.title}</h3></div><p className="text-gray-600 text-sm line-clamp-3 mb-3">{entry.content || '...'}</p><div className="flex flex-wrap gap-1">{entry.tags?.map(tag => <NationTag key={tag} text={tag} nations={nations} year={entry.year} />)}</div></div></div> </div> );
                                             })}
                                             {timelineItems.length === 0 && <div className="text-center py-32"><p className="text-gray-500 font-serif text-lg">記録なし</p></div>}
                                         </div>
                                     </div>
                                 </div>
                             ) : 
-view === 'detail' && selectedEntry ? (
-    <DetailView 
-        isAuthorized={canEdit} 
-        entry={selectedEntry} 
-        onEdit={() => { setIsEditing(true); setView('edit'); }} 
-        // ★ここを変更: 戻る処理
-        onClose={() => { setView(lastView); setSelectedEntry(null); }} 
-        onDelete={(id) => { if(window.confirm('削除しますか？')) { const newEntries = entries.filter(e => e.id !== id); setEntries(newEntries); saveToCloud({ entries: newEntries }); setView('timeline'); setSelectedEntry(null); } }} 
-        nations={nations}
-        // ★ここを追加: 戻るボタンのラベル
-        backLabel={
-            lastView === 'timeline' ? '年表に戻る' : 
-            lastView === 'genealogy' ? '系譜図に戻る' : 
-            lastView === 'nation_profile' ? '国家に戻る' : '戻る'
-        }
-    />
-) : null
-}
+                            view === 'detail' && selectedEntry ? (
+                                <DetailView 
+                                    isAuthorized={canEdit} 
+                                    entry={selectedEntry} 
+                                    onEdit={() => { setIsEditing(true); setView('edit'); }} 
+                                    onClose={() => { setView(lastView); setSelectedEntry(null); }} 
+                                    onDelete={(id) => { if(window.confirm('削除しますか？')) { const newEntries = entries.filter(e => e.id !== id); setEntries(newEntries); saveToCloud({ entries: newEntries }); setView('timeline'); setSelectedEntry(null); } }} 
+                                    nations={nations}
+                                    backLabel={lastView === 'timeline' ? '年表に戻る' : lastView === 'genealogy' ? '系譜図に戻る' : lastView === 'nation_profile' ? '国家に戻る' : '戻る'}
+                                />
+                            ) : null
+                        }
                         </main>
                     </div>
                 </div>
@@ -5084,7 +4737,6 @@ view === 'detail' && selectedEntry ? (
         </>
     );
 }
-
 
         // エラー発生時に真っ白になるのを防ぐコンポーネント
         class ErrorBoundary extends React.Component {

@@ -2841,7 +2841,16 @@ const GenealogyView = ({ setView, nations, stats, entries, setSelectedEntry }) =
                     const isMyth = (e.importance || 2) === 6;
                     return (
                         <div key={e.id} className="absolute left-4 z-30 group" style={{ top: top - 12 }}>
-                            <div className={`w-6 h-6 ${isMyth ? 'bg-rose-600' : 'bg-yellow-500'} rounded-full border-2 border-white shadow-md flex items-center justify-center text-white text-xs font-bold ring-2 ${isMyth ? 'ring-rose-300' : 'ring-yellow-200'} group-hover:scale-110 transition-transform cursor-pointer relative z-40`} onClick={(ev) => { ev.stopPropagation(); setSelectedEntry(e); setView('detail'); }} title="詳細を表示">{isMyth ? '✦' : '★'}</div>
+                            <div className={`w-6 h-6 ${isMyth ? 'bg-rose-600' : 'bg-yellow-500'} rounded-full border-2 border-white shadow-md flex items-center justify-center text-white text-xs font-bold ring-2 ${isMyth ? 'ring-rose-300' : 'ring-yellow-200'} group-hover:scale-110 transition-transform cursor-pointer relative z-40`} // ★修正: handleOpenDetailを経由させることで「系譜図に戻る」が可能になる
+onClick={(ev) => { 
+    ev.stopPropagation(); 
+    if(onOpenDetail) {
+        onOpenDetail(e); 
+    } else {
+        setSelectedEntry(e); 
+        setView('detail'); 
+    }
+}} title="詳細を表示">{isMyth ? '✦' : '★'}</div>
                             <div className="absolute left-8 top-0 bg-white/90 backdrop-blur border border-yellow-400 px-2 py-1 rounded shadow-sm text-xs font-bold text-gray-800 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none max-w-[200px] truncate z-50">{e.year}年: {e.title}</div>
                             <div className="absolute left-3 top-3 border-t border-yellow-300 border-dashed opacity-0 group-hover:opacity-50 pointer-events-none z-30" style={{ width: `${TOTAL_WIDTH}px` }}></div>
                         </div>
@@ -2934,19 +2943,31 @@ const EditForm = ({ entry, onSave, onCancel, nations }) => {
     return ( <div className="bg-white p-6 rounded-lg shadow-lg max-w-2xl mx-auto border-2 border-gray-800"> <h2 className="text-2xl font-bold mb-6 text-gray-800 flex items-center gap-2"><Icons.Edit2 size={24} /> 記録を編集</h2> <div className="space-y-6"> <div className="bg-gray-50 p-4 rounded border border-gray-200"> <div className="flex items-center gap-2 mb-2 text-sm font-bold text-gray-700"><Icons.Calendar size={16} /><span>時期設定</span></div> <div className="grid grid-cols-3 gap-4"> <div><label className="block text-xs text-gray-500 mb-1">英覇暦 (年)</label><input type="number" value={formData.year} onChange={e => setFormData({...formData, year: e.target.value})} className="w-full p-2 border rounded" placeholder="必須" /></div> <div><label className="block text-xs text-gray-500 mb-1">月 (任意)</label><select value={formData.month || ''} onChange={e => setFormData({...formData, month: e.target.value})} className="w-full p-2 border rounded"><option value="">-- 不明 --</option>{Object.entries(CUSTOM_MONTHS).map(([num, name]) => <option key={num} value={num}>{name} ({num}月)</option>)}</select></div> <div><label className="block text-xs text-gray-500 mb-1">日 (任意)</label><input type="number" min="1" max="31" value={formData.day || ''} onChange={e => setFormData({...formData, day: e.target.value})} className="w-full p-2 border rounded" placeholder="--" /></div> </div> </div> <div> <label className="block text-sm font-bold text-gray-700 mb-1">重要度</label> <select value={formData.importance || 2} onChange={e => setFormData({...formData, importance: parseInt(e.target.value)})} className="w-full p-2 border-2 border-gray-300 rounded font-bold"> {Object.entries(importanceLevels).map(([level, info]) => <option key={level} value={level}>Lv.{level} {info.label}</option>)} </select> </div> <div className="space-y-2"> <div><label className="block text-xs text-gray-500">ふりがな</label><input type="text" value={formData.reading || ''} onChange={e => setFormData({...formData, reading: e.target.value})} className="w-full p-1 border-b border-gray-300 outline-none text-sm" /></div> <div><label className="block text-sm font-bold text-gray-700 mb-1">タイトル</label><input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full p-2 border-2 border-gray-300 rounded text-lg font-bold" /></div> </div> <div> <label className="block text-sm font-bold text-gray-700 mb-1">タグ</label> <input type="text" value={tagInput} onChange={e => setTagInput(e.target.value)} className="w-full p-2 border border-gray-300 rounded" placeholder="政治, 戦争" /> <div className="mt-2"> <span className="text-xs text-gray-500 mr-2">国家タグを追加:</span> <div className="flex flex-wrap gap-1 mt-1 max-h-32 overflow-y-auto p-1 border rounded bg-gray-50"> <button onClick={() => addNationTag('世界')} className="text-xs bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 px-2 py-1 rounded flex items-center gap-1"><Icons.Globe size={12} /> 世界</button> {sortedNations.map(n => { const info = getNationInfo(n, currentYear); if (info.isCollapsed) return null; const rankColor = NATION_RANKS[n.rank || 'minor_power']?.color || '#ccc'; return ( <button key={n.id} onClick={() => addNationTag(info.name)} className="text-xs bg-white hover:bg-gray-100 border px-2 py-1 rounded flex items-center gap-1" style={{borderColor: rankColor}}> {info.flag && <img src={info.flag} className="w-4 h-3 object-cover border border-gray-200" />} <span style={{color: rankColor, fontWeight: 'bold'}}>{info.name}</span> </button> ); })} </div> </div> </div> <div><label className="block text-sm font-bold text-gray-700 mb-1">詳細記述</label><textarea value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} className="w-full p-2 border-2 border-gray-300 rounded min-h-[200px]" /></div> <div className="flex justify-end gap-4 pt-4 border-t"> <button onClick={onCancel} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-bold">破棄</button> <button onClick={() => {const tagsArray = tagInput.split(',').map(t => t.trim()).filter(t => t !== ''); onSave({ ...formData, tags: tagsArray });}} disabled={!formData.title} className="px-6 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 flex items-center gap-2 font-bold shadow-lg"><Icons.Save size={18} /> 記録する</button> </div> </div> </div> );
 };
 
-const DetailView = ({ isAuthorized, entry, onEdit, onClose, onDelete, nations }) => ( 
+// ★引数に backLabel を追加
+const DetailView = ({ isAuthorized, entry, onEdit, onClose, onDelete, nations, backLabel }) => ( 
     <div className="bg-white min-h-screen md:min-h-0 pb-20"> 
         <div className="sticky top-0 bg-white/90 backdrop-blur-sm border-b border-gray-200 p-4 flex justify-between items-center z-10">
+            
+            {/* ★ここに追加: 戻るボタン */}
+            <div>
+                <button onClick={onClose} className="flex flex-col items-center justify-center text-gray-500 hover:text-blue-600 hover:bg-blue-50 px-3 py-1 rounded-lg transition-all group">
+                    <Icons.ArrowLeft size={20} className="mb-0.5 group-hover:-translate-x-1 transition-transform"/>
+                    <span className="text-[9px] font-bold leading-none">{backLabel || '戻る'}</span>
+                </button>
+            </div>
+
             <div className="flex gap-2">
-                {/* ★権限がある時だけボタンを表示 */}
+                {/* 権限がある時だけ編集ボタンを表示 */}
                 {isAuthorized && (
                     <>
-                        <button onClick={() => onEdit(entry)} className="p-2 text-blue-600 rounded" title="編集"><Icons.Edit2 size={20} /></button>
-                        <button onClick={() => onDelete(entry.id)} className="p-2 text-red-600 rounded" title="削除"><Icons.Trash2 size={20} /></button>
+                        <button onClick={() => onEdit(entry)} className="p-2 text-blue-600 rounded hover:bg-blue-50" title="編集"><Icons.Edit2 size={20} /></button>
+                        <button onClick={() => onDelete(entry.id)} className="p-2 text-red-600 rounded hover:bg-red-50" title="削除"><Icons.Trash2 size={20} /></button>
                     </>
                 )}
             </div>
         </div> 
+    
+    {/* ...以下、コンテンツ表示部分は変更なし... */}
     <div className="max-w-3xl mx-auto p-6 md:p-10"> 
         <div className="flex flex-wrap items-center gap-4 mb-6">
             <div className="inline-block bg-gray-900 text-white px-4 py-1 rounded-sm font-mono text-xl font-bold shadow-md">{formatDate(entry.year, entry.month, entry.day)}
@@ -4463,6 +4484,7 @@ view === 'detail' && selectedEntry ? (
         }
     />
 ) : null
+}
                         </main>
                     </div>
                 </div>

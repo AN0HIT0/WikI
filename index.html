@@ -3659,17 +3659,215 @@ const UserManagementView = ({ setView, allUsers, onChangeRole }) => {
     );
 };
 
-// --- GlossaryView コンポーネント (修正版: エイリアス保存対応) ---
+// --- GlossaryView コンポーネント (修正版: ロジック補完済み) ---
 const GlossaryView = ({ setView, nations, entries, characters, organizations, glossaryData, setGlossaryData, isAuthorized }) => {
-    // ... (searchTerm, filterTypes, selectedItem, history などのState定義は変更なし) ...
     const [searchTerm, setSearchTerm] = useState('');
     const [filterTypes, setFilterTypes] = useState(['all']);
     const [selectedItem, setSelectedItem] = useState(null);
     const [history, setHistory] = useState([]);
 
-    // ... (getAutoTags, allItems, toggleFilter, filteredItems, openDetail, handleLinkClick, handleBack, handleJumpHistory, handleAddTerm, handleDeleteTerm は変更なし) ...
+    // --- 1. 自動タグ生成ロジック ---
+    const getAutoTags = (item) => {
+        const tags = [];
+        if (item.type === 'nation') {
+            tags.push('国家');
+            if (item.original.location) tags.push(LOCATIONS[item.original.location]?.label || '不明');
+            if (item.original.rank) tags.push(NATION_RANKS[item.original.rank]?.label || '不明');
+        } else if (item.type === 'event') {
+            tags.push('出来事');
+            tags.push(`${item.original.year}年`);
+            if (item.original.tags) tags.push(...item.original.tags);
+        } else if (item.type === 'char') {
+            tags.push('人物');
+            if (item.original.race) tags.push(item.original.race);
+            if (item.original.affiliations) {
+                item.original.affiliations.forEach(a => tags.push(typeof a === 'string' ? a : a.name));
+            }
+        } else if (item.type === 'org') {
+            tags.push('組織');
+            const typeLabel = ORG_TYPES.find(t => t.key === item.original.type)?.label;
+            if (typeLabel) tags.push(typeLabel);
+        } else {
+            tags.push('用語');
+        }
+        return Array.from(new Set(tags)); // 重複排除
+    };
 
-    // ★修正: エイリアスも保存できるように引数を追加
+    // --- 2. 全アイテムの統合リスト生成 ---
+    const allItems = useMemo(() => {
+        let list = [];
+
+        // 国家
+        nations.forEach(n => {
+            list.push({
+                id: n.id, type: 'nation', name: n.name, label: '国家',
+                color: 'bg-indigo-100 text-indigo-700', image: n.flag, original: n,
+                sub: LOCATIONS[n.location]?.label
+            });
+        });
+        // 出来事
+        entries.forEach(e => {
+            list.push({
+                id: e.id, type: 'event', name: e.title, label: '出来事',
+                color: 'bg-green-100 text-green-700', image: null, original: e,
+                sub: `${e.year}年`
+            });
+        });
+        // 人物
+        characters.forEach(c => {
+            list.push({
+                id: c.id, type: 'char', name: c.name, label: '人物',
+                color: 'bg-blue-100 text-blue-700', image: c.portrait, original: c,
+                sub: c.race
+            });
+        });
+        // 組織
+        organizations.forEach(o => {
+            list.push({
+                id: o.id, type: 'org', name: o.name, label: '組織',
+                color: 'bg-orange-100 text-orange-700', image: o.logo, original: o,
+                sub: ORG_TYPES.find(t => t.key === o.type)?.label
+            });
+        });
+        // 手動登録用語 (glossaryData.terms)
+        if (glossaryData && glossaryData.terms) {
+            glossaryData.terms.forEach(t => {
+                list.push({
+                    id: t.id, type: 'term', name: t.name, label: '用語',
+                    color: 'bg-gray-100 text-gray-600', image: null, original: t,
+                    sub: '一般用語'
+                });
+            });
+        }
+
+        return list.sort((a, b) => a.name.localeCompare(b.name));
+    }, [nations, entries, characters, organizations, glossaryData]);
+
+    // --- 3. フィルタリング ---
+    const toggleFilter = (type) => {
+        if (type === 'all') {
+            setFilterTypes(['all']);
+        } else {
+            let newTypes = filterTypes.includes('all') ? [] : [...filterTypes];
+            if (newTypes.includes(type)) {
+                newTypes = newTypes.filter(t => t !== type);
+            } else {
+                newTypes.push(type);
+            }
+            if (newTypes.length === 0) newTypes = ['all'];
+            setFilterTypes(newTypes);
+        }
+    };
+
+    const filteredItems = useMemo(() => {
+        let res = allItems;
+        // カテゴリフィルタ
+        if (!filterTypes.includes('all')) {
+            res = res.filter(item => filterTypes.includes(item.type));
+        }
+        // 検索フィルタ
+        if (searchTerm) {
+            const lower = searchTerm.toLowerCase();
+            res = res.filter(item => {
+                // 名前一致
+                if (item.name.toLowerCase().includes(lower)) return true;
+                
+                // タグ一致
+                const savedTags = glossaryData?.tags?.[item.id] || [];
+                const autoTags = getAutoTags(item);
+                const allTags = [...savedTags, ...autoTags];
+                if (allTags.some(t => t.toLowerCase().includes(lower))) return true;
+
+                // エイリアス一致
+                const aliases = glossaryData?.aliases?.[item.id] || [];
+                if (aliases.some(a => a.toLowerCase().includes(lower))) return true;
+
+                return false;
+            });
+        }
+        return res;
+    }, [allItems, filterTypes, searchTerm, glossaryData]);
+
+    // --- 4. 操作ハンドラ ---
+    
+    // 詳細を開く
+    const openDetail = (item) => {
+        if (selectedItem) {
+            setHistory([...history, selectedItem]);
+        }
+        setSelectedItem(item);
+        // 画面トップへスクロール
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    // リンククリック（名前からアイテムを探して開く）
+    const handleLinkClick = (name) => {
+        const target = allItems.find(i => i.name === name);
+        if (target) openDetail(target);
+        else alert(`「${name}」のページは見つかりませんでした。`);
+    };
+
+    // 戻る
+    const handleBack = () => {
+        if (history.length > 0) {
+            const prev = history[history.length - 1];
+            setHistory(history.slice(0, -1));
+            setSelectedItem(prev);
+        } else {
+            setSelectedItem(null);
+        }
+    };
+
+    // 履歴ジャンプ
+    const handleJumpHistory = (index) => {
+        const target = history[index];
+        setHistory(history.slice(0, index));
+        setSelectedItem(target);
+    };
+
+    // 新規用語追加 (ReferenceErrorの原因だった箇所)
+    const handleAddTerm = () => {
+        const name = prompt("用語名を入力してください:");
+        if (!name) return;
+        
+        const newTerm = {
+            id: `term_${Date.now()}`,
+            name: name,
+            desc: '',
+            note: ''
+        };
+        
+        // glossaryDataを更新
+        const newTerms = [...(glossaryData.terms || []), newTerm];
+        const newData = { ...glossaryData, terms: newTerms };
+        setGlossaryData(newData);
+        
+        // 追加した用語を即座に開く
+        // allItemsはuseMemoで再計算されるため、少し遅延させて開くか、擬似オブジェクトで開く
+        setTimeout(() => {
+            const itemObj = {
+                id: newTerm.id, type: 'term', name: newTerm.name, label: '用語',
+                color: 'bg-gray-100 text-gray-600', image: null, original: newTerm,
+                sub: '一般用語'
+            };
+            openDetail(itemObj);
+        }, 100);
+    };
+
+    // 用語削除
+    const handleDeleteTerm = (id) => {
+        if (!window.confirm("この用語を削除しますか？")) return;
+        
+        const newTerms = (glossaryData.terms || []).filter(t => t.id !== id);
+        // 関連データ（上書き設定やタグ）も消す場合はここで行うが、今回は残しておいても害はないためTermsのみ更新
+        setGlossaryData({ ...glossaryData, terms: newTerms });
+        
+        if (selectedItem && selectedItem.id === id) {
+            handleBack();
+        }
+    };
+
+    // 用語データの保存（上書き・タグ・エイリアス）
     const handleSaveTermData = (id, content, tags, aliases) => {
         const overrides = { ...(glossaryData.overrides || {}) };
         if (content !== undefined) overrides[id] = content;
@@ -3677,7 +3875,6 @@ const GlossaryView = ({ setView, nations, entries, characters, organizations, gl
         const tagData = { ...(glossaryData.tags || {}) };
         if (tags !== undefined) tagData[id] = tags;
 
-        // ★追加: エイリアスの保存処理
         const aliasData = { ...(glossaryData.aliases || {}) };
         if (aliases !== undefined) aliasData[id] = aliases;
 
@@ -3685,9 +3882,7 @@ const GlossaryView = ({ setView, nations, entries, characters, organizations, gl
         setGlossaryData(newData);
     };
 
-    // ... (return文の中身は変更なし) ...
-    // ... (ただし、GlossaryDetailへのprops渡しはそのまま利用します) ...
-
+    // --- レンダリング ---
     if (selectedItem) {
         return (
             <GlossaryDetail 
@@ -3706,7 +3901,6 @@ const GlossaryView = ({ setView, nations, entries, characters, organizations, gl
         );
     }
     
-    // ... (以降の return JSX は元のままでOK) ...
     return (
         <div className="space-y-6 animate-fade-in pb-20">
             <SectionHeader icon={Icons.BookOpen} title="用語集・百科事典" desc="世界に存在する国家、人物、出来事、用語を網羅したデータベースです。" />
@@ -3732,10 +3926,9 @@ const GlossaryView = ({ setView, nations, entries, characters, organizations, gl
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredItems.map(item => {
                     const savedTags = glossaryData.tags?.[item.id] || [];
-                    const savedAliases = glossaryData.aliases?.[item.id] || [];
                     const autoTags = getAutoTags(item);
                     const displayTags = savedTags.length > 0 ? savedTags : autoTags;
-                    // 検索ヒット用にタグとエイリアスを結合して渡すロジックはfilteredItems内で行われている前提
+                    
                     return (
                         <div key={`${item.type}_${item.id}`} onClick={() => openDetail(item)} className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group flex items-center p-3 gap-3 h-24 overflow-hidden relative">
                             <div className="w-16 h-16 bg-gray-100 rounded-md border border-gray-200 flex-shrink-0 flex items-center justify-center overflow-hidden relative">

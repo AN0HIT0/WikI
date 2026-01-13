@@ -332,236 +332,243 @@ const NationTag = ({ text, nations, year }) => {
     return (<span className="text-[10px] bg-black/5 text-gray-600 px-1.5 py-0.5 rounded border border-black/5 inline-flex items-center gap-1 relative pr-2">{text}{flagSrc && (<span className="inline-block w-4 h-3 rounded-sm overflow-hidden border border-black/10 ml-1 shadow-sm"><img src={flagSrc} alt="" className="w-full h-full object-cover" /></span>)}</span>);
 };
 
-// --- HelpView コンポーネント (Ver1.04 修正版: 統計をMANAGEへ移動) ---
+// --- HelpView コンポーネント (大幅加筆版) ---
 const HelpView = ({ setView }) => {
-    const [activeTab, setActiveTab] = useState('index');
+    const [activeTab, setActiveTab] = useState('basic');
 
-    const TabButton = ({ id, icon: Icon, label }) => (
-        <button 
-            onClick={() => setActiveTab(id)} 
-            className={`flex items-center gap-2 px-4 py-3 border-b-4 font-bold transition-colors whitespace-nowrap ${
-                activeTab === id ? 'border-yellow-500 text-gray-900 bg-yellow-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-            }`}
-        >
-            <Icon size={18} /> {label}
-        </button>
-    );
+    const TABS = [
+        { id: 'basic', label: '基本操作', icon: Icons.MousePointer },
+        { id: 'timeline', label: '年表・閲覧', icon: Icons.Clock },
+        { id: 'database', label: '図鑑・用語集', icon: Icons.BookOpen },
+        { id: 'edit', label: 'データの編集', icon: Icons.Edit3 },
+        { id: 'nations', label: '国家設定', icon: Icons.Flag },
+        { id: 'sync', label: '保存と同期', icon: Icons.RefreshCw },
+    ];
 
-    const contentClass = "bg-white p-8 rounded-b-lg rounded-r-lg shadow-md border border-gray-200 min-h-[500px]";
-    const h3Class = "text-xl font-bold text-gray-800 mb-4 border-b-2 border-gray-100 pb-2 flex items-center gap-2";
-    const pClass = "text-sm leading-relaxed text-gray-600 mb-4";
-    const highlight = "font-bold bg-gray-100 px-1 rounded text-gray-800";
+    const renderContent = () => {
+        switch (activeTab) {
+            case 'basic':
+                return (
+                    <div className="space-y-8 animate-fade-in">
+                        <section>
+                            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
+                                <Icons.Monitor className="text-blue-500" /> 画面の見方
+                            </h3>
+                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-sm leading-relaxed font-sans">
+                                <p className="mb-4">このアプリケーションは、架空世界の歴史、国家、人物などのデータを統合管理するツールです。</p>
+                                <ul className="list-disc pl-5 space-y-2 text-gray-600">
+                                    <li><strong>左メニュー (PC) / 下メニュー (スマホ):</strong> 各機能への切り替えを行います。</li>
+                                    <li><strong>ヘッダー:</strong> ズーム操作、検索、各種管理画面へのショートカットがあります。</li>
+                                    <li><strong>メインエリア:</strong> 年表や詳細データが表示されます。</li>
+                                </ul>
+                            </div>
+                        </section>
+                        <section>
+                            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
+                                <Icons.ZoomIn className="text-blue-500" /> 表示の調整
+                            </h3>
+                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-sm leading-relaxed font-sans">
+                                <p className="mb-2"><strong>ズーム機能:</strong> ヘッダー右上の <span className="bg-gray-800 text-white px-1 rounded text-xs">＋</span> <span className="bg-gray-800 text-white px-1 rounded text-xs">－</span> ボタンで、文字や要素のサイズを調整できます。</p>
+                                <p><strong>レスポンシブ対応:</strong> スマートフォン、タブレット、PCそれぞれの画面サイズに合わせてレイアウトが自動調整されます。</p>
+                            </div>
+                        </section>
+                    </div>
+                );
+            case 'timeline':
+                return (
+                    <div className="space-y-8 animate-fade-in">
+                        <section>
+                            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
+                                <Icons.Clock className="text-green-600" /> 年表機能
+                            </h3>
+                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-sm leading-relaxed font-sans">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <h4 className="font-bold mb-2 text-gray-700">イベントの重要度</h4>
+                                        <p className="mb-2 text-gray-600">年表のドットやカードの色は、出来事の重要度を表しています。</p>
+                                        <ul className="space-y-2">
+                                            <li className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-rose-600"></span> <span className="font-bold">激動 (Class S):</span> 世界を揺るがす大事件、時代の転換点。</li>
+                                            <li className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-yellow-500"></span> <span className="font-bold">重大 (Class A):</span> 建国、大戦争の勃発など。</li>
+                                            <li className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-purple-600"></span> <span className="font-bold">重要 (Class B):</span> 政策の変更、主要人物の死没など。</li>
+                                            <li className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-gray-400"></span> <span className="font-bold">通常:</span> 日常的な記録や小規模な出来事。</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold mb-2 text-gray-700">検索とフィルタ</h4>
+                                        <p className="mb-2 text-gray-600">画面上部の検索バーと「条件」ボタンを活用してください。</p>
+                                        <ul className="list-disc pl-5 space-y-1 text-gray-600">
+                                            <li>キーワード検索（タイトル、内容、年号）</li>
+                                            <li>タグによる絞り込み（戦争、文化、など）</li>
+                                            <li>重要度による表示/非表示の切り替え</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                );
+            case 'edit':
+                return (
+                    <div className="space-y-8 animate-fade-in">
+                        <section>
+                            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
+                                <Icons.Edit3 className="text-yellow-600" /> データの作成と編集
+                            </h3>
+                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-sm leading-relaxed font-sans">
+                                <div className="mb-4 p-3 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800">
+                                    <p className="font-bold">編集権限について</p>
+                                    <p>データの追加・編集・削除を行うには、管理者またはWriter権限でログインする必要があります。右上のログインボタンからGoogleアカウントでログインしてください。</p>
+                                </div>
+                                <h4 className="font-bold text-lg mb-2">エディタの使い方</h4>
+                                <p className="mb-4 text-gray-600">詳細説明文（Overview）や用語解説には、リッチテキストエディタが使用できます。</p>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+                                    <div className="bg-gray-50 p-2 rounded text-center border"><span className="font-bold">B</span> 太字</div>
+                                    <div className="bg-gray-50 p-2 rounded text-center border"><span className="italic">i</span> 斜体</div>
+                                    <div className="bg-gray-50 p-2 rounded text-center border"><span className="underline">U</span> 下線</div>
+                                    <div className="bg-gray-50 p-2 rounded text-center border text-blue-600">文字色</div>
+                                </div>
+                                <p className="text-xs text-gray-500">※ テキストを選択した状態でツールバーのボタンを押すと適用されます。</p>
+                            </div>
+                        </section>
+                    </div>
+                );
+            case 'nations':
+                return (
+                    <div className="space-y-8 animate-fade-in">
+                        <section>
+                            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
+                                <Icons.Flag className="text-orange-500" /> 国家の管理構造
+                            </h3>
+                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-sm leading-relaxed font-sans">
+                                <p className="mb-4">国家データは単なる名称だけでなく、以下の要素で構成されています。</p>
+                                <div className="space-y-4">
+                                    <div className="border-l-4 border-blue-400 pl-4 py-1">
+                                        <h4 className="font-bold text-blue-700">基本情報</h4>
+                                        <p className="text-gray-600">国旗（絵文字）、テーマカラー、正式名称、略称を設定します。テーマカラーは年表やグラフでの表示色に反映されます。</p>
+                                    </div>
+                                    <div className="border-l-4 border-green-400 pl-4 py-1">
+                                        <h4 className="font-bold text-green-700">歴史的変遷 (Eras)</h4>
+                                        <p className="text-gray-600">国家の「存続期間」を管理します。1つの国家に対し、複数の期間（王朝交代や一時滅亡など）を設定可能です。</p>
+                                        <ul className="list-disc pl-5 mt-1 text-gray-500 text-xs">
+                                            <li>開始年・終了年を設定することで、その期間だけ年表に「存在」するものとして扱われます。</li>
+                                            <li>前身国家（親）を設定すると、系譜図（Genealogy）で線が繋がります。</li>
+                                        </ul>
+                                    </div>
+                                    <div className="border-l-4 border-purple-400 pl-4 py-1">
+                                        <h4 className="font-bold text-purple-700">統計データ (Stats)</h4>
+                                        <p className="text-gray-600">人口、GDP、兵力などを年単位で入力できます。入力されていない年は、前後のデータから自動的に推計（線形補間）されてグラフ化されます。</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                );
+            case 'sync':
+                return (
+                    <div className="space-y-8 animate-fade-in">
+                        <section>
+                            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
+                                <Icons.RefreshCw className="text-indigo-600" /> 保存と同期の仕組み
+                            </h3>
+                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-sm leading-relaxed font-sans">
+                                <div className="flex items-start gap-4 mb-6">
+                                    <div className="text-4xl text-indigo-500">☁️</div>
+                                    <div>
+                                        <h4 className="font-bold text-lg mb-1">自動保存システム</h4>
+                                        <p className="text-gray-600">編集操作を行うと、<strong>操作が止まってから約0.8秒後に自動的にクラウドへ保存</strong>されます。「保存ボタン」を押す必要は基本的にありません。</p>
+                                    </div>
+                                </div>
+                                
+                                <h4 className="font-bold border-b border-gray-200 pb-2 mb-3">画面右下のゲージについて</h4>
+                                <div className="bg-gray-900 text-white p-4 rounded-lg mb-4">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="w-4 h-4 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
+                                        <span className="font-bold text-xs">送信中: 年表データ</span>
+                                    </div>
+                                    <div className="w-full h-1 bg-gray-700 rounded-full"><div className="w-1/2 h-full bg-yellow-500"></div></div>
+                                </div>
+                                <p className="mb-4 text-gray-600">
+                                    右下にこのようなゲージが表示されている間は、<strong>「データの通信中」</strong>です。<br/>
+                                    <span className="text-red-500 font-bold">⚠️ ゲージが出ている間は、ブラウザを閉じたりリロードしたりしないでください。データが破損する可能性があります。</span>
+                                </p>
+
+                            </div>
+                        </section>
+                    </div>
+                );
+            case 'database':
+                return (
+                    <div className="space-y-8 animate-fade-in">
+                        <section>
+                            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
+                                <Icons.Database className="text-teal-600" /> 図鑑・用語集
+                            </h3>
+                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-sm leading-relaxed font-sans">
+                                <p className="mb-4">世界観を深めるためのデータベース機能です。</p>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-gray-50 p-4 rounded border">
+                                        <h4 className="font-bold text-teal-700 mb-2">人物図鑑</h4>
+                                        <p className="text-xs text-gray-600">キャラクターのプロフィール、種族、能力値（魂位深度）、所属組織を管理します。</p>
+                                    </div>
+                                    <div className="bg-gray-50 p-4 rounded border">
+                                        <h4 className="font-bold text-teal-700 mb-2">組織図鑑</h4>
+                                        <p className="text-xs text-gray-600">国家以外の集団（ギルド、結社、騎士団など）を管理します。ロゴ画像の設定も可能です。</p>
+                                    </div>
+                                    <div className="bg-gray-50 p-4 rounded border">
+                                        <h4 className="font-bold text-teal-700 mb-2">用語集</h4>
+                                        <p className="text-xs text-gray-600">魔法体系、文化、アイテムなどの解説。記事内のキーワードは自動的にリンク化されます。</p>
+                                    </div>
+                                </div>
+                                <div className="mt-4 p-3 bg-teal-50 text-teal-800 rounded text-xs">
+                                    <strong>💡 ヒント:</strong> 用語集の記事内では、他の用語や国家名が含まれていると自動的にリンクが生成され、クリックでそのページへジャンプできます。
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                );
+            default:
+                return null;
+        }
+    };
 
     return (
-        <div className="space-y-6 animate-fade-in pb-20 max-w-6xl mx-auto text-gray-800">
-
-            {/* タブナビゲーション */}
-            <div className="flex overflow-x-auto bg-white rounded-t-lg border-b border-gray-200 shadow-sm">
-                <TabButton id="index" icon={Icons.List} label="目次・要約" />
-                <TabButton id="manage" icon={Icons.Settings} label="MANAGE (設定)" />
-                <TabButton id="edit" icon={Icons.Edit2} label="EDIT (記録)" />
-                <TabButton id="view" icon={Icons.LayoutGrid} label="VIEW (閲覧)" />
-                <TabButton id="data" icon={Icons.Save} label="DATA (保存)" />
-                <TabButton id="zoom" icon={Icons.Search} label="ZOOM (表示)" />
+        <div className="flex flex-col md:flex-row h-full bg-[#f0f2f5] font-sans">
+            {/* Sidebar Navigation */}
+            <div className="w-full md:w-64 bg-white border-r border-gray-200 flex-shrink-0 md:h-full md:overflow-y-auto">
+                <div className="p-4 border-b border-gray-100">
+                    <h2 className="font-bold text-gray-800 flex items-center gap-2">
+                        <Icons.HelpCircle className="text-yellow-500" /> 
+                        ユーザーガイド
+                    </h2>
+                </div>
+                <nav className="p-2 space-y-1">
+                    {TABS.map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-bold transition-all ${
+                                activeTab === tab.id 
+                                ? 'bg-yellow-50 text-yellow-700 shadow-sm border border-yellow-100' 
+                                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                            }`}
+                        >
+                            <tab.icon size={18} />
+                            {tab.label}
+                        </button>
+                    ))}
+                </nav>
             </div>
 
-            {/* コンテンツエリア */}
-            <div className={contentClass}>
-                
-                {/* --- 1. 目次 (Index) --- */}
-                {activeTab === 'index' && (
-                    <div className="space-y-8">
-                        <div className="text-center py-10 border-b border-gray-100">
-                            <h2 className="text-3xl font-black text-gray-900 mb-4">英覇歴代記へようこそ</h2>
-                            <p className="text-gray-500">このツールは、架空世界の歴史、国家の興亡、統計データ、人物相関図を統合管理するための<br/>ワールドビルディング（世界構築）支援アプリケーションです。</p>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {[
-                                {id:'manage', icon:Icons.Settings, title:'MANAGE', desc:'国家、人物、組織、権力構造の設定、および統計データの編集について。'},
-                                {id:'edit', icon:Icons.Edit2, title:'EDIT', desc:'年表への出来事の記録について。'},
-                                {id:'view', icon:Icons.LayoutGrid, title:'VIEW', desc:'年表、系譜図、グラフ、プロフィールの閲覧について。'},
-                                {id:'data', icon:Icons.Save, title:'DATA', desc:'データの保存(エクスポート)と読み込みについて。'},
-                                {id:'zoom', icon:Icons.Search, title:'ZOOM', desc:'画面全体の拡大・縮小操作について。'},
-                            ].map(item => (
-                                <div key={item.id} onClick={() => setActiveTab(item.id)} className="group p-6 border border-gray-200 rounded-lg hover:shadow-lg hover:border-yellow-400 transition-all cursor-pointer bg-gray-50 hover:bg-white">
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <div className="p-2 bg-white rounded-full shadow-sm group-hover:bg-yellow-500 group-hover:text-white transition-colors text-gray-400">
-                                            <item.icon size={24} />
-                                        </div>
-                                        <h3 className="font-bold text-lg text-gray-700 group-hover:text-black">{item.title}</h3>
-                                    </div>
-                                    <p className="text-xs text-gray-500 leading-relaxed">{item.desc}</p>
-                                </div>
-                            ))}
-                        </div>
+            {/* Main Content Area */}
+            <div className="flex-grow p-4 md:p-8 overflow-y-auto custom-scrollbar">
+                <div className="max-w-3xl mx-auto pb-20">
+                    {renderContent()}
+                    
+                    <div className="mt-12 pt-8 border-t border-gray-200 text-center text-gray-400 text-xs">
+                        <p>Helmenaea Chronicle Timeline Wiki</p>
+                        <p>Version 2.5.0 - System Update & Sync Fix</p>
                     </div>
-                )}
-
-                {/* --- 2. MANAGE (設定) --- */}
-                {activeTab === 'manage' && (
-                    <div className="space-y-10">
-                        <section>
-                            <h3 className={h3Class}><Icons.Globe className="text-yellow-600"/> 国家変遷管理 (Settings)</h3>
-                            <p className={pClass}>
-                                国家の根本的なデータを管理します。
-                                <br/>右側の編集パネルで<span className={highlight}>「✨誕生」「💀滅亡」「通常」</span>モードを切り替え、歴史の節目（Era）を作成します。
-                                <br/>「A国から独立」「B国を併合」といった関係性を設定することで、興亡系譜図のラインが自動的に結ばれます。
-                            </p>
-                        </section>
-
-                        <section>
-                            <h3 className={h3Class}><Icons.User className="text-blue-500"/> 人物・組織管理</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="bg-gray-50 p-4 rounded border border-gray-200">
-                                    <h4 className="font-bold text-sm mb-2 flex items-center gap-2"><Icons.User size={16}/> 人物 (Characters)</h4>
-                                    <p className="text-xs text-gray-600 mb-2">
-                                        歴史上の重要人物を登録します。「種族」や「レベル（Lv）」の設定が可能です。<br/>
-                                        レベルの横にある<span className={highlight}>？</span>ボタンを押すと、この世界の強さの指標（魂位深度）を確認できます。
-                                    </p>
-                                </div>
-                                <div className="bg-gray-50 p-4 rounded border border-gray-200">
-                                    <h4 className="font-bold text-sm mb-2 flex items-center gap-2"><Icons.Briefcase size={16}/> 組織 (Organizations)</h4>
-                                    <p className="text-xs text-gray-600 mb-2">
-                                        騎士団、ギルド、魔法協会などを登録します。ロゴ画像の設定や、主要メンバー（登録人物からの紐付け）が可能です。
-                                    </p>
-                                </div>
-                            </div>
-                        </section>
-
-                        <section>
-                            <h3 className={h3Class}><Icons.BarChart2 className="text-blue-600"/> 統計データ編集 (Stats)</h3>
-                            <p className={pClass}>
-                                人口やGDPのデータを入力します。Ver1.04では2つのモードがあります。
-                            </p>
-                            <div className="space-y-4">
-                                <div className="bg-blue-50 p-4 rounded border border-blue-100">
-                                    <h4 className="font-bold text-sm text-blue-800 mb-1"><Icons.Calendar size={14} className="inline"/> 年代別入力</h4>
-                                    <p className="text-xs text-blue-600">特定の年を指定し、その時点での全国家のデータを一括入力します。定点観測に便利です。</p>
-                                </div>
-                                <div className="bg-green-50 p-4 rounded border border-green-100">
-                                    <h4 className="font-bold text-sm text-green-800 mb-1"><Icons.TrendingUp size={14} className="inline"/> 国家別入力（自動補完）</h4>
-                                    <p className="text-xs text-green-600">
-                                        特定の国を選び、「1900年に100万人」→「2000年に1億人」のように始点と終点を入力すると、
-                                        間のデータを自動計算して生成します。<br/>
-                                        変化のカーブ（補完関数）を「直線」「加速」「S字」などから選べるため、急激な経済成長などを表現できます。
-                                    </p>
-                                </div>
-                            </div>
-                        </section>
-
-                        <section>
-                            <h3 className={h3Class}><Icons.Structure className="text-purple-500"/> 権力構造図 (Power Structure)</h3>
-                            <p className={pClass}>
-                                国家ごとの統治機構図（組織図）をビジュアルエディタで作成できます。
-                            </p>
-                            <ul className="list-disc list-inside text-sm text-gray-600 space-y-2 ml-4">
-                                <li><span className={highlight}>カード操作</span>: カードにカーソルを合わせるとメニューが出現し、下部組織の追加や削除、人物・組織データの紐付けができます。</li>
-                                <li><span className={highlight}>移動・拡大</span>: キャンバスのドラッグで移動、ホイールで拡大縮小が可能です。</li>
-                                <li><span className={highlight}>独立組織</span>: 左上の「独立組織を追加」ボタンで、政府とは別のツリー（例：教会、独立ギルド）を作成できます。</li>
-                            </ul>
-                        </section>
-
-                        <section>
-                            <h3 className={h3Class}><Icons.FileText className="text-gray-500"/> 国家概要 (Overview)</h3>
-                            <p className={pClass}>
-                                文化、地理、歴史詳細などを記述するWiki機能です。文章を選択して「亜/あ」ボタンでルビを振ることができます。
-                            </p>
-                        </section>
-                    </div>
-                )}
-
-                {/* --- 3. EDIT (記録) --- */}
-                {activeTab === 'edit' && (
-                    <div className="space-y-10">
-                        <section>
-                            <h3 className={h3Class}><Icons.Edit2 className="text-green-600"/> 歴史を刻む (年表作成)</h3>
-                            <p className={pClass}>
-                                出来事を年表に追加します。タグ欄に国名を入力すると、その国のプロフィールページにも自動的に表示されます。
-                            </p>
-                        </section>
-                    </div>
-                )}
-
-                {/* --- 4. VIEW (閲覧) --- */}
-                {activeTab === 'view' && (
-                    <div className="space-y-10">
-                        <section>
-                            <h3 className={h3Class}><Icons.LayoutGrid className="text-blue-500"/> 国家一覧 (Nation List)</h3>
-                            <p className={pClass}>
-                                国力ランク順に並んだ国家カードをクリックすると、詳細プロフィール画面（Wiki）へ移動します。<br/>
-                                プロフィール画面では、関連する年表、人物、組織、統計グラフがタブで整理されて表示されます。
-                            </p>
-                        </section>
-
-                        <section>
-                            <h3 className={h3Class}><Icons.GitMerge className="text-purple-500"/> 国家興亡系譜図 (Genealogy)</h3>
-                            <p className={pClass}>
-                                歴史の流れを縦軸にとり、国家の誕生から滅亡までの流れを「レーン」として可視化します。
-                                左上のパネルから「レーンの幅」や「1年あたりの高さ」を調整し、見やすいレイアウトに変更できます。
-                            </p>
-                        </section>
-
-                        <section>
-                            <h3 className={h3Class}><Icons.Activity className="text-green-500"/> グラフ分析 (Graph)</h3>
-                            <p className={pClass}>
-                                入力された統計データをもとに折れ線グラフを表示します。
-                                「基準データに合わせて縮小」をチェックすると、史実のアメリカ合衆国のデータを背景に表示し、国力の規模感を比較できます。
-                            </p>
-                        </section>
-                        
-                        <section>
-                            <h3 className={h3Class}><Icons.List className="text-gray-500"/> 国家体制一覧 (Table)</h3>
-                            <p className={pClass}>
-                                指定した年における全国家の統治体制やイデオロギーを一覧表で比較します。
-                                「その時代に存在していた国」だけが自動的にリストアップされます。
-                            </p>
-                        </section>
-                    </div>
-                )}
-
-                {/* --- 5. DATA (保存) --- */}
-                {activeTab === 'data' && (
-                    <div className="space-y-8">
-                        <section>
-                            <h3 className={h3Class}><Icons.Save className="text-gray-600"/> データの保存と読み込み</h3>
-                            <p className={pClass}>
-                                本ツールはサーバーを持たず、データはお使いのブラウザ内（ローカルストレージ）に保存されます。<br/>
-                                ブラウザのキャッシュ削除などでデータが消える可能性があるため、<span className="text-red-500 font-bold">こまめな「エクスポート（JSON保存）」</span>を強く推奨します。
-                            </p>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                                <div className="border p-4 rounded bg-gray-50">
-                                    <h4 className="font-bold text-sm flex items-center gap-2 mb-2"><Icons.Upload size={16}/> エクスポート</h4>
-                                    <p className="text-xs text-gray-600">現在の全データをJSONファイルとしてダウンロードします。バックアップとして定期的に行ってください。</p>
-                                </div>
-                                <div className="border p-4 rounded bg-gray-50">
-                                    <h4 className="font-bold text-sm flex items-center gap-2 mb-2"><Icons.Download size={16}/> インポート</h4>
-                                    <p className="text-xs text-gray-600">JSONファイルを読み込み、現在のデータを<span className="text-red-500 font-bold">完全に上書き</span>して復元します。</p>
-                                </div>
-                                <div className="border p-4 rounded bg-gray-50">
-                                    <h4 className="font-bold text-sm flex items-center gap-2 mb-2"><Icons.RefreshCw size={16}/> コンバート</h4>
-                                    <p className="text-xs text-gray-600">JSONファイルを読み込み、現在のデータに「足りない部分だけ」を追加（マージ）します。チーム制作などでデータを統合する際に便利です。</p>
-                                </div>
-                            </div>
-                        </section>
-                    </div>
-                )}
-
-                {/* --- 6. ZOOM --- */}
-                {activeTab === 'zoom' && (
-                    <div className="space-y-8">
-                        <section>
-                            <h3 className={h3Class}><Icons.Search className="text-blue-500"/> 画面表示の拡大・縮小</h3>
-                            <p className={pClass}>ヘッダー中央にある <span className={highlight}>ZOOM</span> コントロールを使用して、アプリケーション全体の表示倍率を変更できます。</p>
-                            <ul className="list-disc list-inside text-sm text-gray-600 space-y-2 ml-4">
-                                <li><span className={highlight}>＋</span> ボタン: 画面を拡大します（最大200%）。細かい文字を読むときに便利です。</li>
-                                <li><span className={highlight}>－</span> ボタン: 画面を縮小します（最小30%）。「国家興亡系譜図」など、全体を俯瞰したいときに役立ちます。</li>
-                                <li><span className={highlight}>％数値</span> ボタン: クリックすると標準サイズ（100%）にリセットされます。</li>
-                            </ul>
-                        </section>
-                    </div>
-                )}
-
+                </div>
             </div>
         </div>
     );
@@ -2481,66 +2488,62 @@ const GraphView = ({ setView, stats, nations }) => (
     </div> 
 );
 
-// --- NationOverviewView コンポーネント (復活・修正版) ---
+// --- NationOverviewView コンポーネント (修正版: Sans-serif対応) ---
 const NationOverviewView = ({ setView, nations, setNations, targetNation }) => {
-    const [selectedNation, setSelectedNation] = useState(null);
+    const [content, setContent] = useState('');
 
     useEffect(() => {
         if (targetNation) {
-            const current = nations.find(n => n.id === targetNation.id);
-            if (current) setSelectedNation(current);
+            setContent(targetNation.overview || '');
         }
-    }, [targetNation, nations]);
+    }, [targetNation]);
 
-    const handleSave = (htmlContent) => {
-        const updatedNation = { ...selectedNation, note: htmlContent };
-        const newNations = nations.map(n => n.id === selectedNation.id ? updatedNation : n);
+    const handleSave = () => {
+        if (!targetNation) return;
+        const newNations = nations.map(n => n.id === targetNation.id ? { ...n, overview: content } : n);
         setNations(newNations);
-        setSelectedNation(updatedNation);
-        alert('概要を保存しました');
+        // ここで親コンポーネントが自動保存するため、setNationsだけでOK (TimelineWiki修正済み前提)
+        alert('保存しました');
     };
 
+    if (!targetNation) return <div>国家が選択されていません</div>;
+
     return (
-        <div className="min-h-[calc(100vh-120px)] flex flex-col gap-4 animate-fade-in pb-20">
-            
-            <SectionHeader icon={Icons.FileText} title="国家概要管理" desc="リッチテキストエディタを使用して、国家の詳細な設定（文化、地理、歴史詳細など）を記述します。" />
-
-            <div className="flex gap-6 items-start flex-grow">
-                {/* 左側リスト: Sticky配置 + 高さ指定 */}
-                <div 
-                    className="w-full md:w-80 flex-shrink-0 sticky top-4"
-                    style={{ height: 'calc(100vh - 320px)', minHeight: '400px' }}
-                >
-                    <NationListPanel 
-                        nations={nations} 
-                        setNations={setNations} 
-                        selectedNationId={selectedNation?.id} 
-                        onSelect={setSelectedNation} 
-                    />
+        <div className="animate-fade-in pb-20 max-w-4xl mx-auto">
+            <div className="flex items-center gap-4 mb-6">
+                <button onClick={() => setView('settings')} className="bg-gray-200 hover:bg-gray-300 p-2 rounded-full transition-colors"><Icons.ArrowLeft size={20}/></button>
+                <div className="flex items-center gap-3">
+                    <span className="text-4xl">{targetNation.flag}</span>
+                    <h2 className="text-2xl font-bold">{targetNation.name} - 概要編集</h2>
                 </div>
+            </div>
 
-                {/* 右側: エディタエリア */}
-                <div className="flex-grow w-full min-w-[300px]">
-                    {selectedNation ? (
-                        <QuillEditor 
-                            key={selectedNation.id} 
-                            initialContent={selectedNation.note} 
-                            nationName={selectedNation.name}
-                            nationFlag={selectedNation.flag}
-                            onSave={handleSave} 
-                        />
-                    ) : (
-                        <div className="w-full min-h-[600px] flex flex-col bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden justify-center items-center text-gray-400 bg-gray-50">
-                            <Icons.FileText size={64} className="mb-4 opacity-20"/>
-                            <p>左のリストから編集したい国家を選択してください</p>
-                        </div>
-                    )}
+            <div className="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+                <div className="mb-4 bg-blue-50 p-4 rounded-lg text-sm text-blue-800 flex gap-3">
+                    <Icons.Info size={20} className="flex-shrink-0"/>
+                    <div>
+                        <p className="font-bold mb-1">国家の歴史や特徴、文化などを自由に記述できます。</p>
+                        <p>ルビを振る機能などが利用可能です。ここでの記述は「国家プロファイル」画面で表示されます。</p>
+                    </div>
+                </div>
+                
+                <QuillEditor 
+                    initialContent={content} 
+                    onSave={(c) => { setContent(c); handleSave(); }} 
+                    nationName={targetNation.name}
+                    placeholder="この国の成り立ち、文化、政治体制など..."
+                />
+
+                {/* プレビューエリア */}
+                <div className="mt-8 border-t pt-6">
+                    <h3 className="text-sm font-bold text-gray-500 mb-4">プレビュー</h3>
+                    {/* ★修正箇所: font-serif を削除し、font-sans を追加 */}
+                    <div className="prose prose-lg max-w-none bg-gray-50 p-6 rounded-lg border border-gray-100 font-sans" dangerouslySetInnerHTML={{ __html: content }} />
                 </div>
             </div>
         </div>
     );
 };
-
 
 // --- 国家興亡系譜図ビュー (スマホ対応・ピンチズーム実装版) ---
 const GenealogyView = ({ setView, nations, stats, entries, setSelectedEntry, uiScale, onOpenDetail}) => {
@@ -3094,52 +3097,69 @@ const EditForm = ({ entry, onSave, onCancel, nations }) => {
     );
 };
 
-// ★引数に backLabel を追加
-const DetailView = ({ isAuthorized, entry, onEdit, onClose, onDelete, nations, backLabel }) => ( 
-    <div className="bg-white min-h-screen md:min-h-0 pb-20"> 
-        <div className="sticky top-0 bg-white/90 backdrop-blur-sm border-b border-gray-200 p-4 flex justify-between items-center z-10">
-            
-            {/* ★ここに追加: 戻るボタン */}
-            <div>
-                <button onClick={onClose} className="flex flex-col items-center justify-center text-gray-500 hover:text-blue-600 hover:bg-blue-50 px-3 py-1 rounded-lg transition-all group">
-                    <Icons.ArrowLeft size={20} className="mb-0.5 group-hover:-translate-x-1 transition-transform"/>
-                    <span className="text-[9px] font-bold leading-none">{backLabel || '戻る'}</span>
-                </button>
-            </div>
+// --- DetailView コンポーネント (修正版: Sans-serif対応) ---
+const DetailView = ({ isAuthorized, entry, onEdit, onClose, onDelete, nations, backLabel }) => {
+    // リンク処理
+    const handleLinkClick = (id) => {
+        // 同じページ内での遷移等の処理があればここに
+        console.log("Link to:", id);
+    };
 
-            <div className="flex gap-2">
-                {/* 権限がある時だけ編集ボタンを表示 */}
+    const renderContent = () => {
+        if (!entry.content) return <p className="text-gray-400 italic">詳細な記述はありません。</p>;
+        
+        // 自動リンクなどの処理（簡易版）
+        let contentHtml = entry.content.replace(/\n/g, '<br/>');
+        
+        // ★修正箇所: font-serif を削除し、font-sans を明示（またはデフォルトに任せる）
+        return (
+            <div 
+                className="prose prose-lg max-w-none text-gray-800 leading-loose font-sans" // ← ここを変更
+                dangerouslySetInnerHTML={{ __html: contentHtml }} 
+            />
+        );
+    };
+
+    return (
+        <div className="animate-fade-in pb-20">
+            <div className="sticky top-0 bg-[#f0f2f5]/90 backdrop-blur z-10 py-4 mb-4 border-b border-gray-200 flex justify-between items-center">
+                <button onClick={onClose} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-bold transition-colors">
+                    <div className="bg-white p-2 rounded-full shadow-sm"><Icons.ArrowLeft size={20}/></div>
+                    <span>{backLabel || '戻る'}</span>
+                </button>
                 {isAuthorized && (
-                    <>
-                        <button onClick={() => onEdit(entry)} className="p-2 text-blue-600 rounded hover:bg-blue-50" title="編集"><Icons.Edit2 size={20} /></button>
-                        <button onClick={() => onDelete(entry.id)} className="p-2 text-red-600 rounded hover:bg-red-50" title="削除"><Icons.Trash2 size={20} /></button>
-                    </>
+                    <div className="flex gap-2">
+                        <button onClick={() => onDelete(entry.id)} className="bg-white text-red-500 hover:bg-red-50 px-4 py-2 rounded-lg font-bold shadow-sm border border-gray-200 flex items-center gap-2 transition-colors"><Icons.Trash2 size={18}/> 削除</button>
+                        <button onClick={onEdit} className="bg-yellow-500 text-white hover:bg-yellow-600 px-4 py-2 rounded-lg font-bold shadow-md flex items-center gap-2 transition-colors"><Icons.Edit2 size={18}/> 編集</button>
+                    </div>
                 )}
             </div>
-        </div> 
-    
-    {/* ...以下、コンテンツ表示部分は変更なし... */}
-    <div className="max-w-3xl mx-auto p-6 md:p-10"> 
-        <div className="flex flex-wrap items-center gap-4 mb-6">
-            <div className="inline-block bg-gray-900 text-white px-4 py-1 rounded-sm font-mono text-xl font-bold shadow-md">{formatDate(entry.year, entry.month, entry.day)}
-            </div>
-            <div className={`px-3 py-1 text-sm rounded-full border ${importanceLevels[entry.importance || 2].badge} border-opacity-20`}>
-                {importanceLevels[entry.importance || 2].label}
+
+            <div className="bg-white rounded-xl shadow-xl overflow-hidden border border-gray-200 min-h-[500px]">
+                <div className="h-4 bg-yellow-500 w-full"></div>
+                <div className="p-8 md:p-12">
+                    <div className="flex flex-col md:flex-row justify-between items-start gap-4 mb-8 pb-6 border-b border-gray-100">
+                        <div>
+                            <div className="flex items-center gap-3 mb-2">
+                                <span className="bg-gray-900 text-yellow-500 font-mono font-bold px-3 py-1 rounded text-lg shadow-sm">{entry.year}年</span>
+                                {entry.month && <span className="text-gray-500 font-bold">{entry.month}月{entry.day ? `${entry.day}日` : ''}</span>}
+                            </div>
+                            <h1 className="text-3xl md:text-4xl font-black text-gray-900 mb-2 leading-tight">{entry.title}</h1>
+                            {entry.reading && <p className="text-gray-500 text-sm font-bold">{entry.reading}</p>}
+                        </div>
+                        <div className="flex flex-wrap gap-2 justify-end max-w-xs">
+                            {entry.tags && entry.tags.map(tag => <NationTag key={tag} text={tag} nations={nations} year={entry.year} />)}
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg">
+                        {renderContent()}
+                    </div>
+                </div>
             </div>
         </div>
-        <div className="mb-8 pb-4 border-b-4 border-gray-100">
-        {entry.reading && <p className="text-sm text-gray-500 font-medium mb-1">{entry.reading}</p>}
-        <h1 className="text-4xl md:text-5xl font-black text-gray-900 leading-tight">{entry.title}
-        </h1>
-        </div>
-        <div className="prose prose-lg text-gray-800 whitespace-pre-wrap leading-loose font-serif">
-        {entry.content || <span className="text-gray-400 italic">記述なし</span>}
-        </div> 
-        {entry.tags && entry.tags.length > 0 && (<div className="mt-10 pt-6 border-t border-gray-100">
-        <div className="flex flex-wrap gap-2">
-        {entry.tags.map(tag => <NationTag key={tag} text={tag} nations={nations} year={entry.year} />)}</div></div>)} 
-    </div> 
-</div> );
+    );
+};
 
 // --- StatsInputModal コンポーネント (修正版: 高さ制限・内部スクロール対応) ---
 const StatsInputModal = ({ showStatsInput, setShowStatsInput, nations, stats, setStats }) => {
@@ -3535,289 +3555,7 @@ const ItemDetailModal = ({ item, type, onClose, parseRuby }) => {
     );
 };
 
-// --- NationProfileView コンポーネント (修正版: 権限チェック追加) ---
-const NationProfileView = ({ isAuthorized, setView, nation: initialNation, nations, entries, stats, characters, organizations, onEditEntry, onEditNation, onEditStats, onEditOverview, updateNation, onOpenDetail }) => {
-    const [activeTab, setActiveTab] = useState('overview');
-    const [isKeyCharModalOpen, setIsKeyCharModalOpen] = useState(false);
-    const [isKeyOrgModalOpen, setIsKeyOrgModalOpen] = useState(false);
-    const [viewingItem, setViewingItem] = useState(null);
 
-    const nation = useMemo(() => nations.find(n => n.id === initialNation.id) || initialNation, [nations, initialNation]);
-
-    useEffect(() => {
-        if (document.getElementById('quill-custom-styles')) return;
-        const style = document.createElement('style');
-        style.id = 'quill-custom-styles';
-        style.innerHTML = `
-            .ql-font-gothic { font-family: 'Yu Gothic', 'YuGothic', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif; }
-            .ql-font-mincho { font-family: 'Yu Mincho', 'YuMincho', 'Hiragino Mincho ProN', 'HGS Mincho E', 'MS PMincho', serif; }
-            .ql-font-serif { font-family: 'Times New Roman', 'YuMincho', serif; }
-            .ql-font-sans-serif { font-family: Arial, Helvetica, sans-serif; }
-            .ql-font-monospace { font-family: 'Courier New', Courier, monospace; }
-        `;
-        document.head.appendChild(style);
-    }, []);
-
-    if (!nation) return null;
-
-    const { relatedEntries, relatedChars, relatedOrgs, sortedEras } = useMemo(() => {
-        const targetNames = new Set([nation.name]);
-        const targetEraIds = new Set();
-        if (nation.eras) {
-            nation.eras.forEach((era, idx) => {
-                if (era.name) targetNames.add(era.name);
-                targetEraIds.add(`${nation.id}_era_${idx}`);
-            });
-        }
-        const rEntries = entries.filter(e => e.tags && e.tags.some(tag => targetNames.has(tag))).sort((a, b) => a.year - b.year);
-        const rChars = characters.filter(c => c.affiliations && c.affiliations.some(aff => targetNames.has(typeof aff === 'string' ? aff : aff.name)));
-        const rOrgs = organizations.filter(o => o.affiliationId === nation.id || targetEraIds.has(o.affiliationId));
-
-        return { 
-            relatedEntries: rEntries, 
-            relatedChars: rChars, 
-            relatedOrgs: rOrgs,
-            sortedEras: (nation.eras || []).sort((a, b) => a.startYear - b.startYear)
-        };
-    }, [entries, characters, organizations, nation]);
-
-    const relatedStats = useMemo(() => stats.filter(s => s.nationId === nation.id).sort((a, b) => a.year - b.year), [stats, nation]);
-    const powerStructureData = useMemo(() => { const raw = nation.powerStructure; if (!raw) return []; return Array.isArray(raw) ? raw : [raw]; }, [nation]);
-
-    const handleSaveKeyChars = (ids) => { updateNation({ ...nation, keyCharacterIds: ids }); setIsKeyCharModalOpen(false); };
-    const handleSaveKeyOrgs = (ids) => { updateNation({ ...nation, keyOrganizationIds: ids }); setIsKeyOrgModalOpen(false); };
-
-    const textOutlineStyle = { textShadow: '2px 2px 0 #fff, -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 2px 0 0 #fff, -2px 0 0 #fff, 0 2px 0 #fff, 0 -2px 0 #fff' };
-    const parseRuby = (html) => html ? html.replace(/\[(.*?)\|(.*?)\]/g, '<ruby>$1<rt>$2</rt></ruby>') : '';
-
-    const treeCss = `
-        .tf-tree { display: flex; text-align: center; }
-        .tf-tree ul { padding-top: 20px; position: relative; display: flex; justify-content: center; padding-inline-start: 0; margin: 0; }
-        .tf-tree li { list-style-type: none; position: relative; padding: 20px 5px 0 5px; display: flex; flex-direction: column; align-items: center; }
-        .tf-tree li::before, .tf-tree li::after { content: ''; position: absolute; top: 0; right: 50%; border-top: 1px solid #ccc; width: 50%; height: 20px; }
-        .tf-tree li::after { right: auto; left: 50%; border-left: 1px solid #ccc; }
-        .tf-tree li:only-child::after, .tf-tree li:only-child::before { display: none; }
-        .tf-tree li:only-child { padding-top: 0; }
-        .tf-tree li:first-child::before { border: 0 none; }
-        .tf-tree li:last-child::after { border: 0 none; }
-        .tf-tree li:last-child::before { border-right: 1px solid #ccc; border-radius: 0 5px 0 0; }
-        .tf-tree li:first-child::after { border-radius: 5px 0 0 0; }
-        .tf-tree ul::before { content: ''; position: absolute; top: 0; left: 50%; border-left: 1px solid #ccc; width: 0; height: 20px; }
-    `;
-
-    const renderReadOnlyTree = (node) => {
-        let linkedData = null; let imageSrc = null; let DefaultIcon = Icons.User;
-        if (node.linkType === 'org' && node.linkId) { linkedData = organizations.find(o => o.id === node.linkId); imageSrc = linkedData?.logo; DefaultIcon = Icons.Briefcase; } 
-        else if (node.linkType === 'char' && node.linkId) { linkedData = characters.find(c => c.id === node.linkId); imageSrc = linkedData?.portrait; DefaultIcon = Icons.User; }
-
-        return (
-            <li key={node.id}>
-                 <div className="flex flex-col items-center bg-white border border-gray-300 rounded shadow-sm min-w-[140px] max-w-[180px] overflow-hidden hover:shadow-md transition-shadow z-10 relative">
-                    <div className="w-full h-12 bg-gray-50 flex items-center justify-center border-b border-gray-200 relative overflow-hidden">
-                         {imageSrc ? <img src={imageSrc} className="w-full h-full object-cover" /> : <DefaultIcon className="text-gray-300" />}
-                         {node.linkType && <div className={`absolute top-0 left-0 p-0.5 text-white text-[8px] ${node.linkType === 'org' ? 'bg-blue-500' : 'bg-green-500'}`}>{node.linkType === 'org' ? <Icons.Briefcase size={8}/> : <Icons.User size={8}/>}</div>}
-                    </div>
-                    <div className="p-2 text-center w-full">
-                        <div className="font-bold text-sm text-gray-800 leading-tight mb-0.5">{node.name}</div>
-                        {node.title && <div className="text-[10px] text-gray-500 mb-1">{node.title}</div>}
-                        {linkedData ? ( <div className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded truncate mx-auto border border-blue-100 cursor-pointer hover:bg-blue-100 transition-colors" onClick={(e) => { e.stopPropagation(); setViewingItem({item: linkedData, type: node.linkType}); }}>{linkedData.name}</div> ) : ( <div className="text-[9px] text-gray-300">-</div> )}
-                    </div>
-                 </div>
-                 {node.children && node.children.length > 0 && <ul>{node.children.map(child => renderReadOnlyTree(child))}</ul>}
-            </li>
-        );
-    };
-
-    const SidebarKeyList = ({ title, icon: Icon, items, allItems, onEdit, type, onItemClick }) => (
-        <div className="bg-white p-6 rounded-lg shadow border border-gray-200 relative group/sidebar">
-            <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-gray-500 text-xs uppercase flex items-center gap-2"><Icon size={16}/> {title}</h3>
-                {isAuthorized && <button onClick={onEdit} className="text-xs bg-gray-100 text-gray-600 border border-gray-200 px-2 py-1 rounded hover:bg-gray-200 flex items-center gap-1 transition-colors"><Icons.Edit2 size={12} /> 編集</button>}
-            </div>
-            <div className="space-y-3">
-                {items && items.length > 0 ? items.map(id => {
-                    const item = allItems.find(i => i.id === id); if (!item) return null;
-                    let role = '';
-                    if (type === 'char') { const aff = item.affiliations?.find(a => (typeof a === 'string' ? a : a.name) === nation.name) || item.affiliations?.[0]; role = (typeof aff === 'object' && aff.role) ? aff.role : ''; }
-                    const rank = type === 'char' ? getLevelRank(item.level) : null;
-                    return (
-                        <div key={id} onClick={() => onItemClick(item, type)} className="flex items-center gap-3 p-2 rounded border border-gray-100 bg-gray-50 hover:bg-white hover:shadow-md cursor-pointer transition-all">
-                            <div className="w-10 h-10 rounded-full bg-gray-200 border border-gray-300 overflow-hidden flex-shrink-0">{(type === 'char' ? item.portrait : item.logo) ? <img src={type === 'char' ? item.portrait : item.logo} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-gray-400"><Icon size={16}/></div>}</div>
-                            <div className="overflow-hidden">
-                                <div className="font-bold text-sm text-gray-800 truncate">{item.name}</div>
-                                {role && <div className="text-xs text-blue-600 font-bold">{role}</div>}
-                                <div className="flex flex-wrap items-center gap-1 mt-0.5">
-                                    {!role && type === 'org' && item.type && <span className="text-xs text-gray-400">{ORG_TYPES.find(t=>t.key===item.type)?.label}</span>}
-                                    {type === 'char' && item.level && rank ? ( <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border ${rank.bg} ${rank.color} ${rank.border}`}><rank.icon size={10} /> <span className="font-mono">Lv.{item.level}</span></span> ) : ( type === 'char' && item.level && <span className="font-mono font-bold text-indigo-400 text-xs">Lv.{item.level}</span> )}
-                                </div>
-                            </div>
-                        </div>
-                    );
-                }) : ( <div className="text-center py-4 border-2 border-dashed border-gray-100 rounded"><p className="text-xs text-gray-400 mb-2">設定なし</p>{isAuthorized && <button onClick={onEdit} className="text-xs text-blue-500 hover:underline">選択</button>}</div> )}
-            </div>
-        </div>
-    );
-
-    return (
-        <div className="space-y-6 animate-fade-in pb-20">
-            <KeySelectionModal isOpen={isKeyCharModalOpen} onClose={() => setIsKeyCharModalOpen(false)} title="重要人物" candidates={relatedChars} selectedIds={nation.keyCharacterIds} onSave={handleSaveKeyChars} />
-            <KeySelectionModal isOpen={isKeyOrgModalOpen} onClose={() => setIsKeyOrgModalOpen(false)} title="主要組織" candidates={relatedOrgs} selectedIds={nation.keyOrganizationIds} onSave={handleSaveKeyOrgs} />
-            <ItemDetailModal item={viewingItem?.item} type={viewingItem?.type} onClose={() => setViewingItem(null)} parseRuby={parseRuby} />
-
-            <div className="flex items-center gap-4">
-                <button onClick={() => setView('nation_list')} className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 font-bold rounded-lg shadow hover:bg-gray-50 transition-colors border border-gray-200">
-                    <Icons.ArrowLeft size={20} /> 一覧へ戻る
-                </button>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden relative">
-                <div className="h-32 w-full relative overflow-hidden" style={{ backgroundColor: nation.color || '#1f2937' }}>{nation.flag && <img src={nation.flag} className="w-full h-full object-cover opacity-30 blur-xl scale-110" />}<div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div></div>
-                <div className="px-8 pb-0 relative flex flex-col md:flex-row items-end gap-6 -mt-16">
-                    <div className="w-40 h-28 bg-white p-1 shadow-xl border-4 border-white flex-shrink-0 rounded-sm relative z-10">{nation.flag ? <img src={nation.flag} className="w-full h-full object-cover border border-gray-200" /> : <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs font-bold">No Image</div>}</div>
-                    <div className="flex-grow mb-4 relative z-10">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <div className="flex items-center gap-2 mb-2"><span className="bg-yellow-100 border border-yellow-300 text-yellow-800 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">{LOCATIONS[nation.location || 'unknown']?.label}</span><span className="bg-gray-100 border border-gray-300 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">{NATION_RANKS[nation.rank || 'minor_power']?.label}</span></div>
-                                <h1 className="text-4xl font-black tracking-tight text-gray-900 leading-none mb-2" style={textOutlineStyle}>{nation.name}</h1>
-                                <div className="flex gap-3 text-xs font-mono text-gray-500"><span className="bg-white/80 px-1.5 py-0.5 rounded border border-gray-200 backdrop-blur-sm">ID: {nation.id}</span></div>
-                            </div>
-                            {isAuthorized && <button onClick={onEditNation} className="mb-2 mr-2 bg-white/90 hover:bg-white text-gray-700 border border-gray-300 shadow-sm px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all"><Icons.Settings size={16} /> <span className="hidden sm:inline">国家設定を編集</span></button>}
-                        </div>
-                    </div>
-                </div>
-
-                <div className="flex px-8 pt-4 border-t border-gray-100 bg-gray-50/50 gap-1 overflow-x-auto">
-                    {[ {id: 'overview', icon: Icons.FileText, label: '概要・変遷'}, {id: 'characters', icon: Icons.User, label: '関連人物', badge: relatedChars.length}, {id: 'organizations', icon: Icons.Briefcase, label: '関連組織', badge: relatedOrgs.length}, {id: 'structure', icon: Icons.Structure, label: '統治機構'}, {id: 'stats', icon: Icons.Activity, label: '統計データ'}, {id: 'timeline', icon: Icons.List, label: '関連年表', badge: relatedEntries.length} ].map(tab => (
-                        <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-6 py-3 text-sm font-bold border-b-4 transition-colors whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id ? 'border-yellow-500 text-gray-900 bg-yellow-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}>
-                            <tab.icon size={18} /> {tab.label}
-                            {tab.badge > 0 && <span className="bg-gray-200 text-gray-600 text-[10px] px-1.5 rounded-full">{tab.badge}</span>}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            <div className="animate-fade-in">
-                {activeTab === 'overview' && (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        <div className="lg:col-span-2 space-y-6">
-                            <div className="bg-white p-8 rounded-lg shadow border border-gray-200 min-h-[300px] relative">
-                                <div className="flex justify-between items-center border-b pb-3 mb-4"><h3 className="font-bold text-gray-800 text-lg flex items-center gap-2"><Icons.BookOpen size={20} className="text-yellow-600"/> 国家概要</h3>{isAuthorized && <button onClick={onEditOverview} className="bg-yellow-100 text-yellow-800 border border-yellow-300 px-3 py-1.5 rounded font-bold text-xs flex items-center gap-1 hover:bg-yellow-200 transition-colors shadow-sm"><Icons.Edit2 size={14} /> 概要を編集</button>}</div>
-                                {nation.note ? <div className="text-base leading-loose text-gray-800 font-serif ql-editor" style={{ padding: 0, overflow: 'visible' }} dangerouslySetInnerHTML={{ __html: parseRuby(nation.note) }} /> : <div className="text-center py-10"><p className="text-gray-400 italic font-serif mb-4">記述がありません。</p>{isAuthorized && <button onClick={onEditOverview} className="text-blue-600 hover:underline text-sm">編集して追加する</button>}</div>}
-                            </div>
-                        </div>
-                        <div className="lg:col-span-1 space-y-6">
-                            <SidebarKeyList title="重要人物" icon={Icons.User} items={nation.keyCharacterIds} allItems={characters} onEdit={() => setIsKeyCharModalOpen(true)} type="char" onItemClick={(item, type) => setViewingItem({item, type})} />
-                            <SidebarKeyList title="主要組織" icon={Icons.Briefcase} items={nation.keyOrganizationIds} allItems={organizations} onEdit={() => setIsKeyOrgModalOpen(true)} type="org" onItemClick={(item, type) => setViewingItem({item, type})} />
-                            <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-                                <div className="flex justify-between items-center mb-6"><h3 className="font-bold text-gray-500 text-xs uppercase flex items-center gap-2"><Icons.History size={16}/> 歴史的変遷</h3>{isAuthorized && <button onClick={onEditNation} className="text-xs bg-gray-100 text-gray-600 border border-gray-200 px-2 py-1 rounded hover:bg-gray-200 flex items-center gap-1"><Icons.Settings size={12} /> 変遷を編集</button>}</div>
-                                <div className="relative border-l-2 border-gray-200 ml-3 space-y-8 py-2">
-                                    {sortedEras.map((era, idx) => {
-                                        const isCollapse = era.type === 'collapse'; let eventBadge = null; const eventType = era.event?.type;
-                                        if (eventType && eventType !== 'none') {
-                                            const eventDef = ERA_EVENT_TYPES[eventType];
-                                            if (eventDef) {
-                                                const targetIds = era.event.targetIds || (era.event.targetId ? [era.event.targetId] : []);
-                                                const targetNames = targetIds.map(tid => { const n = nations.find(nav => nav.id === tid); return n ? n.name : ''; }).filter(n => n).join('・');
-                                                let labelText = eventDef.label; let badgeClass = "bg-gray-100 text-gray-600 border-gray-200";
-                                                if (['annexed_by', 'merger'].includes(eventType)) { labelText = targetNames ? `${targetNames}に併合` : "他国に併合"; badgeClass = "bg-red-50 text-red-600 border-red-100"; } else if (eventType === 'partitioned_by') { labelText = targetNames ? `${targetNames}により分割` : "分割統治される"; badgeClass = "bg-red-50 text-red-600 border-red-100"; } else if (['independence', 'splinter'].includes(eventType)) { labelText = targetNames ? `${targetNames}より${eventDef.label}` : eventDef.label; badgeClass = "bg-indigo-50 text-indigo-700 border-indigo-100"; } else if (eventType === 'foundation') { labelText = "建国・成立"; badgeClass = "bg-green-50 text-green-700 border-green-100"; } else if (eventType === 'foundation_puppet') { labelText = targetNames ? `${targetNames}の傀儡として成立` : "傀儡国として成立"; badgeClass = "bg-purple-50 text-purple-700 border-purple-100"; } else if (eventType === 'regime_change') { labelText = "政体変更"; badgeClass = "bg-blue-50 text-blue-700 border-blue-100"; } else if (eventType === 'be_puppet') { labelText = targetNames ? `${targetNames}の傀儡になる` : "傀儡化される"; badgeClass = "bg-purple-50 text-purple-700 border-purple-100"; }
-                                                eventBadge = ( <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${badgeClass} mt-1 w-fit`}> {eventDef.icon} {labelText} </span> );
-                                            }
-                                        }
-                                        return ( <div key={idx} className="relative pl-6"> <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 border-white shadow-sm ${isCollapse ? 'bg-gray-400' : 'bg-blue-500'}`}></div> <div className="flex flex-col"> <span className="text-xs font-mono font-bold text-gray-500 mb-1 block">{era.startYear}年</span> <span className={`font-bold text-base ${isCollapse ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{era.name}</span> {eventBadge} {era.params && Object.keys(era.params).length > 0 && ( <div className="mt-3 space-y-2"> {NATION_PARAMS.map(p => { const val = era.params[p.key]; if (!val || !val.name) return null; return ( <div key={p.key} className="text-xs flex flex-col bg-gray-50 p-2 rounded border border-gray-100"> <span className="text-[9px] font-bold text-gray-400 mb-0.5">{p.label}</span> <div className="flex items-center gap-2"> <div className="w-2 h-2 rounded-full flex-shrink-0" style={{backgroundColor: val.color || p.defaultColor}}></div> <span className="font-bold text-gray-800">{val.name}</span> </div> </div> ); })} </div> )} </div> </div> );
-                                    })}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'characters' && (
-                    <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
-                        <h3 className="font-bold text-lg text-gray-800 mb-6 flex items-center gap-2"><Icons.User size={20} className="text-blue-600"/> 関連人物一覧 ({relatedChars.length})</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {relatedChars.sort((a, b) => { const aKey = nation.keyCharacterIds?.includes(a.id) ? 1 : 0; const bKey = nation.keyCharacterIds?.includes(b.id) ? 1 : 0; return bKey - aKey; }).map(char => {
-                                const isKey = nation.keyCharacterIds?.includes(char.id); const aff = char.affiliations?.find(a => (typeof a === 'string' ? a : a.name) === nation.name) || char.affiliations?.[0]; const role = (typeof aff === 'object' && aff.role) ? aff.role : ''; const rank = getLevelRank(char.level);
-                                return ( <div key={char.id} onClick={() => setViewingItem({item: char, type: 'char'})} className={`p-4 rounded-lg border flex items-start gap-4 cursor-pointer transition-all ${isKey ? 'bg-blue-50 border-blue-200 hover:shadow-md' : 'bg-white border-gray-100 hover:bg-gray-50 hover:shadow-sm'}`}> <div className="w-16 h-16 rounded-full bg-gray-200 border-2 border-white shadow overflow-hidden flex-shrink-0"> {char.portrait ? <img src={char.portrait} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-gray-400"><Icons.User size={24}/></div>} </div> <div className="flex-grow overflow-hidden"> <div className="flex items-center gap-2"> <h4 className="font-bold text-lg text-gray-900 truncate">{char.name}</h4> {isKey && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200 font-bold flex-shrink-0">重要</span>} </div> <div className="text-sm text-gray-600 font-bold mb-1">{role || '所属'}</div> <div className="text-xs text-gray-500 flex items-center gap-2 mb-2"> <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{char.race}</span> {char.level && rank ? ( <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${rank.bg} ${rank.color} ${rank.border}`}><rank.icon size={10} /> <span className="font-mono">Lv.{char.level}</span></span> ) : ( char.level && <span className="font-mono font-bold text-indigo-400">Lv.{char.level}</span> )} <span>{char.birthYear || '?'} - {char.deathYear || '?'}</span> </div> {char.note && <div className="text-xs text-gray-500 line-clamp-2 border-t border-gray-100 pt-2 mt-1">{char.note.replace(/<[^>]+>/g, '')}</div>} </div> </div> );
-                            })}
-                            {relatedChars.length === 0 && <p className="text-gray-400 italic col-span-2">関連する人物は登録されていません。</p>}
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'organizations' && (
-                    <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
-                        <h3 className="font-bold text-lg text-gray-800 mb-6 flex items-center gap-2"><Icons.Briefcase size={20} className="text-blue-600"/> 関連組織一覧 ({relatedOrgs.length})</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {relatedOrgs.sort((a, b) => { const aKey = nation.keyOrganizationIds?.includes(a.id) ? 1 : 0; const bKey = nation.keyOrganizationIds?.includes(b.id) ? 1 : 0; return bKey - aKey; }).map(org => {
-                                const isKey = nation.keyOrganizationIds?.includes(org.id); const typeInfo = ORG_TYPES.find(t => t.key === org.type);
-                                return ( <div key={org.id} onClick={() => setViewingItem({item: org, type: 'org'})} className={`p-4 rounded-lg border flex items-start gap-4 cursor-pointer transition-all ${isKey ? 'bg-blue-50 border-blue-200 hover:shadow-md' : 'bg-white border-gray-100 hover:bg-gray-50 hover:shadow-sm'}`}> <div className="w-16 h-16 rounded bg-white border border-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0 p-1"> {org.logo ? <img src={org.logo} className="w-full h-full object-contain"/> : <span className="text-2xl">{typeInfo?.icon}</span>} </div> <div className="flex-grow overflow-hidden"> <div className="flex items-center gap-2"> <h4 className="font-bold text-lg text-gray-900 truncate">{org.name}</h4> {isKey && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200 font-bold flex-shrink-0">主要</span>} </div> <div className="text-xs text-gray-500 mb-2">{typeInfo?.label}</div> <p className="text-xs text-gray-600 line-clamp-2">{org.note || '概要なし'}</p> </div> </div> );
-                            })}
-                            {relatedOrgs.length === 0 && <p className="text-gray-400 italic col-span-2">関連する組織は登録されていません。</p>}
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'structure' && (
-                    <div className="bg-white rounded-lg shadow border border-gray-200 p-8 min-h-[400px]">
-                        <style>{treeCss}</style>
-                        <div className="flex justify-between items-center mb-6 border-b pb-4">
-                            <h3 className="font-bold text-xl text-gray-800 flex items-center gap-2"><Icons.Structure size={24} className="text-purple-600"/> 統治機構・権力構造図</h3>
-                            {isAuthorized && <button onClick={() => { setView('power_structure'); }} className="bg-purple-100 text-purple-800 border border-purple-300 px-4 py-2 rounded font-bold text-sm flex items-center gap-2 hover:bg-purple-200 transition-colors shadow-sm"><Icons.Edit2 size={16} /> 構造を編集</button>}
-                        </div>
-                        <div className="w-full overflow-x-auto pb-8 custom-scrollbar bg-[#f9fafb] rounded border border-gray-100 p-8">
-                            {powerStructureData.length > 0 ? ( <div className="flex gap-16 justify-center min-w-max"> {powerStructureData.map((rootNode, index) => ( <div key={index} className="tf-tree"> <ul>{renderReadOnlyTree(rootNode)}</ul> </div> ))} </div> ) : ( <div className="text-center py-20 text-gray-400"> <Icons.Structure size={48} className="mx-auto mb-4 opacity-20"/> <p>権力構造図が未作成です。</p> <p className="text-sm">「構造を編集」ボタンから作成できます。</p> </div> )}
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'stats' && (
-                    <div className="space-y-6">
-                        <div className="flex justify-end">{isAuthorized && <button onClick={onEditStats} className="bg-blue-900 text-white px-4 py-2 rounded-lg font-bold shadow hover:bg-blue-800 flex items-center gap-2 transition-colors"><Icons.BarChart2 size={18} /> 統計データを記録・修正</button>}</div>
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <div className="bg-white p-6 rounded-lg shadow border border-gray-200"><SimpleLineChart title="総人口推移" data={relatedStats} nations={[nation]} getValue={(d) => d.population} formatValue={(v, isShort) => formatJapaneseNumber(v, '人', isShort)} icon={Icons.Users} dataType="population" /></div>
-                            <div className="bg-white p-6 rounded-lg shadow border border-gray-200"><SimpleLineChart title="GDP推移" data={relatedStats} nations={[nation]} getValue={(d) => d.gdp} formatValue={(v, isShort) => formatJapaneseNumber(v, '円', isShort)} icon={Icons.BarChart2} dataType="gdp" /></div>
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'timeline' && (
-                    <div className="bg-white p-8 rounded-lg shadow border border-gray-200 min-h-[400px]">
-                        <div className="flex items-center justify-between mb-6 border-b pb-4"><h3 className="font-bold text-xl text-gray-800 flex items-center gap-2"><Icons.List size={24} className="text-green-600"/> 関連年表</h3><span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-bold">{relatedEntries.length} 件の記録</span></div>
-                        <div className="space-y-0">
-                            {relatedEntries.map((entry, idx) => (
-                                /* ★修正: 全体にonClickを追加し、詳細画面を開くように変更 */
-                                <div 
-                                    key={entry.id} 
-                                    onClick={() => onOpenDetail(entry)}
-                                    className="flex gap-6 p-4 hover:bg-gray-50 transition-all group border-b border-gray-100 last:border-0 relative cursor-pointer"
-                                >
-                                    <div className="flex-shrink-0 w-28 pt-1 text-right"><div className="font-mono font-bold text-lg text-gray-700">{entry.year}年</div><div className="text-xs text-gray-400">{entry.month ? entry.month + '月' : ''}{entry.day ? entry.day + '日' : ''}</div></div>
-                                    <div className="flex-grow relative pl-6 border-l-2 border-gray-200 group-hover:border-green-300 transition-colors"><div className={`absolute -left-[7px] top-2 w-3 h-3 rounded-full border-2 border-white shadow-sm ${importanceLevels[entry.importance||2].bg.replace('bg-', 'bg-').replace('-50', '-400')}`}></div><h4 className="font-bold text-lg text-gray-900 mb-1">{entry.title}</h4><p className="text-sm text-gray-600 leading-relaxed">{entry.content}</p></div>
-                                    
-                                    {/* ★修正: 編集ボタンのクリックイベント伝播を停止 (stopPropagation) */}
-                                    {isAuthorized && (
-                                        <div className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                                            <button 
-                                                onClick={(e) => { 
-                                                    e.stopPropagation(); // これでカードクリック(詳細表示)を防ぐ
-                                                    onEditEntry(entry); 
-                                                }} 
-                                                className="p-2 bg-white text-gray-400 hover:text-blue-600 border border-gray-200 rounded-lg shadow-sm"
-                                            >
-                                                <Icons.Edit2 size={16} />
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-            </div>
-        </div>
-    );
-};
 
 // --- UserManagementView コンポーネント (修正版: 全ユーザー管理・ソート機能付き) ---
 const UserManagementView = ({ setView, allUsers, onChangeRole }) => {
@@ -4102,29 +3840,18 @@ const GlossaryView = ({ setView, nations, entries, characters, organizations, gl
 };
 
 
-// --- GlossaryDetail コンポーネント (修正版: 保存処理の競合解消) ---
+// --- GlossaryDetail コンポーネント (修正版: Sans-serif対応) ---
 const GlossaryDetail = ({ item, history, onBack, onJumpHistory, onLinkClick, allItems, glossaryData, onSaveTermData, onDeleteTerm, isAuthorized, getAutoTags }) => {
+    // ... (state定義やuseEffectなどは変更なし) ...
     const [isEditing, setIsEditing] = useState(false);
-    
-    // データ取得
     const overrideDesc = glossaryData?.overrides?.[item.id];
     const savedTags = glossaryData?.tags?.[item.id];
-    
-    // 自動タグ生成または保存済みタグの使用
     const autoTags = useMemo(() => getAutoTags(item), [item, getAutoTags]);
     const displayTags = savedTags && savedTags.length > 0 ? savedTags : autoTags;
-
-    // 編集用state
     const [tagInput, setTagInput] = useState('');
 
-    // 編集開始時に現在の内容を初期値セット
-    useEffect(() => {
-        if (isEditing) {
-            setTagInput(displayTags.join(', '));
-        }
-    }, [isEditing, displayTags]);
+    useEffect(() => { if (isEditing) setTagInput(displayTags.join(', ')); }, [isEditing, displayTags]);
 
-    // 元の説明文取得
     const getOriginalDesc = () => {
         const o = item.original;
         if (item.type === 'nation') return o.note;
@@ -4137,7 +3864,6 @@ const GlossaryDetail = ({ item, history, onBack, onJumpHistory, onLinkClick, all
 
     const displayContent = overrideDesc || getOriginalDesc() || '<p class="text-gray-400 italic">記述なし</p>';
 
-    // 自動リンク機能
     const renderContent = () => {
         const keywords = allItems.filter(i => i.id !== item.id && i.name.length > 1).map(i => i.name).sort((a, b) => b.length - a.length);
         const tags = [];
@@ -4147,10 +3873,11 @@ const GlossaryDetail = ({ item, history, onBack, onJumpHistory, onLinkClick, all
             tempHtml = tempHtml.replace(regex, `<span class="glossary-link text-blue-600 hover:underline cursor-pointer font-bold" data-term="$1">$1</span><span class="text-[9px] text-blue-400 align-top ml-0.5 opacity-50">↗</span>`);
         });
         const finalHtml = tempHtml.replace(/__TAG_(\d+)__/g, (_, index) => tags[index]);
-        return <div className="prose prose-lg max-w-none text-gray-800 font-serif leading-loose" dangerouslySetInnerHTML={{ __html: finalHtml }} onClick={(e) => { if (e.target.classList.contains('glossary-link')) { onLinkClick(e.target.getAttribute('data-term')); } }} />;
+        
+        // ★修正箇所: font-serif を削除し、font-sans を追加
+        return <div className="prose prose-lg max-w-none text-gray-800 leading-loose font-sans" dangerouslySetInnerHTML={{ __html: finalHtml }} onClick={(e) => { if (e.target.classList.contains('glossary-link')) { onLinkClick(e.target.getAttribute('data-term')); } }} />;
     };
 
-    // 固有情報表示
     const renderSpecificInfo = () => {
         const o = item.original;
         if(item.type === 'nation') return <div className="text-sm text-gray-500 mb-4 bg-gray-50 p-2 rounded border border-gray-100 flex gap-4"><span>📍 {LOCATIONS[o.location]?.label}</span><span style={{color:NATION_RANKS[o.rank]?.color}}>🏴 {NATION_RANKS[o.rank]?.label}</span></div>;
@@ -4162,7 +3889,7 @@ const GlossaryDetail = ({ item, history, onBack, onJumpHistory, onLinkClick, all
 
     return (
         <div className="animate-fade-in pb-20">
-            {/* パンくずリスト */}
+            {/* ... (ヘッダー画像周りは変更なし) ... */}
             <div className="sticky top-0 bg-white/95 backdrop-blur z-30 border-b shadow-sm mb-6 p-2 overflow-x-auto flex items-center gap-2 text-sm whitespace-nowrap custom-scrollbar">
                 <button onClick={onBack} className="flex items-center gap-1 text-gray-500 hover:bg-gray-100 px-2 py-1 rounded"><Icons.ArrowLeft size={16}/> 戻る</button>
                 <div className="h-4 w-px bg-gray-300 mx-1"></div>
@@ -4171,7 +3898,6 @@ const GlossaryDetail = ({ item, history, onBack, onJumpHistory, onLinkClick, all
             </div>
 
             <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden relative max-w-4xl mx-auto">
-                {/* ヘッダー画像 */}
                 <div className="h-48 w-full bg-gray-800 relative overflow-hidden">
                     {item.image ? <img src={item.image} className="w-full h-full object-cover opacity-60 blur-sm scale-105"/> : <div className="opacity-10 w-full h-full flex items-center justify-center"><Icons.BookOpen size={64} color="white"/></div>}
                     <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent"></div>
@@ -4216,7 +3942,6 @@ const GlossaryDetail = ({ item, history, onBack, onJumpHistory, onLinkClick, all
                                 initialContent={displayContent} 
                                 onSave={(content) => {
                                     const newTags = tagInput.split(/,|、/).map(t => t.trim()).filter(t => t !== '');
-                                    // ★ここで一括保存！(これが修正の肝です)
                                     onSaveTermData(item.id, content, newTags);
                                     setIsEditing(false);
                                 }}
@@ -4237,6 +3962,212 @@ const GlossaryDetail = ({ item, history, onBack, onJumpHistory, onLinkClick, all
                             )}
                         </div>
                     )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- NationProfileView (復元版) ---
+const NationProfileView = ({ isAuthorized, nation, entries, stats, nations, characters, organizations, onClose, onEditEntry, onEditNation, onEditStats, onEditOverview, onOpenDetail }) => {
+    const [activeTab, setActiveTab] = useState('overview');
+
+    // この国に関連するデータをフィルタリング
+    const relatedEntries = useMemo(() => {
+        return entries.filter(e => e.tags && (e.tags.includes(nation.name) || e.tags.includes(nation.code))).sort((a, b) => a.year - b.year);
+    }, [entries, nation]);
+
+    const relatedChars = useMemo(() => {
+        return characters.filter(c => c.affiliations && c.affiliations.some(a => (typeof a === 'string' ? a : a.name) === nation.name));
+    }, [characters, nation]);
+
+    const relatedOrgs = useMemo(() => {
+        return organizations.filter(o => o.location === nation.name || (o.affiliations && o.affiliations.includes(nation.name)));
+    }, [organizations, nation]);
+
+    const nationStats = useMemo(() => {
+        return stats.filter(s => s.nationId === nation.id).sort((a, b) => a.year - b.year);
+    }, [stats, nation]);
+
+    // 概要表示（フォント修正反映済み）
+    const renderOverview = () => {
+        const overview = nation.overview;
+        if (!overview) return (
+            <div className="flex flex-col items-center justify-center py-20 text-gray-400 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                <Icons.FileText size={48} className="mb-4 opacity-50"/>
+                <p className="italic mb-4">概要記述はまだありません。</p>
+                {isAuthorized && <button onClick={onEditOverview} className="text-blue-500 hover:underline font-bold">記述を追加する</button>}
+            </div>
+        );
+        
+        return (
+            <div className="bg-white p-6 md:p-10 rounded-lg shadow-sm border border-gray-100">
+                <div 
+                    className="prose prose-lg max-w-none text-gray-800 leading-loose font-sans" 
+                    dangerouslySetInnerHTML={{ __html: overview }} 
+                />
+                {isAuthorized && (
+                    <div className="mt-8 text-right border-t pt-4">
+                        <button onClick={onEditOverview} className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded flex items-center gap-2 ml-auto transition-colors"><Icons.Edit2 size={14}/> 概要を編集</button>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // タブの中身
+    const renderTabContent = () => {
+        switch (activeTab) {
+            case 'overview': return renderOverview();
+            case 'history': return (
+                <div className="space-y-4">
+                    {relatedEntries.length === 0 ? <div className="text-center py-10 text-gray-400">記録なし</div> : 
+                    relatedEntries.map(entry => (
+                        <div key={entry.id} onClick={() => onOpenDetail(entry)} className="flex gap-4 p-4 bg-white rounded-lg shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group">
+                            <div className="font-mono font-bold text-gray-500 w-16 flex-shrink-0 text-right">{entry.year}</div>
+                            <div className="w-px bg-gray-200 group-hover:bg-blue-300 transition-colors"></div>
+                            <div className="flex-grow">
+                                <h4 className="font-bold text-gray-800 group-hover:text-blue-600 mb-1">{entry.title}</h4>
+                                <p className="text-sm text-gray-600 line-clamp-2">{entry.content?.replace(/<[^>]+>/g, '')}</p>
+                            </div>
+                        </div>
+                    ))}
+                    {isAuthorized && <div className="text-center pt-4"><button onClick={() => { onClose(); onEditEntry({ id: Date.now().toString(), title: '', year: DEFAULT_YEAR, tags: [nation.name] }); }} className="text-blue-500 hover:underline">+ 新しい歴史を記録</button></div>}
+                </div>
+            );
+            case 'people': return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {relatedChars.length === 0 ? <div className="col-span-full text-center py-10 text-gray-400">登録なし</div> :
+                    relatedChars.map(char => (
+                        <div key={char.id} className="flex items-center gap-4 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+                            <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden">{char.portrait ? <img src={char.portrait} className="w-full h-full object-cover"/> : <Icons.User className="w-full h-full p-2 text-gray-400"/>}</div>
+                            <div>
+                                <div className="font-bold text-gray-800">{char.name}</div>
+                                <div className="text-xs text-gray-500">{char.race} / {char.role || '所属者'}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+            case 'stats': return (
+                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                    <h3 className="font-bold text-gray-700 mb-4 flex justify-between items-center">
+                        <span>統計データ推移</span>
+                        {isAuthorized && <button onClick={onEditStats} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100">データ編集</button>}
+                    </h3>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="text-xs text-gray-500 bg-gray-50 uppercase border-b">
+                                <tr>
+                                    <th className="px-4 py-3">年</th>
+                                    <th className="px-4 py-3">人口</th>
+                                    <th className="px-4 py-3">経済力(GDP)</th>
+                                    <th className="px-4 py-3">兵力</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {nationStats.length === 0 ? <tr><td colSpan="4" className="text-center py-4 text-gray-400">データなし</td></tr> :
+                                nationStats.map((s, i) => (
+                                    <tr key={i} className="hover:bg-gray-50">
+                                        <td className="px-4 py-2 font-mono font-bold">{s.year}</td>
+                                        <td className="px-4 py-2">{s.population?.toLocaleString() ?? '-'}</td>
+                                        <td className="px-4 py-2">{s.gdp?.toLocaleString() ?? '-'}</td>
+                                        <td className="px-4 py-2">{s.military?.toLocaleString() ?? '-'}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+            default: return null;
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-hidden animate-fade-in">
+            <div className="bg-[#f0f2f5] w-full max-w-5xl h-full md:h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden relative">
+                
+                {/* ヘッダー */}
+                <div className="bg-white border-b border-gray-200 p-4 flex justify-between items-center shrink-0 z-10 shadow-sm">
+                    <div className="flex items-center gap-4">
+                        <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><Icons.X size={24} className="text-gray-500"/></button>
+                        <div className="flex items-center gap-3">
+                            <span className="text-4xl">{nation.flag}</span>
+                            <div>
+                                <h2 className="text-xl md:text-2xl font-black text-gray-800 leading-none">{nation.name}</h2>
+                                <div className="text-xs text-gray-500 font-bold mt-1 flex gap-2">
+                                    <span className="bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">ID: {nation.code}</span>
+                                    {nation.color && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{background:nation.color}}></span>Theme</span>}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {isAuthorized && (
+                        <div className="flex gap-2">
+                            <button onClick={onEditNation} className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm transition-colors"><Icons.Settings size={16}/> 設定</button>
+                        </div>
+                    )}
+                </div>
+
+                {/* メインコンテンツ */}
+                <div className="flex-grow flex flex-col md:flex-row overflow-hidden">
+                    {/* 左サイドバー (基本情報) */}
+                    <div className="md:w-72 bg-white border-r border-gray-200 overflow-y-auto p-6 shrink-0 custom-scrollbar">
+                        <div className="mb-6">
+                            <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">基本情報</h3>
+                            <dl className="space-y-4 text-sm">
+                                <div><dt className="text-gray-500 text-xs mb-1">正式名称</dt><dd className="font-bold text-gray-800">{nation.officialName || nation.name}</dd></div>
+                                <div><dt className="text-gray-500 text-xs mb-1">首都</dt><dd className="font-bold text-gray-800">{nation.capital || '-'}</dd></div>
+                                <div><dt className="text-gray-500 text-xs mb-1">指導者</dt><dd className="font-bold text-gray-800">{nation.leader || '-'}</dd></div>
+                                <div><dt className="text-gray-500 text-xs mb-1">政体</dt><dd className="font-bold text-gray-800">{nation.polity || '-'}</dd></div>
+                                <div><dt className="text-gray-500 text-xs mb-1">種族構成</dt><dd className="font-bold text-gray-800">{nation.race || '-'}</dd></div>
+                                <div>
+                                    <dt className="text-gray-500 text-xs mb-1">ランク</dt>
+                                    <dd className="font-bold text-gray-800">
+                                        <span style={{color: NATION_RANKS[nation.rank]?.color || '#000'}}>
+                                            {NATION_RANKS[nation.rank]?.label || nation.rank || '-'}
+                                        </span>
+                                    </dd>
+                                </div>
+                                <div><dt className="text-gray-500 text-xs mb-1">地域</dt><dd className="font-bold text-gray-800">{LOCATIONS[nation.location]?.label || nation.location || '-'}</dd></div>
+                            </dl>
+                        </div>
+                        {nation.note && (
+                            <div className="p-3 bg-yellow-50 text-yellow-800 text-xs rounded border border-yellow-100 leading-relaxed">
+                                <strong>Note:</strong><br/>{nation.note}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 右メインエリア */}
+                    <div className="flex-grow flex flex-col overflow-hidden bg-[#f8f9fa]">
+                        {/* タブナビゲーション */}
+                        <div className="flex border-b border-gray-200 bg-white px-4 shrink-0 overflow-x-auto custom-scrollbar">
+                            {[
+                                { id: 'overview', label: '概要', icon: Icons.FileText },
+                                { id: 'history', label: `歴史 (${relatedEntries.length})`, icon: Icons.Clock },
+                                { id: 'stats', label: '国力統計', icon: Icons.BarChart2 },
+                                { id: 'people', label: `人物 (${relatedChars.length})`, icon: Icons.User },
+                                { id: 'orgs', label: `組織 (${relatedOrgs.length})`, icon: Icons.Briefcase },
+                            ].map(tab => (
+                                <button 
+                                    key={tab.id} 
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${activeTab === tab.id ? 'border-yellow-500 text-yellow-600 bg-yellow-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                                >
+                                    <tab.icon size={16}/> {tab.label}
+                                </button>
+                            ))}
+                        </div>
+                        
+                        {/* コンテンツエリア */}
+                        <div className="flex-grow overflow-y-auto p-4 md:p-8 custom-scrollbar">
+                            <div className="max-w-4xl mx-auto pb-20">
+                                {renderTabContent()}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

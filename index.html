@@ -339,227 +339,391 @@ const NationTag = ({ text, nations, year }) => {
     return (<span className="text-[10px] bg-black/5 text-gray-600 px-1.5 py-0.5 rounded border border-black/5 inline-flex items-center gap-1 relative pr-2">{text}{flagSrc && (<span className="inline-block w-4 h-3 rounded-sm overflow-hidden border border-black/10 ml-1 shadow-sm"><img src={flagSrc} alt="" className="w-full h-full object-cover" /></span>)}</span>);
 };
 
-// --- HelpView コンポーネント (大幅加筆版) ---
+// --- HelpView コンポーネント (実戦運用特化: データ管理系削除・活用ノウハウ拡充版) ---
 const HelpView = ({ setView }) => {
     const [activeTab, setActiveTab] = useState('basic');
 
+    // タブ定義 (バックアップ等を削除し、活用系にフォーカス)
     const TABS = [
-        { id: 'basic', label: '基本操作', icon: Icons.MousePointer },
-        { id: 'timeline', label: '年表・閲覧', icon: Icons.Clock },
-        { id: 'database', label: '図鑑・用語集', icon: Icons.BookOpen },
-        { id: 'edit', label: 'データの編集', icon: Icons.Edit3 },
-        { id: 'nations', label: '国家設定', icon: Icons.Flag },
-        { id: 'sync', label: '保存と同期', icon: Icons.RefreshCw },
+        { id: 'basic', label: '基本・コンセプト', icon: Icons.HelpCircle },
+        { id: 'timeline', label: '年表・系譜図の操作', icon: Icons.Clock },
+        { id: 'nations', label: '国家・組織図作成', icon: Icons.Flag },
+        { id: 'scenario', label: 'シナリオ構築ガイド', icon: Icons.Zap }, // Tipsを拡充・昇格
+        { id: 'stats', label: '統計データの活用', icon: Icons.BarChart2 },
+        { id: 'database', label: '用語・設定・レベル', icon: Icons.BookOpen },
+        { id: 'writing', label: '執筆・装飾テクニック', icon: Icons.Edit3 },
     ];
+
+    // スタイル定義
+    const SectionTitle = ({ icon: Icon, title, color = "text-gray-800" }) => (
+        <h3 className={`text-xl font-bold ${color} mb-4 flex items-center gap-2 border-b-2 border-gray-100 pb-2 mt-8 first:mt-0`}>
+            {Icon && <Icon className={color.replace('text-', 'text-opacity-80 text-')} size={24} />} {title}
+        </h3>
+    );
+
+    const SubHeader = ({ title }) => (
+        <h4 className="font-bold text-gray-700 mt-6 mb-3 flex items-center gap-2 text-sm border-l-4 border-gray-300 pl-3">
+            {title}
+        </h4>
+    );
+
+    const Card = ({ children, className = "" }) => (
+        <div className={`bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-sm leading-relaxed ${className}`}>
+            {children}
+        </div>
+    );
 
     const renderContent = () => {
         switch (activeTab) {
             case 'basic':
                 return (
-                    <div className="space-y-8 animate-fade-in">
-                        <section>
-                            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
-                                <Icons.Monitor className="text-blue-500" /> 画面の見方
-                            </h3>
-                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-sm leading-relaxed font-sans">
-                                <p className="mb-4">このアプリケーションは、架空世界の歴史、国家、人物などのデータを統合管理するツールです。</p>
-                                <ul className="list-disc pl-5 space-y-2 text-gray-600">
-                                    <li><strong>左メニュー (PC) / 下メニュー (スマホ):</strong> 各機能への切り替えを行います。</li>
-                                    <li><strong>ヘッダー:</strong> ズーム操作、検索、各種管理画面へのショートカットがあります。</li>
-                                    <li><strong>メインエリア:</strong> 年表や詳細データが表示されます。</li>
-                                </ul>
+                    <div className="space-y-6 animate-fade-in">
+                        <SectionTitle icon={Icons.Monitor} title="歴史構築のフロー" color="text-blue-600" />
+                        <Card>
+                            <p className="mb-4 text-gray-700">
+                                このツールは、断片的なアイデアを繋ぎ合わせ、一つの整合性のある「世界史」として出力するためのワークベンチです。
+                                推奨される作成手順を紹介します。
+                            </p>
+                            
+                            <div className="relative border-l-2 border-blue-200 ml-3 space-y-6 py-2">
+                                <div className="ml-6 relative">
+                                    <div className="absolute -left-[31px] top-0 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">1</div>
+                                    <h4 className="font-bold text-gray-800">主要国家の定義 (Actors)</h4>
+                                    <p className="text-xs text-gray-600 mt-1">
+                                        まずは主役となる大国を2〜3個作成します。最初から細かく設定しすぎず、「国名」と「テーマカラー」を決めるだけで十分です。
+                                    </p>
+                                </div>
+                                <div className="ml-6 relative">
+                                    <div className="absolute -left-[31px] top-0 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">2</div>
+                                    <h4 className="font-bold text-gray-800">転換点の配置 (Turning Points)</h4>
+                                    <p className="text-xs text-gray-600 mt-1">
+                                        「建国」「大戦勃発」「革命」など、歴史の節目となるLv.5以上のイベントを年表に配置します。これで歴史の背骨ができます。
+                                    </p>
+                                </div>
+                                <div className="ml-6 relative">
+                                    <div className="absolute -left-[31px] top-0 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">3</div>
+                                    <h4 className="font-bold text-gray-800">因果の結合 (Connections)</h4>
+                                    <p className="text-xs text-gray-600 mt-1">
+                                        なぜ戦争が起きたのか？誰が建国したのか？イベント詳細に「人物」や「関連国家」を紐付け、点と線を繋ぎます。
+                                    </p>
+                                </div>
                             </div>
-                        </section>
-                        <section>
-                            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
-                                <Icons.ZoomIn className="text-blue-500" /> 表示の調整
-                            </h3>
-                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-sm leading-relaxed font-sans">
-                                <p className="mb-2"><strong>ズーム機能:</strong> ヘッダー右上の <span className="bg-gray-800 text-white px-1 rounded text-xs">＋</span> <span className="bg-gray-800 text-white px-1 rounded text-xs">－</span> ボタンで、文字や要素のサイズを調整できます。</p>
-                                <p><strong>レスポンシブ対応:</strong> スマートフォン、タブレット、PCそれぞれの画面サイズに合わせてレイアウトが自動調整されます。</p>
-                            </div>
-                        </section>
+                        </Card>
                     </div>
                 );
+
             case 'timeline':
                 return (
-                    <div className="space-y-8 animate-fade-in">
-                        <section>
-                            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
-                                <Icons.Clock className="text-green-600" /> 年表機能
-                            </h3>
-                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-sm leading-relaxed font-sans">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
-                                        <h4 className="font-bold mb-2 text-gray-700">イベントの重要度</h4>
-                                        <p className="mb-2 text-gray-600">年表のドットやカードの色は、出来事の重要度を表しています。</p>
-                                        <ul className="space-y-2">
-                                            <li className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-rose-600"></span> <span className="font-bold">激動 (Class S):</span> 世界を揺るがす大事件、時代の転換点。</li>
-                                            <li className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-yellow-500"></span> <span className="font-bold">重大 (Class A):</span> 建国、大戦争の勃発など。</li>
-                                            <li className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-purple-600"></span> <span className="font-bold">重要 (Class B):</span> 政策の変更、主要人物の死没など。</li>
-                                            <li className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-gray-400"></span> <span className="font-bold">通常:</span> 日常的な記録や小規模な出来事。</li>
-                                        </ul>
-                                    </div>
-                                    <div>
-                                        <h4 className="font-bold mb-2 text-gray-700">検索とフィルタ</h4>
-                                        <p className="mb-2 text-gray-600">画面上部の検索バーと「条件」ボタンを活用してください。</p>
-                                        <ul className="list-disc pl-5 space-y-1 text-gray-600">
-                                            <li>キーワード検索（タイトル、内容、年号）</li>
-                                            <li>タグによる絞り込み（戦争、文化、など）</li>
-                                            <li>重要度による表示/非表示の切り替え</li>
-                                        </ul>
-                                    </div>
+                    <div className="space-y-6 animate-fade-in">
+                        <SectionTitle icon={Icons.Clock} title="年表・系譜図の操作テクニック" />
+                        <Card>
+                            <SubHeader title="イベント種類の使い分け" />
+                            <p className="mb-3 text-xs text-gray-600">
+                                イベント作成時に選ぶ「Type」によって、系譜図上の線の動きやアイコンが変化します。
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                                <div className="p-3 bg-red-50 border border-red-100 rounded">
+                                    <span className="font-bold text-red-700 block mb-1">War (戦争)</span>
+                                    「交戦国」を複数設定することで、国家間の対立関係を表現します。Lvを高く設定して目立たせましょう。
+                                </div>
+                                <div className="p-3 bg-green-50 border border-green-100 rounded">
+                                    <span className="font-bold text-green-700 block mb-1">Indep (独立/成立)</span>
+                                    <span className="underline">新しい線の始点</span>となります。「Parent（母国）」を指定すると、そこから枝分かれする線が描かれます。
+                                </div>
+                                <div className="p-3 bg-gray-50 border border-gray-200 rounded">
+                                    <span className="font-bold text-gray-700 block mb-1">Annex (併合/滅亡)</span>
+                                    <span className="underline">線の終点</span>となります。「Annexed By（併合国）」を指定すると、その国の線へ吸収される矢印が描かれます。
+                                </div>
+                                <div className="p-3 bg-blue-50 border border-blue-100 rounded">
+                                    <span className="font-bold text-blue-700 block mb-1">Diplo (外交/条約)</span>
+                                    同盟や和平条約など。国家間の線は途切れず、関係性の変化を記述するのに適しています。
                                 </div>
                             </div>
-                        </section>
+
+                            <SubHeader title="検索・フィルタリング活用" />
+                            <ul className="list-disc pl-5 space-y-2 text-xs text-gray-600">
+                                <li><strong>年代ジャンプ:</strong> 画面上部の検索バーに数字（例: <code>1000</code>）を入力すると、その年代へ即座にスクロールします。</li>
+                                <li><strong>特定の国だけ追う:</strong> 検索バーに国名を入れると、その国が関わっていないイベントが薄くなり（または非表示になり）、歴史の流れを追いやすくなります。</li>
+                            </ul>
+                        </Card>
                     </div>
                 );
-            case 'edit':
-                return (
-                    <div className="space-y-8 animate-fade-in">
-                        <section>
-                            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
-                                <Icons.Edit3 className="text-yellow-600" /> データの作成と編集
-                            </h3>
-                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-sm leading-relaxed font-sans">
-                                <div className="mb-4 p-3 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800">
-                                    <p className="font-bold">編集権限について</p>
-                                    <p>データの追加・編集・削除を行うには、管理者またはWriter権限でログインする必要があります。右上のログインボタンからGoogleアカウントでログインしてください。</p>
-                                </div>
-                                <h4 className="font-bold text-lg mb-2">エディタの使い方</h4>
-                                <p className="mb-4 text-gray-600">詳細説明文（Overview）や用語解説には、リッチテキストエディタが使用できます。</p>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-                                    <div className="bg-gray-50 p-2 rounded text-center border"><span className="font-bold">B</span> 太字</div>
-                                    <div className="bg-gray-50 p-2 rounded text-center border"><span className="italic">i</span> 斜体</div>
-                                    <div className="bg-gray-50 p-2 rounded text-center border"><span className="underline">U</span> 下線</div>
-                                    <div className="bg-gray-50 p-2 rounded text-center border text-blue-600">文字色</div>
-                                </div>
-                                <p className="text-xs text-gray-500">※ テキストを選択した状態でツールバーのボタンを押すと適用されます。</p>
-                            </div>
-                        </section>
-                    </div>
-                );
+
             case 'nations':
                 return (
-                    <div className="space-y-8 animate-fade-in">
-                        <section>
-                            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
-                                <Icons.Flag className="text-orange-500" /> 国家の管理構造
-                            </h3>
-                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-sm leading-relaxed font-sans">
-                                <p className="mb-4">国家データは単なる名称だけでなく、以下の要素で構成されています。</p>
-                                <div className="space-y-4">
-                                    <div className="border-l-4 border-blue-400 pl-4 py-1">
-                                        <h4 className="font-bold text-blue-700">基本情報</h4>
-                                        <p className="text-gray-600">国旗（絵文字）、テーマカラー、正式名称、略称を設定します。テーマカラーは年表やグラフでの表示色に反映されます。</p>
-                                    </div>
-                                    <div className="border-l-4 border-green-400 pl-4 py-1">
-                                        <h4 className="font-bold text-green-700">歴史的変遷 (Eras)</h4>
-                                        <p className="text-gray-600">国家の「存続期間」を管理します。1つの国家に対し、複数の期間（王朝交代や一時滅亡など）を設定可能です。</p>
-                                        <ul className="list-disc pl-5 mt-1 text-gray-500 text-xs">
-                                            <li>開始年・終了年を設定することで、その期間だけ年表に「存在」するものとして扱われます。</li>
-                                            <li>前身国家（親）を設定すると、系譜図（Genealogy）で線が繋がります。</li>
-                                        </ul>
-                                    </div>
-                                    <div className="border-l-4 border-purple-400 pl-4 py-1">
-                                        <h4 className="font-bold text-purple-700">統計データ (Stats)</h4>
-                                        <p className="text-gray-600">人口、GDP、兵力などを年単位で入力できます。入力されていない年は、前後のデータから自動的に推計（線形補間）されてグラフ化されます。</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-                    </div>
-                );
-            case 'sync':
-                return (
-                    <div className="space-y-8 animate-fade-in">
-                        <section>
-                            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
-                                <Icons.RefreshCw className="text-indigo-600" /> 保存と同期の仕組み
-                            </h3>
-                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-sm leading-relaxed font-sans">
-                                <div className="flex items-start gap-4 mb-6">
-                                    <div className="text-4xl text-indigo-500">☁️</div>
-                                    <div>
-                                        <h4 className="font-bold text-lg mb-1">自動保存システム</h4>
-                                        <p className="text-gray-600">編集操作を行うと、<strong>操作が止まってから約0.8秒後に自動的にクラウドへ保存</strong>されます。「保存ボタン」を押す必要は基本的にありません。</p>
-                                    </div>
-                                </div>
-                                
-                                <h4 className="font-bold border-b border-gray-200 pb-2 mb-3">画面右下のゲージについて</h4>
-                                <div className="bg-gray-900 text-white p-4 rounded-lg mb-4">
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <div className="w-4 h-4 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
-                                        <span className="font-bold text-xs">送信中: 年表データ</span>
-                                    </div>
-                                    <div className="w-full h-1 bg-gray-700 rounded-full"><div className="w-1/2 h-full bg-yellow-500"></div></div>
-                                </div>
-                                <p className="mb-4 text-gray-600">
-                                    右下にこのようなゲージが表示されている間は、<strong>「データの通信中」</strong>です。<br/>
-                                    <span className="text-red-500 font-bold">⚠️ ゲージが出ている間は、ブラウザを閉じたりリロードしたりしないでください。データが破損する可能性があります。</span>
+                    <div className="space-y-6 animate-fade-in">
+                        <SectionTitle icon={Icons.Flag} title="国家の深掘り・Eraシステム" color="text-indigo-600" />
+                        <Card>
+                            <p className="mb-4 text-gray-700">
+                                一つの国でも時代によって体制は変わります。「Era（変遷）」機能を使うことで、
+                                別々の国として登録することなく、同一国家の連続性を保ったまま変化を表現できます。
+                            </p>
+                            <div className="bg-indigo-50 p-4 rounded border border-indigo-100 text-xs">
+                                <h5 className="font-bold text-indigo-800 mb-2">活用例：革命による体制変更</h5>
+                                <ol className="list-decimal pl-5 space-y-2 text-indigo-900">
+                                    <li>1789年までのEra: 名前「王国」 / 旗「百合の紋章」 / 元首「国王」</li>
+                                    <li>1789年からのEra: 名前「共和国」 / 旗「三色旗」 / 元首「大統領」</li>
+                                </ol>
+                                <p className="mt-2 text-indigo-600 opacity-80">
+                                    ※これを「別の国」として作ってしまうと、統計データなどが途切れてしまいます。Eraを使うのが正解です。
                                 </p>
-
                             </div>
-                        </section>
+                        </Card>
+
+                        <SectionTitle icon={Icons.Structure} title="権力構造図 (Power Structure)" color="text-orange-600" />
+                        <Card>
+                            <p className="mb-4 text-gray-700">
+                                政府や軍の組織図を作成します。単なる図形描画ではなく、人物DBとリンクするのがポイントです。
+                            </p>
+                            <SubHeader title="おすすめの構成パターン" />
+                            <div className="space-y-4 text-xs text-gray-600">
+                                <div>
+                                    <strong>👑 君主制パターン:</strong><br/>
+                                    頂点に「皇帝」→ 直下に「宰相」「軍務尚書」→ その下に各省庁や軍団。<br/>
+                                    皇帝の権力がどこまで及んでいるかを可視化できます。
+                                </div>
+                                <div>
+                                    <strong>⚖️ 共和制/合議制パターン:</strong><br/>
+                                    頂点に「評議会」や「元老院」を配置し、そこから複数のリーダーを並列に繋げることで、
+                                    「権力が分散している様子」を表現できます。
+                                </div>
+                            </div>
+                        </Card>
                     </div>
                 );
+
+            case 'scenario':
+                return (
+                    <div className="space-y-6 animate-fade-in">
+                        <SectionTitle icon={Icons.Zap} title="シナリオ構築ガイド (Tips)" color="text-yellow-600" />
+                        
+                        <div className="space-y-4">
+                            <details className="group bg-white rounded-lg shadow-sm border border-gray-200" open>
+                                <summary className="cursor-pointer p-4 font-bold flex justify-between items-center bg-yellow-50 text-yellow-800 transition-colors">
+                                    <span>⚔️ 内戦・分裂の完全再現手順</span>
+                                    <Icons.ChevronDown className="text-gray-400 group-open:rotate-180 transition-transform" />
+                                </summary>
+                                <div className="p-4 border-t text-sm text-gray-600 leading-relaxed bg-white">
+                                    <p className="mb-2">単純なイベントではなく、系譜図上で「国が割れる」表現をする手順です。</p>
+                                    <ol className="list-decimal pl-5 space-y-2 text-xs">
+                                        <li><strong>反乱勢力の国家化:</strong> 「帝国反乱軍」や「南朝」などの新しい国家を作成します。</li>
+                                        <li><strong>独立イベント:</strong> その勢力の成立イベントを作成し、Typeを「独立(Indep)」または「内戦(Civil War)」にします。</li>
+                                        <li><strong>親指定 (Parent):</strong> 詳細設定で、宗主国またはParentに「元の国（帝国）」を指定します。これで帝国のラインから分岐します。</li>
+                                        <li><strong>決着:</strong> 
+                                            <ul className="pl-4 mt-1 border-l-2 border-gray-200">
+                                                <li>・反乱軍勝利 → 帝国の「滅亡」イベント（Annexed by 反乱軍）を作成。</li>
+                                                <li>・鎮圧 → 反乱軍の「滅亡」イベント（Annexed by 帝国）を作成。</li>
+                                            </ul>
+                                        </li>
+                                    </ol>
+                                </div>
+                            </details>
+
+                            <details className="group bg-white rounded-lg shadow-sm border border-gray-200">
+                                <summary className="cursor-pointer p-4 font-bold flex justify-between items-center group-open:bg-gray-50 transition-colors">
+                                    <span>🌐 連邦・連合体（EU/HRE型）の表現</span>
+                                    <Icons.ChevronDown className="text-gray-400 group-open:rotate-180 transition-transform" />
+                                </summary>
+                                <div className="p-4 border-t text-sm text-gray-600 leading-relaxed bg-white">
+                                    <p className="mb-2">「神聖ローマ帝国」のような緩やかな連合体の表現方法。</p>
+                                    <ul className="list-disc pl-5 space-y-2 text-xs">
+                                        <li><strong>枠組み国家の作成:</strong> 「○○諸国連合」という国家を作成します。</li>
+                                        <li><strong>宗主国設定:</strong> 加盟国（構成国）の国家データ編集で、宗主国(Suzerain)に「連合」を指定します。</li>
+                                        <li><strong>系譜図での効果:</strong> 全加盟国のラインに「属国色（紫）」の帯が付き、視覚的にグループ化されていることがわかります。</li>
+                                    </ul>
+                                </div>
+                            </details>
+
+                            <details className="group bg-white rounded-lg shadow-sm border border-gray-200">
+                                <summary className="cursor-pointer p-4 font-bold flex justify-between items-center group-open:bg-gray-50 transition-colors">
+                                    <span>📜 神話・太古の時代の扱い</span>
+                                    <Icons.ChevronDown className="text-gray-400 group-open:rotate-180 transition-transform" />
+                                </summary>
+                                <div className="p-4 border-t text-sm text-gray-600 leading-relaxed bg-white">
+                                    <p className="mb-2">年号が不確定な時代の管理テクニック。</p>
+                                    <ul className="list-disc pl-5 space-y-2 text-xs">
+                                        <li><strong>マイナス年の活用:</strong> 紀元前はマイナス値（例: -5000年）で入力可能です。</li>
+                                        <li><strong>超長期イベント:</strong> 神話的出来事は、期間を長く（例: 1000年間）設定し、詳細に「およそ〜頃」と記述することで、歴史の不確かさを表現できます。</li>
+                                    </ul>
+                                </div>
+                            </details>
+                            
+                            <details className="group bg-white rounded-lg shadow-sm border border-gray-200">
+                                <summary className="cursor-pointer p-4 font-bold flex justify-between items-center group-open:bg-gray-50 transition-colors">
+                                    <span>🎭 「影の支配者」の表現</span>
+                                    <Icons.ChevronDown className="text-gray-400 group-open:rotate-180 transition-transform" />
+                                </summary>
+                                <div className="p-4 border-t text-sm text-gray-600 leading-relaxed bg-white">
+                                    <p className="mb-2">表向きの君主とは別に、実権を握る黒幕がいる場合。</p>
+                                    <ul className="list-disc pl-5 space-y-2 text-xs">
+                                        <li><strong>組織図の活用:</strong> 権力構造図で、君主の上に「顧問」や「教皇」を配置します。</li>
+                                        <li><strong>人物詳細:</strong> 黒幕の人物データの詳細に、タグやリンクで「事実上の最高権力者」と明記し、関連イベント（暗殺や傀儡擁立）に紐付けます。</li>
+                                    </ul>
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+                );
+
+            case 'stats':
+                return (
+                    <div className="space-y-6 animate-fade-in">
+                        <SectionTitle icon={Icons.BarChart2} title="統計データによる説得力" color="text-teal-600" />
+                        <Card>
+                            <p className="mb-4 text-gray-700">
+                                「なぜその国が勝ったのか？」を数字で裏付けます。
+                                毎年分のデータを入力する必要はありません。<strong>「オートフィル（自動補完）」</strong>を使いこなしましょう。
+                            </p>
+                            
+                            <SubHeader title="成長曲線の使い分け (Curve Types)" />
+                            <div className="space-y-3 text-xs">
+                                <div className="flex gap-3 items-start">
+                                    <div className="w-20 font-bold bg-gray-100 text-center rounded py-1">Linear</div>
+                                    <div>
+                                        <strong>直線 (Linear):</strong><br/>
+                                        安定した成長。もっとも汎用的なモデルです。
+                                    </div>
+                                </div>
+                                <div className="flex gap-3 items-start">
+                                    <div className="w-20 font-bold bg-green-100 text-green-800 text-center rounded py-1">Exp</div>
+                                    <div>
+                                        <strong>指数関数 (Exponential):</strong><br/>
+                                        産業革命やバブル経済など、急激に加速する成長を描くのに適しています。
+                                    </div>
+                                </div>
+                                <div className="flex gap-3 items-start">
+                                    <div className="w-20 font-bold bg-purple-100 text-purple-800 text-center rounded py-1">S-Curve</div>
+                                    <div>
+                                        <strong>S字カーブ (Sigmoid):</strong><br/>
+                                        「急成長した後に頭打ちになる」モデル。土地の限界による人口飽和や、技術の成熟などを表現するのに最適で、非常にリアルなグラフになります。
+                                    </div>
+                                </div>
+                            </div>
+                        </Card>
+                    </div>
+                );
+
             case 'database':
                 return (
-                    <div className="space-y-8 animate-fade-in">
-                        <section>
-                            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
-                                <Icons.Database className="text-teal-600" /> 図鑑・用語集
-                            </h3>
-                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-sm leading-relaxed font-sans">
-                                <p className="mb-4">世界観を深めるためのデータベース機能です。</p>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div className="bg-gray-50 p-4 rounded border">
-                                        <h4 className="font-bold text-teal-700 mb-2">人物図鑑</h4>
-                                        <p className="text-xs text-gray-600">キャラクターのプロフィール、種族、能力値（魂位深度）、所属組織を管理します。</p>
-                                    </div>
-                                    <div className="bg-gray-50 p-4 rounded border">
-                                        <h4 className="font-bold text-teal-700 mb-2">組織図鑑</h4>
-                                        <p className="text-xs text-gray-600">国家以外の集団（ギルド、結社、騎士団など）を管理します。ロゴ画像の設定も可能です。</p>
-                                    </div>
-                                    <div className="bg-gray-50 p-4 rounded border">
-                                        <h4 className="font-bold text-teal-700 mb-2">用語集</h4>
-                                        <p className="text-xs text-gray-600">魔法体系、文化、アイテムなどの解説。記事内のキーワードは自動的にリンク化されます。</p>
-                                    </div>
-                                </div>
-                                <div className="mt-4 p-3 bg-teal-50 text-teal-800 rounded text-xs">
-                                    <strong>💡 ヒント:</strong> 用語集の記事内では、他の用語や国家名が含まれていると自動的にリンクが生成され、クリックでそのページへジャンプできます。
-                                </div>
+                    <div className="space-y-6 animate-fade-in">
+                        <SectionTitle icon={Icons.BookOpen} title="データベース設定とレベル定義" color="text-yellow-600" />
+                        <Card>
+                            <SubHeader title="自動リンクの活用（別名登録）" />
+                            <p className="mb-3 text-xs text-gray-600">
+                                記事内で「皇帝」と書いただけで、特定の人物ページに飛ばすことができます。
+                                用語編集画面で<strong>「エイリアス（別名）」</strong>を設定しましょう。
+                            </p>
+                            
+                            <SubHeader title="魂位深度 (Soul Level) の階梯" />
+                            <p className="mb-2 text-xs text-gray-600">
+                                本アプリの標準規格となる強さの指標です。シナリオ上のパワーバランスを調整する際の目安にしてください。
+                            </p>
+                            <div className="overflow-x-auto border rounded-lg">
+                                <table className="w-full text-xs text-left border-collapse">
+                                    <thead className="bg-gray-100 border-b">
+                                        <tr>
+                                            <th className="p-2 w-16 text-center">Lv</th>
+                                            <th className="p-2 w-24">階級</th>
+                                            <th className="p-2">戦闘能力の目安</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                        {[
+                                            { lv: '~7', label: '一般市民', desc: '非戦闘員。' },
+                                            { lv: '8-14', label: '駆け出し', desc: '武装市民、徴集兵レベル。' },
+                                            { lv: '15-24', label: '正規兵', desc: '訓練を受けた職業軍人。' },
+                                            { lv: '25-39', label: '精鋭', desc: '近衛兵、特殊部隊員。一般兵なら1分隊を相手にできる。' },
+                                            { lv: '40-49', label: '古強者', desc: '名の知れた戦士。小規模な部隊の隊長クラス。' },
+                                            { lv: '50-59', label: '達人', desc: '武芸の極み。単独で戦況を変えうる。' },
+                                            { lv: '60-69', label: '猛者', desc: '一騎当千。軍の将軍クラス。' },
+                                            { lv: '70-79', label: '英雄', desc: '歴史に名を残す救国の英雄。' },
+                                            { lv: '80-89', label: '最高戦力', desc: '大国の最終兵器扱い。存在自体が抑止力。' },
+                                            { lv: '90~', label: '超越者', desc: '人知を超えた災害指定存在。' },
+                                        ].map((row, i) => (
+                                            <tr key={i} className={i >= 7 ? "bg-yellow-50" : ""}>
+                                                <td className="p-2 text-center font-mono font-bold text-gray-500">{row.lv}</td>
+                                                <td className="p-2 font-bold text-gray-800">{row.label}</td>
+                                                <td className="p-2 text-gray-600">{row.desc}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
-                        </section>
+                        </Card>
                     </div>
                 );
+
+            case 'writing':
+                return (
+                    <div className="space-y-6 animate-fade-in">
+                        <SectionTitle icon={Icons.Edit3} title="執筆・装飾テクニック" />
+                        <Card>
+                            <p className="mb-4 text-gray-700">
+                                国家の概要や用語解説は、単なるテキストではなく「読み物」として面白く見せることが可能です。
+                            </p>
+
+                            <SubHeader title="特殊記法 (Syntax) まとめ" />
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-xs text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-gray-100 border-b">
+                                            <th className="p-2 w-1/3">記法</th>
+                                            <th className="p-2">結果</th>
+                                            <th className="p-2">用途</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                        <tr>
+                                            <td className="p-2 font-mono bg-gray-50">[漢字|かんじ]</td>
+                                            <td className="p-2"><ruby>漢字<rt>かんじ</rt></ruby></td>
+                                            <td className="p-2">固有名称の読み仮名、必殺技の当て字など。</td>
+                                        </tr>
+                                        <tr>
+                                            <td className="p-2 font-mono bg-gray-50">http://...</td>
+                                            <td className="p-2"><a href="#" className="text-blue-500 underline">リンク</a></td>
+                                            <td className="p-2">外部Wikiや画像資料への参照。</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <SubHeader title="画像を綺麗に見せるコツ" />
+                            <ul className="list-disc pl-5 space-y-2 text-xs text-gray-600">
+                                <li><strong>国旗:</strong> アスペクト比 3:2 が標準ですが、1:1（正方形）でもアイコンとして綺麗に収まります。</li>
+                                <li><strong>人物:</strong> 縦長の肖像画（3:4程度）が最も適しています。顔が中心に来るようにトリミングしておくと、丸アイコンになった際に綺麗です。</li>
+                            </ul>
+                        </Card>
+                    </div>
+                );
+
             default:
                 return null;
         }
     };
 
     return (
-        <div className="flex flex-col md:flex-row h-full bg-[#f0f2f5] font-sans">
+        <div className="flex flex-col md:flex-row h-full bg-[#f0f2f5] font-sans text-gray-800">
             {/* Sidebar Navigation */}
-            <div className="w-full md:w-64 bg-white border-r border-gray-200 flex-shrink-0 md:h-full md:overflow-y-auto">
-                <div className="p-4 border-b border-gray-100">
-                    <h2 className="font-bold text-gray-800 flex items-center gap-2">
+            <div className="w-full md:w-64 bg-white border-r border-gray-200 flex-shrink-0 md:h-full md:overflow-y-auto z-10">
+                <div className="p-5 border-b border-gray-100 bg-gray-50 sticky top-0">
+                    <h2 className="font-bold text-gray-800 flex items-center gap-2 text-lg">
                         <Icons.HelpCircle className="text-yellow-500" /> 
-                        ユーザーガイド
+                        Manual & Tips
                     </h2>
+                    <p className="text-[10px] text-gray-400 mt-1 ml-7 tracking-wider">CREATOR'S GUIDE</p>
                 </div>
                 <nav className="p-2 space-y-1">
                     {TABS.map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-bold transition-all ${
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-bold transition-all duration-200 group ${
                                 activeTab === tab.id 
-                                ? 'bg-yellow-50 text-yellow-700 shadow-sm border border-yellow-100' 
-                                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                                ? 'bg-blue-50 text-blue-700 shadow-sm border-l-4 border-blue-500' 
+                                : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800 hover:pl-5'
                             }`}
                         >
-                            <tab.icon size={18} />
+                            <tab.icon size={18} className={`transition-colors ${activeTab === tab.id ? "text-blue-600" : "text-gray-400 group-hover:text-gray-600"}`} />
                             {tab.label}
                         </button>
                     ))}
@@ -567,13 +731,14 @@ const HelpView = ({ setView }) => {
             </div>
 
             {/* Main Content Area */}
-            <div className="flex-grow p-4 md:p-8 overflow-y-auto custom-scrollbar">
-                <div className="max-w-3xl mx-auto pb-20">
+            <div className="flex-grow p-4 md:p-8 overflow-y-auto custom-scrollbar bg-[#f8f9fa]">
+                <div className="max-w-4xl mx-auto pb-24">
                     {renderContent()}
                     
-                    <div className="mt-12 pt-8 border-t border-gray-200 text-center text-gray-400 text-xs">
-                        <p>Helmenaea Chronicle Timeline Wiki</p>
-                        <p>Version 2.5.0 - System Update & Sync Fix</p>
+                    <div className="mt-16 pt-8 border-t border-gray-200 flex flex-col items-center text-gray-400 text-xs gap-2">
+                        <span className="font-serif italic text-lg opacity-50">Helmenaea Chronicle Timeline Wiki</span>
+                        <span>World Building & History Management Tool</span>
+                        <span>Ver 3.1 - Practical Guide</span>
                     </div>
                 </div>
             </div>

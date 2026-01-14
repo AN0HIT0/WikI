@@ -1707,11 +1707,11 @@ const OrganizationManager = ({ setView, nations, organizations, setOrganizations
     );
 };
 
-// --- 修正版 QuillEditor (遅延読み込み対応・アイコン崩れ防止) ---
+// --- 修正版 QuillEditor (バグ修正済み: 余計な行を削除) ---
 const QuillEditor = ({ initialContent, onSave, nationName, nationFlag }) => {
     const editorRef = useRef(null);
     const quillInstanceRef = useRef(null);
-    const [isLoaded, setIsLoaded] = useRef(false); // データ読み込み済みフラグ
+    // × ここにあった間違ったコードを削除しました
 
     // カスタムフォント・ルビ・アイコン修正用のCSSスタイル定義
     const injectCustomStyles = () => {
@@ -1740,7 +1740,7 @@ const QuillEditor = ({ initialContent, onSave, nationName, nationFlag }) => {
     useEffect(() => {
         if (!editorRef.current) return;
         
-        // 既にインスタンスがある場合は再生成を防ぐ（二重表示防止）
+        // 既にインスタンスがある場合は再生成を防ぐ
         if (quillInstanceRef.current) return;
 
         editorRef.current.innerHTML = ''; 
@@ -1772,22 +1772,16 @@ const QuillEditor = ({ initialContent, onSave, nationName, nationFlag }) => {
                 quill.clipboard.dangerouslyPasteHTML(initialContent);
             }
 
-            // テキスト変更時の処理
-            quill.on('text-change', () => {
-                // 自動保存が必要ならここでタイマー処理などが可能
-            });
-
             quillInstanceRef.current = quill;
         }
     }, []);
 
-    // ★重要修正: データが遅れてやってきた場合にエディタに反映させる処理
+    // 遅延データ反映処理
     useEffect(() => {
         const quill = quillInstanceRef.current;
         if (quill && initialContent) {
             const currentText = quill.getText().trim();
-            // エディタが「空っぽ」または「改行のみ」の場合、ロードされたデータを入れる
-            // これにより「プレビューはあるのに入力欄が白い」を防ぐ
+            // エディタが空っぽの場合のみデータを流し込む（上書き防止）
             if (currentText.length === 0 && initialContent.length > 0) {
                  quill.clipboard.dangerouslyPasteHTML(initialContent);
             }

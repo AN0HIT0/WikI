@@ -4462,207 +4462,265 @@ const GlossaryDetail = ({ item, history, onBack, onJumpHistory, onLinkClick, all
     );
 };
 
-// --- NationProfileView (復元版) ---
-const NationProfileView = ({ isAuthorized, nation, entries, stats, nations, characters, organizations, onClose, onEditEntry, onEditNation, onEditStats, onEditOverview, onOpenDetail }) => {
+// --- NationProfileView コンポーネント (修正版: 権限チェック追加) ---
+const NationProfileView = ({ isAuthorized, setView, nation: initialNation, nations, entries, stats, characters, organizations, onEditEntry, onEditNation, onEditStats, onEditOverview, updateNation }) => {
     const [activeTab, setActiveTab] = useState('overview');
+    const [isKeyCharModalOpen, setIsKeyCharModalOpen] = useState(false);
+    const [isKeyOrgModalOpen, setIsKeyOrgModalOpen] = useState(false);
+    const [viewingItem, setViewingItem] = useState(null);
 
-    // この国に関連するデータをフィルタリング
-    const relatedEntries = useMemo(() => {
-        return entries.filter(e => e.tags && (e.tags.includes(nation.name) || e.tags.includes(nation.code))).sort((a, b) => a.year - b.year);
-    }, [entries, nation]);
+    const nation = useMemo(() => nations.find(n => n.id === initialNation.id) || initialNation, [nations, initialNation]);
 
-    const relatedChars = useMemo(() => {
-        return characters.filter(c => c.affiliations && c.affiliations.some(a => (typeof a === 'string' ? a : a.name) === nation.name));
-    }, [characters, nation]);
+    useEffect(() => {
+        if (document.getElementById('quill-custom-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'quill-custom-styles';
+        style.innerHTML = `
+            .ql-font-gothic { font-family: 'Yu Gothic', 'YuGothic', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif; }
+            .ql-font-mincho { font-family: 'Yu Mincho', 'YuMincho', 'Hiragino Mincho ProN', 'HGS Mincho E', 'MS PMincho', serif; }
+            .ql-font-serif { font-family: 'Times New Roman', 'YuMincho', serif; }
+            .ql-font-sans-serif { font-family: Arial, Helvetica, sans-serif; }
+            .ql-font-monospace { font-family: 'Courier New', Courier, monospace; }
+        `;
+        document.head.appendChild(style);
+    }, []);
 
-    const relatedOrgs = useMemo(() => {
-        return organizations.filter(o => o.location === nation.name || (o.affiliations && o.affiliations.includes(nation.name)));
-    }, [organizations, nation]);
+    if (!nation) return null;
 
-    const nationStats = useMemo(() => {
-        return stats.filter(s => s.nationId === nation.id).sort((a, b) => a.year - b.year);
-    }, [stats, nation]);
-
-    // 概要表示（フォント修正反映済み）
-    const renderOverview = () => {
-        const overview = nation.overview;
-        if (!overview) return (
-            <div className="flex flex-col items-center justify-center py-20 text-gray-400 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                <Icons.FileText size={48} className="mb-4 opacity-50"/>
-                <p className="italic mb-4">概要記述はまだありません。</p>
-                {isAuthorized && <button onClick={onEditOverview} className="text-blue-500 hover:underline font-bold">記述を追加する</button>}
-            </div>
-        );
-        
-        return (
-            <div className="bg-white p-6 md:p-10 rounded-lg shadow-sm border border-gray-100">
-                <div 
-                    className="prose prose-lg max-w-none text-gray-800 leading-loose font-sans" 
-                    dangerouslySetInnerHTML={{ __html: overview }} 
-                />
-                {isAuthorized && (
-                    <div className="mt-8 text-right border-t pt-4">
-                        <button onClick={onEditOverview} className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded flex items-center gap-2 ml-auto transition-colors"><Icons.Edit2 size={14}/> 概要を編集</button>
-                    </div>
-                )}
-            </div>
-        );
-    };
-
-    // タブの中身
-    const renderTabContent = () => {
-        switch (activeTab) {
-            case 'overview': return renderOverview();
-            case 'history': return (
-                <div className="space-y-4">
-                    {relatedEntries.length === 0 ? <div className="text-center py-10 text-gray-400">記録なし</div> : 
-                    relatedEntries.map(entry => (
-                        <div key={entry.id} onClick={() => onOpenDetail(entry)} className="flex gap-4 p-4 bg-white rounded-lg shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group">
-                            <div className="font-mono font-bold text-gray-500 w-16 flex-shrink-0 text-right">{entry.year}</div>
-                            <div className="w-px bg-gray-200 group-hover:bg-blue-300 transition-colors"></div>
-                            <div className="flex-grow">
-                                <h4 className="font-bold text-gray-800 group-hover:text-blue-600 mb-1">{entry.title}</h4>
-                                <p className="text-sm text-gray-600 line-clamp-2">{entry.content?.replace(/<[^>]+>/g, '')}</p>
-                            </div>
-                        </div>
-                    ))}
-                    {isAuthorized && <div className="text-center pt-4"><button onClick={() => { onClose(); onEditEntry({ id: Date.now().toString(), title: '', year: DEFAULT_YEAR, tags: [nation.name] }); }} className="text-blue-500 hover:underline">+ 新しい歴史を記録</button></div>}
-                </div>
-            );
-            case 'people': return (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {relatedChars.length === 0 ? <div className="col-span-full text-center py-10 text-gray-400">登録なし</div> :
-                    relatedChars.map(char => (
-                        <div key={char.id} className="flex items-center gap-4 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
-                            <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden">{char.portrait ? <img src={char.portrait} className="w-full h-full object-cover"/> : <Icons.User className="w-full h-full p-2 text-gray-400"/>}</div>
-                            <div>
-                                <div className="font-bold text-gray-800">{char.name}</div>
-                                <div className="text-xs text-gray-500">{char.race} / {char.role || '所属者'}</div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            );
-            case 'stats': return (
-                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                    <h3 className="font-bold text-gray-700 mb-4 flex justify-between items-center">
-                        <span>統計データ推移</span>
-                        {isAuthorized && <button onClick={onEditStats} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100">データ編集</button>}
-                    </h3>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="text-xs text-gray-500 bg-gray-50 uppercase border-b">
-                                <tr>
-                                    <th className="px-4 py-3">年</th>
-                                    <th className="px-4 py-3">人口</th>
-                                    <th className="px-4 py-3">経済力(GDP)</th>
-                                    <th className="px-4 py-3">兵力</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {nationStats.length === 0 ? <tr><td colSpan="4" className="text-center py-4 text-gray-400">データなし</td></tr> :
-                                nationStats.map((s, i) => (
-                                    <tr key={i} className="hover:bg-gray-50">
-                                        <td className="px-4 py-2 font-mono font-bold">{s.year}</td>
-                                        <td className="px-4 py-2">{s.population?.toLocaleString() ?? '-'}</td>
-                                        <td className="px-4 py-2">{s.gdp?.toLocaleString() ?? '-'}</td>
-                                        <td className="px-4 py-2">{s.military?.toLocaleString() ?? '-'}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            );
-            default: return null;
+    const { relatedEntries, relatedChars, relatedOrgs, sortedEras } = useMemo(() => {
+        const targetNames = new Set([nation.name]);
+        const targetEraIds = new Set();
+        if (nation.eras) {
+            nation.eras.forEach((era, idx) => {
+                if (era.name) targetNames.add(era.name);
+                targetEraIds.add(`${nation.id}_era_${idx}`);
+            });
         }
+        const rEntries = entries.filter(e => e.tags && e.tags.some(tag => targetNames.has(tag))).sort((a, b) => a.year - b.year);
+        const rChars = characters.filter(c => c.affiliations && c.affiliations.some(aff => targetNames.has(typeof aff === 'string' ? aff : aff.name)));
+        const rOrgs = organizations.filter(o => o.affiliationId === nation.id || targetEraIds.has(o.affiliationId));
+
+        return { 
+            relatedEntries: rEntries, 
+            relatedChars: rChars, 
+            relatedOrgs: rOrgs,
+            sortedEras: (nation.eras || []).sort((a, b) => a.startYear - b.startYear)
+        };
+    }, [entries, characters, organizations, nation]);
+
+    const relatedStats = useMemo(() => stats.filter(s => s.nationId === nation.id).sort((a, b) => a.year - b.year), [stats, nation]);
+    const powerStructureData = useMemo(() => { const raw = nation.powerStructure; if (!raw) return []; return Array.isArray(raw) ? raw : [raw]; }, [nation]);
+
+    const handleSaveKeyChars = (ids) => { updateNation({ ...nation, keyCharacterIds: ids }); setIsKeyCharModalOpen(false); };
+    const handleSaveKeyOrgs = (ids) => { updateNation({ ...nation, keyOrganizationIds: ids }); setIsKeyOrgModalOpen(false); };
+
+    const textOutlineStyle = { textShadow: '2px 2px 0 #fff, -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 2px 0 0 #fff, -2px 0 0 #fff, 0 2px 0 #fff, 0 -2px 0 #fff' };
+    const parseRuby = (html) => html ? html.replace(/\[(.*?)\|(.*?)\]/g, '<ruby>$1<rt>$2</rt></ruby>') : '';
+
+    const treeCss = `
+        .tf-tree { display: flex; text-align: center; }
+        .tf-tree ul { padding-top: 20px; position: relative; display: flex; justify-content: center; padding-inline-start: 0; margin: 0; }
+        .tf-tree li { list-style-type: none; position: relative; padding: 20px 5px 0 5px; display: flex; flex-direction: column; align-items: center; }
+        .tf-tree li::before, .tf-tree li::after { content: ''; position: absolute; top: 0; right: 50%; border-top: 1px solid #ccc; width: 50%; height: 20px; }
+        .tf-tree li::after { right: auto; left: 50%; border-left: 1px solid #ccc; }
+        .tf-tree li:only-child::after, .tf-tree li:only-child::before { display: none; }
+        .tf-tree li:only-child { padding-top: 0; }
+        .tf-tree li:first-child::before { border: 0 none; }
+        .tf-tree li:last-child::after { border: 0 none; }
+        .tf-tree li:last-child::before { border-right: 1px solid #ccc; border-radius: 0 5px 0 0; }
+        .tf-tree li:first-child::after { border-radius: 5px 0 0 0; }
+        .tf-tree ul::before { content: ''; position: absolute; top: 0; left: 50%; border-left: 1px solid #ccc; width: 0; height: 20px; }
+    `;
+
+    const renderReadOnlyTree = (node) => {
+        let linkedData = null; let imageSrc = null; let DefaultIcon = Icons.User;
+        if (node.linkType === 'org' && node.linkId) { linkedData = organizations.find(o => o.id === node.linkId); imageSrc = linkedData?.logo; DefaultIcon = Icons.Briefcase; } 
+        else if (node.linkType === 'char' && node.linkId) { linkedData = characters.find(c => c.id === node.linkId); imageSrc = linkedData?.portrait; DefaultIcon = Icons.User; }
+
+        return (
+            <li key={node.id}>
+                 <div className="flex flex-col items-center bg-white border border-gray-300 rounded shadow-sm min-w-[140px] max-w-[180px] overflow-hidden hover:shadow-md transition-shadow z-10 relative">
+                    <div className="w-full h-12 bg-gray-50 flex items-center justify-center border-b border-gray-200 relative overflow-hidden">
+                         {imageSrc ? <img src={imageSrc} className="w-full h-full object-cover" /> : <DefaultIcon className="text-gray-300" />}
+                         {node.linkType && <div className={`absolute top-0 left-0 p-0.5 text-white text-[8px] ${node.linkType === 'org' ? 'bg-blue-500' : 'bg-green-500'}`}>{node.linkType === 'org' ? <Icons.Briefcase size={8}/> : <Icons.User size={8}/>}</div>}
+                    </div>
+                    <div className="p-2 text-center w-full">
+                        <div className="font-bold text-sm text-gray-800 leading-tight mb-0.5">{node.name}</div>
+                        {node.title && <div className="text-[10px] text-gray-500 mb-1">{node.title}</div>}
+                        {linkedData ? ( <div className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded truncate mx-auto border border-blue-100 cursor-pointer hover:bg-blue-100 transition-colors" onClick={(e) => { e.stopPropagation(); setViewingItem({item: linkedData, type: node.linkType}); }}>{linkedData.name}</div> ) : ( <div className="text-[9px] text-gray-300">-</div> )}
+                    </div>
+                 </div>
+                 {node.children && node.children.length > 0 && <ul>{node.children.map(child => renderReadOnlyTree(child))}</ul>}
+            </li>
+        );
     };
+
+    const SidebarKeyList = ({ title, icon: Icon, items, allItems, onEdit, type, onItemClick }) => (
+        <div className="bg-white p-6 rounded-lg shadow border border-gray-200 relative group/sidebar">
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="font-bold text-gray-500 text-xs uppercase flex items-center gap-2"><Icon size={16}/> {title}</h3>
+                {isAuthorized && <button onClick={onEdit} className="text-xs bg-gray-100 text-gray-600 border border-gray-200 px-2 py-1 rounded hover:bg-gray-200 flex items-center gap-1 transition-colors"><Icons.Edit2 size={12} /> 編集</button>}
+            </div>
+            <div className="space-y-3">
+                {items && items.length > 0 ? items.map(id => {
+                    const item = allItems.find(i => i.id === id); if (!item) return null;
+                    let role = '';
+                    if (type === 'char') { const aff = item.affiliations?.find(a => (typeof a === 'string' ? a : a.name) === nation.name) || item.affiliations?.[0]; role = (typeof aff === 'object' && aff.role) ? aff.role : ''; }
+                    const rank = type === 'char' ? getLevelRank(item.level) : null;
+                    return (
+                        <div key={id} onClick={() => onItemClick(item, type)} className="flex items-center gap-3 p-2 rounded border border-gray-100 bg-gray-50 hover:bg-white hover:shadow-md cursor-pointer transition-all">
+                            <div className="w-10 h-10 rounded-full bg-gray-200 border border-gray-300 overflow-hidden flex-shrink-0">{(type === 'char' ? item.portrait : item.logo) ? <img src={type === 'char' ? item.portrait : item.logo} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-gray-400"><Icon size={16}/></div>}</div>
+                            <div className="overflow-hidden">
+                                <div className="font-bold text-sm text-gray-800 truncate">{item.name}</div>
+                                {role && <div className="text-xs text-blue-600 font-bold">{role}</div>}
+                                <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                                    {!role && type === 'org' && item.type && <span className="text-xs text-gray-400">{ORG_TYPES.find(t=>t.key===item.type)?.label}</span>}
+                                    {type === 'char' && item.level && rank ? ( <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border ${rank.bg} ${rank.color} ${rank.border}`}><rank.icon size={10} /> <span className="font-mono">Lv.{item.level}</span></span> ) : ( type === 'char' && item.level && <span className="font-mono font-bold text-indigo-400 text-xs">Lv.{item.level}</span> )}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                }) : ( <div className="text-center py-4 border-2 border-dashed border-gray-100 rounded"><p className="text-xs text-gray-400 mb-2">設定なし</p>{isAuthorized && <button onClick={onEdit} className="text-xs text-blue-500 hover:underline">選択</button>}</div> )}
+            </div>
+        </div>
+    );
 
     return (
-        <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-hidden animate-fade-in">
-            <div className="bg-[#f0f2f5] w-full max-w-5xl h-full md:h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden relative">
-                
-                {/* ヘッダー */}
-                <div className="bg-white border-b border-gray-200 p-4 flex justify-between items-center shrink-0 z-10 shadow-sm">
-                    <div className="flex items-center gap-4">
-                        <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><Icons.X size={24} className="text-gray-500"/></button>
-                        <div className="flex items-center gap-3">
-                            <span className="text-4xl">{nation.flag}</span>
+        <div className="space-y-6 animate-fade-in pb-20">
+            <KeySelectionModal isOpen={isKeyCharModalOpen} onClose={() => setIsKeyCharModalOpen(false)} title="重要人物" candidates={relatedChars} selectedIds={nation.keyCharacterIds} onSave={handleSaveKeyChars} />
+            <KeySelectionModal isOpen={isKeyOrgModalOpen} onClose={() => setIsKeyOrgModalOpen(false)} title="主要組織" candidates={relatedOrgs} selectedIds={nation.keyOrganizationIds} onSave={handleSaveKeyOrgs} />
+            <ItemDetailModal item={viewingItem?.item} type={viewingItem?.type} onClose={() => setViewingItem(null)} parseRuby={parseRuby} />
+
+            <div className="flex items-center gap-4">
+                <button onClick={() => setView('nation_list')} className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 font-bold rounded-lg shadow hover:bg-gray-50 transition-colors border border-gray-200">
+                    <Icons.ArrowLeft size={20} /> 一覧へ戻る
+                </button>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden relative">
+                <div className="h-32 w-full relative overflow-hidden" style={{ backgroundColor: nation.color || '#1f2937' }}>{nation.flag && <img src={nation.flag} className="w-full h-full object-cover opacity-30 blur-xl scale-110" />}<div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div></div>
+                <div className="px-8 pb-0 relative flex flex-col md:flex-row items-end gap-6 -mt-16">
+                    <div className="w-40 h-28 bg-white p-1 shadow-xl border-4 border-white flex-shrink-0 rounded-sm relative z-10">{nation.flag ? <img src={nation.flag} className="w-full h-full object-cover border border-gray-200" /> : <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs font-bold">No Image</div>}</div>
+                    <div className="flex-grow mb-4 relative z-10">
+                        <div className="flex items-center justify-between">
                             <div>
-                                <h2 className="text-xl md:text-2xl font-black text-gray-800 leading-none">{nation.name}</h2>
-                                <div className="text-xs text-gray-500 font-bold mt-1 flex gap-2">
-                                    <span className="bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">ID: {nation.code}</span>
-                                    {nation.color && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{background:nation.color}}></span>Theme</span>}
-                                </div>
+                                <div className="flex items-center gap-2 mb-2"><span className="bg-yellow-100 border border-yellow-300 text-yellow-800 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">{LOCATIONS[nation.location || 'unknown']?.label}</span><span className="bg-gray-100 border border-gray-300 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">{NATION_RANKS[nation.rank || 'minor_power']?.label}</span></div>
+                                <h1 className="text-4xl font-black tracking-tight text-gray-900 leading-none mb-2" style={textOutlineStyle}>{nation.name}</h1>
+                                <div className="flex gap-3 text-xs font-mono text-gray-500"><span className="bg-white/80 px-1.5 py-0.5 rounded border border-gray-200 backdrop-blur-sm">ID: {nation.id}</span></div>
                             </div>
+                            {isAuthorized && <button onClick={onEditNation} className="mb-2 mr-2 bg-white/90 hover:bg-white text-gray-700 border border-gray-300 shadow-sm px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all"><Icons.Settings size={16} /> <span className="hidden sm:inline">国家設定を編集</span></button>}
                         </div>
                     </div>
-                    {isAuthorized && (
-                        <div className="flex gap-2">
-                            <button onClick={onEditNation} className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm transition-colors"><Icons.Settings size={16}/> 設定</button>
-                        </div>
-                    )}
                 </div>
 
-                {/* メインコンテンツ */}
-                <div className="flex-grow flex flex-col md:flex-row overflow-hidden">
-                    {/* 左サイドバー (基本情報) */}
-                    <div className="md:w-72 bg-white border-r border-gray-200 overflow-y-auto p-6 shrink-0 custom-scrollbar">
-                        <div className="mb-6">
-                            <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">基本情報</h3>
-                            <dl className="space-y-4 text-sm">
-                                <div><dt className="text-gray-500 text-xs mb-1">正式名称</dt><dd className="font-bold text-gray-800">{nation.officialName || nation.name}</dd></div>
-                                <div><dt className="text-gray-500 text-xs mb-1">首都</dt><dd className="font-bold text-gray-800">{nation.capital || '-'}</dd></div>
-                                <div><dt className="text-gray-500 text-xs mb-1">指導者</dt><dd className="font-bold text-gray-800">{nation.leader || '-'}</dd></div>
-                                <div><dt className="text-gray-500 text-xs mb-1">政体</dt><dd className="font-bold text-gray-800">{nation.polity || '-'}</dd></div>
-                                <div><dt className="text-gray-500 text-xs mb-1">種族構成</dt><dd className="font-bold text-gray-800">{nation.race || '-'}</dd></div>
-                                <div>
-                                    <dt className="text-gray-500 text-xs mb-1">ランク</dt>
-                                    <dd className="font-bold text-gray-800">
-                                        <span style={{color: NATION_RANKS[nation.rank]?.color || '#000'}}>
-                                            {NATION_RANKS[nation.rank]?.label || nation.rank || '-'}
-                                        </span>
-                                    </dd>
-                                </div>
-                                <div><dt className="text-gray-500 text-xs mb-1">地域</dt><dd className="font-bold text-gray-800">{LOCATIONS[nation.location]?.label || nation.location || '-'}</dd></div>
-                            </dl>
-                        </div>
-                        {nation.note && (
-                            <div className="p-3 bg-yellow-50 text-yellow-800 text-xs rounded border border-yellow-100 leading-relaxed">
-                                <strong>Note:</strong><br/>{nation.note}
-                            </div>
-                        )}
-                    </div>
+                <div className="flex px-8 pt-4 border-t border-gray-100 bg-gray-50/50 gap-1 overflow-x-auto">
+                    {[ {id: 'overview', icon: Icons.FileText, label: '概要・変遷'}, {id: 'characters', icon: Icons.User, label: '関連人物', badge: relatedChars.length}, {id: 'organizations', icon: Icons.Briefcase, label: '関連組織', badge: relatedOrgs.length}, {id: 'structure', icon: Icons.Structure, label: '統治機構'}, {id: 'stats', icon: Icons.Activity, label: '統計データ'}, {id: 'timeline', icon: Icons.List, label: '関連年表', badge: relatedEntries.length} ].map(tab => (
+                        <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-6 py-3 text-sm font-bold border-b-4 transition-colors whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id ? 'border-yellow-500 text-gray-900 bg-yellow-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}>
+                            <tab.icon size={18} /> {tab.label}
+                            {tab.badge > 0 && <span className="bg-gray-200 text-gray-600 text-[10px] px-1.5 rounded-full">{tab.badge}</span>}
+                        </button>
+                    ))}
+                </div>
+            </div>
 
-                    {/* 右メインエリア */}
-                    <div className="flex-grow flex flex-col overflow-hidden bg-[#f8f9fa]">
-                        {/* タブナビゲーション */}
-                        <div className="flex border-b border-gray-200 bg-white px-4 shrink-0 overflow-x-auto custom-scrollbar">
-                            {[
-                                { id: 'overview', label: '概要', icon: Icons.FileText },
-                                { id: 'history', label: `歴史 (${relatedEntries.length})`, icon: Icons.Clock },
-                                { id: 'stats', label: '国力統計', icon: Icons.BarChart2 },
-                                { id: 'people', label: `人物 (${relatedChars.length})`, icon: Icons.User },
-                                { id: 'orgs', label: `組織 (${relatedOrgs.length})`, icon: Icons.Briefcase },
-                            ].map(tab => (
-                                <button 
-                                    key={tab.id} 
-                                    onClick={() => setActiveTab(tab.id)}
-                                    className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${activeTab === tab.id ? 'border-yellow-500 text-yellow-600 bg-yellow-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
-                                >
-                                    <tab.icon size={16}/> {tab.label}
-                                </button>
+            <div className="animate-fade-in">
+                {activeTab === 'overview' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div className="lg:col-span-2 space-y-6">
+                            <div className="bg-white p-8 rounded-lg shadow border border-gray-200 min-h-[300px] relative">
+                                <div className="flex justify-between items-center border-b pb-3 mb-4"><h3 className="font-bold text-gray-800 text-lg flex items-center gap-2"><Icons.BookOpen size={20} className="text-yellow-600"/> 国家概要</h3>{isAuthorized && <button onClick={onEditOverview} className="bg-yellow-100 text-yellow-800 border border-yellow-300 px-3 py-1.5 rounded font-bold text-xs flex items-center gap-1 hover:bg-yellow-200 transition-colors shadow-sm"><Icons.Edit2 size={14} /> 概要を編集</button>}</div>
+                                {nation.note ? <div className="text-base leading-loose text-gray-800 font-serif ql-editor" style={{ padding: 0, overflow: 'visible' }} dangerouslySetInnerHTML={{ __html: parseRuby(nation.note) }} /> : <div className="text-center py-10"><p className="text-gray-400 italic font-serif mb-4">記述がありません。</p>{isAuthorized && <button onClick={onEditOverview} className="text-blue-600 hover:underline text-sm">編集して追加する</button>}</div>}
+                            </div>
+                        </div>
+                        <div className="lg:col-span-1 space-y-6">
+                            <SidebarKeyList title="重要人物" icon={Icons.User} items={nation.keyCharacterIds} allItems={characters} onEdit={() => setIsKeyCharModalOpen(true)} type="char" onItemClick={(item, type) => setViewingItem({item, type})} />
+                            <SidebarKeyList title="主要組織" icon={Icons.Briefcase} items={nation.keyOrganizationIds} allItems={organizations} onEdit={() => setIsKeyOrgModalOpen(true)} type="org" onItemClick={(item, type) => setViewingItem({item, type})} />
+                            <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
+                                <div className="flex justify-between items-center mb-6"><h3 className="font-bold text-gray-500 text-xs uppercase flex items-center gap-2"><Icons.History size={16}/> 歴史的変遷</h3>{isAuthorized && <button onClick={onEditNation} className="text-xs bg-gray-100 text-gray-600 border border-gray-200 px-2 py-1 rounded hover:bg-gray-200 flex items-center gap-1"><Icons.Settings size={12} /> 変遷を編集</button>}</div>
+                                <div className="relative border-l-2 border-gray-200 ml-3 space-y-8 py-2">
+                                    {sortedEras.map((era, idx) => {
+                                        const isCollapse = era.type === 'collapse'; let eventBadge = null; const eventType = era.event?.type;
+                                        if (eventType && eventType !== 'none') {
+                                            const eventDef = ERA_EVENT_TYPES[eventType];
+                                            if (eventDef) {
+                                                const targetIds = era.event.targetIds || (era.event.targetId ? [era.event.targetId] : []);
+                                                const targetNames = targetIds.map(tid => { const n = nations.find(nav => nav.id === tid); return n ? n.name : ''; }).filter(n => n).join('・');
+                                                let labelText = eventDef.label; let badgeClass = "bg-gray-100 text-gray-600 border-gray-200";
+                                                if (['annexed_by', 'merger'].includes(eventType)) { labelText = targetNames ? `${targetNames}に併合` : "他国に併合"; badgeClass = "bg-red-50 text-red-600 border-red-100"; } else if (eventType === 'partitioned_by') { labelText = targetNames ? `${targetNames}により分割` : "分割統治される"; badgeClass = "bg-red-50 text-red-600 border-red-100"; } else if (['independence', 'splinter'].includes(eventType)) { labelText = targetNames ? `${targetNames}より${eventDef.label}` : eventDef.label; badgeClass = "bg-indigo-50 text-indigo-700 border-indigo-100"; } else if (eventType === 'foundation') { labelText = "建国・成立"; badgeClass = "bg-green-50 text-green-700 border-green-100"; } else if (eventType === 'foundation_puppet') { labelText = targetNames ? `${targetNames}の傀儡として成立` : "傀儡国として成立"; badgeClass = "bg-purple-50 text-purple-700 border-purple-100"; } else if (eventType === 'regime_change') { labelText = "政体変更"; badgeClass = "bg-blue-50 text-blue-700 border-blue-100"; } else if (eventType === 'be_puppet') { labelText = targetNames ? `${targetNames}の傀儡になる` : "傀儡化される"; badgeClass = "bg-purple-50 text-purple-700 border-purple-100"; }
+                                                eventBadge = ( <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${badgeClass} mt-1 w-fit`}> {eventDef.icon} {labelText} </span> );
+                                            }
+                                        }
+                                        return ( <div key={idx} className="relative pl-6"> <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 border-white shadow-sm ${isCollapse ? 'bg-gray-400' : 'bg-blue-500'}`}></div> <div className="flex flex-col"> <span className="text-xs font-mono font-bold text-gray-500 mb-1 block">{era.startYear}年</span> <span className={`font-bold text-base ${isCollapse ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{era.name}</span> {eventBadge} {era.params && Object.keys(era.params).length > 0 && ( <div className="mt-3 space-y-2"> {NATION_PARAMS.map(p => { const val = era.params[p.key]; if (!val || !val.name) return null; return ( <div key={p.key} className="text-xs flex flex-col bg-gray-50 p-2 rounded border border-gray-100"> <span className="text-[9px] font-bold text-gray-400 mb-0.5">{p.label}</span> <div className="flex items-center gap-2"> <div className="w-2 h-2 rounded-full flex-shrink-0" style={{backgroundColor: val.color || p.defaultColor}}></div> <span className="font-bold text-gray-800">{val.name}</span> </div> </div> ); })} </div> )} </div> </div> );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'characters' && (
+                    <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+                        <h3 className="font-bold text-lg text-gray-800 mb-6 flex items-center gap-2"><Icons.User size={20} className="text-blue-600"/> 関連人物一覧 ({relatedChars.length})</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {relatedChars.sort((a, b) => { const aKey = nation.keyCharacterIds?.includes(a.id) ? 1 : 0; const bKey = nation.keyCharacterIds?.includes(b.id) ? 1 : 0; return bKey - aKey; }).map(char => {
+                                const isKey = nation.keyCharacterIds?.includes(char.id); const aff = char.affiliations?.find(a => (typeof a === 'string' ? a : a.name) === nation.name) || char.affiliations?.[0]; const role = (typeof aff === 'object' && aff.role) ? aff.role : ''; const rank = getLevelRank(char.level);
+                                return ( <div key={char.id} onClick={() => setViewingItem({item: char, type: 'char'})} className={`p-4 rounded-lg border flex items-start gap-4 cursor-pointer transition-all ${isKey ? 'bg-blue-50 border-blue-200 hover:shadow-md' : 'bg-white border-gray-100 hover:bg-gray-50 hover:shadow-sm'}`}> <div className="w-16 h-16 rounded-full bg-gray-200 border-2 border-white shadow overflow-hidden flex-shrink-0"> {char.portrait ? <img src={char.portrait} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-gray-400"><Icons.User size={24}/></div>} </div> <div className="flex-grow overflow-hidden"> <div className="flex items-center gap-2"> <h4 className="font-bold text-lg text-gray-900 truncate">{char.name}</h4> {isKey && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200 font-bold flex-shrink-0">重要</span>} </div> <div className="text-sm text-gray-600 font-bold mb-1">{role || '所属'}</div> <div className="text-xs text-gray-500 flex items-center gap-2 mb-2"> <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{char.race}</span> {char.level && rank ? ( <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${rank.bg} ${rank.color} ${rank.border}`}><rank.icon size={10} /> <span className="font-mono">Lv.{char.level}</span></span> ) : ( char.level && <span className="font-mono font-bold text-indigo-400">Lv.{char.level}</span> )} <span>{char.birthYear || '?'} - {char.deathYear || '?'}</span> </div> {char.note && <div className="text-xs text-gray-500 line-clamp-2 border-t border-gray-100 pt-2 mt-1">{char.note.replace(/<[^>]+>/g, '')}</div>} </div> </div> );
+                            })}
+                            {relatedChars.length === 0 && <p className="text-gray-400 italic col-span-2">関連する人物は登録されていません。</p>}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'organizations' && (
+                    <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+                        <h3 className="font-bold text-lg text-gray-800 mb-6 flex items-center gap-2"><Icons.Briefcase size={20} className="text-blue-600"/> 関連組織一覧 ({relatedOrgs.length})</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {relatedOrgs.sort((a, b) => { const aKey = nation.keyOrganizationIds?.includes(a.id) ? 1 : 0; const bKey = nation.keyOrganizationIds?.includes(b.id) ? 1 : 0; return bKey - aKey; }).map(org => {
+                                const isKey = nation.keyOrganizationIds?.includes(org.id); const typeInfo = ORG_TYPES.find(t => t.key === org.type);
+                                return ( <div key={org.id} onClick={() => setViewingItem({item: org, type: 'org'})} className={`p-4 rounded-lg border flex items-start gap-4 cursor-pointer transition-all ${isKey ? 'bg-blue-50 border-blue-200 hover:shadow-md' : 'bg-white border-gray-100 hover:bg-gray-50 hover:shadow-sm'}`}> <div className="w-16 h-16 rounded bg-white border border-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0 p-1"> {org.logo ? <img src={org.logo} className="w-full h-full object-contain"/> : <span className="text-2xl">{typeInfo?.icon}</span>} </div> <div className="flex-grow overflow-hidden"> <div className="flex items-center gap-2"> <h4 className="font-bold text-lg text-gray-900 truncate">{org.name}</h4> {isKey && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200 font-bold flex-shrink-0">主要</span>} </div> <div className="text-xs text-gray-500 mb-2">{typeInfo?.label}</div> <p className="text-xs text-gray-600 line-clamp-2">{org.note || '概要なし'}</p> </div> </div> );
+                            })}
+                            {relatedOrgs.length === 0 && <p className="text-gray-400 italic col-span-2">関連する組織は登録されていません。</p>}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'structure' && (
+                    <div className="bg-white rounded-lg shadow border border-gray-200 p-8 min-h-[400px]">
+                        <style>{treeCss}</style>
+                        <div className="flex justify-between items-center mb-6 border-b pb-4">
+                            <h3 className="font-bold text-xl text-gray-800 flex items-center gap-2"><Icons.Structure size={24} className="text-purple-600"/> 統治機構・権力構造図</h3>
+                            {isAuthorized && <button onClick={() => { setView('power_structure'); }} className="bg-purple-100 text-purple-800 border border-purple-300 px-4 py-2 rounded font-bold text-sm flex items-center gap-2 hover:bg-purple-200 transition-colors shadow-sm"><Icons.Edit2 size={16} /> 構造を編集</button>}
+                        </div>
+                        <div className="w-full overflow-x-auto pb-8 custom-scrollbar bg-[#f9fafb] rounded border border-gray-100 p-8">
+                            {powerStructureData.length > 0 ? ( <div className="flex gap-16 justify-center min-w-max"> {powerStructureData.map((rootNode, index) => ( <div key={index} className="tf-tree"> <ul>{renderReadOnlyTree(rootNode)}</ul> </div> ))} </div> ) : ( <div className="text-center py-20 text-gray-400"> <Icons.Structure size={48} className="mx-auto mb-4 opacity-20"/> <p>権力構造図が未作成です。</p> <p className="text-sm">「構造を編集」ボタンから作成できます。</p> </div> )}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'stats' && (
+                    <div className="space-y-6">
+                        <div className="flex justify-end">{isAuthorized && <button onClick={onEditStats} className="bg-blue-900 text-white px-4 py-2 rounded-lg font-bold shadow hover:bg-blue-800 flex items-center gap-2 transition-colors"><Icons.BarChart2 size={18} /> 統計データを記録・修正</button>}</div>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div className="bg-white p-6 rounded-lg shadow border border-gray-200"><SimpleLineChart title="総人口推移" data={relatedStats} nations={[nation]} getValue={(d) => d.population} formatValue={(v, isShort) => formatJapaneseNumber(v, '人', isShort)} icon={Icons.Users} dataType="population" /></div>
+                            <div className="bg-white p-6 rounded-lg shadow border border-gray-200"><SimpleLineChart title="GDP推移" data={relatedStats} nations={[nation]} getValue={(d) => d.gdp} formatValue={(v, isShort) => formatJapaneseNumber(v, '円', isShort)} icon={Icons.BarChart2} dataType="gdp" /></div>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'timeline' && (
+                    <div className="bg-white p-8 rounded-lg shadow border border-gray-200 min-h-[400px]">
+                        <div className="flex items-center justify-between mb-6 border-b pb-4"><h3 className="font-bold text-xl text-gray-800 flex items-center gap-2"><Icons.List size={24} className="text-green-600"/> 関連年表</h3><span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-bold">{relatedEntries.length} 件の記録</span></div>
+                        <div className="space-y-0">
+                            {relatedEntries.map((entry, idx) => (
+                                <div key={entry.id} className="flex gap-6 p-4 hover:bg-gray-50 transition-all group border-b border-gray-100 last:border-0 relative">
+                                    <div className="flex-shrink-0 w-28 pt-1 text-right"><div className="font-mono font-bold text-lg text-gray-700">{entry.year}年</div><div className="text-xs text-gray-400">{entry.month ? entry.month + '月' : ''}{entry.day ? entry.day + '日' : ''}</div></div>
+                                    <div className="flex-grow relative pl-6 border-l-2 border-gray-200 group-hover:border-green-300 transition-colors"><div className={`absolute -left-[7px] top-2 w-3 h-3 rounded-full border-2 border-white shadow-sm ${importanceLevels[entry.importance||2].bg.replace('bg-', 'bg-').replace('-50', '-400')}`}></div><h4 className="font-bold text-lg text-gray-900 mb-1">{entry.title}</h4><p className="text-sm text-gray-600 leading-relaxed">{entry.content}</p></div>
+                                    {isAuthorized && <div className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => onEditEntry(entry)} className="p-2 bg-white text-gray-400 hover:text-blue-600 border border-gray-200 rounded-lg shadow-sm"><Icons.Edit2 size={16} /></button></div>}
+                                </div>
                             ))}
                         </div>
-                        
-                        {/* コンテンツエリア */}
-                        <div className="flex-grow overflow-y-auto p-4 md:p-8 custom-scrollbar">
-                            <div className="max-w-4xl mx-auto pb-20">
-                                {renderTabContent()}
-                            </div>
-                        </div>
                     </div>
-                </div>
+                )}
             </div>
         </div>
     );
@@ -5378,4 +5436,3 @@ function TimelineWiki() {
     </script>
 </body>
 </html>
-

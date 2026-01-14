@@ -1707,59 +1707,47 @@ const OrganizationManager = ({ setView, nations, organizations, setOrganizations
     );
 };
 
-// --- 1. エディタ部分 (旧バージョン復元: フォント選択・ルビ入力対応・スタイル注入込み) ---
+// --- 修正版 QuillEditor (遅延読み込み対応・アイコン崩れ防止) ---
 const QuillEditor = ({ initialContent, onSave, nationName, nationFlag }) => {
     const editorRef = useRef(null);
     const quillInstanceRef = useRef(null);
+    const [isLoaded, setIsLoaded] = useRef(false); // データ読み込み済みフラグ
 
-    // カスタムフォントとルビ用のCSSスタイル定義
+    // カスタムフォント・ルビ・アイコン修正用のCSSスタイル定義
     const injectCustomStyles = () => {
         if (document.getElementById('quill-custom-styles')) return;
         const style = document.createElement('style');
         style.id = 'quill-custom-styles';
         style.innerHTML = `
             /* --- エディタ基本設定 --- */
-            .ql-container { height: auto !important; min-height: 600px; font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif; font-size: 16px; border: none !important; }
-            .ql-editor { height: auto; min-height: 600px; overflow-y: visible; padding-bottom: 50px; }
-            .ql-toolbar { position: sticky; top: 0; z-index: 30; background: #f9fafb; border-top: none !important; border-left: none !important; border-right: none !important; border-bottom: 1px solid #e5e7eb !important; }
-
-            /* --- フォント定義 (表示用クラス) --- */
-            .ql-font-gothic { font-family: "Yu Gothic", "YuGothic", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif; }
-            .ql-font-mincho { font-family: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "HGS Mincho E", "MS PMincho", serif; }
-            .ql-font-serif { font-family: "Times New Roman", "YuMincho", serif; }
-            .ql-font-sans-serif { font-family: Arial, Helvetica, sans-serif; }
-            .ql-font-monospace { font-family: "Courier New", Courier, monospace; }
-
-            /* --- ツールバーのプルダウン表示名設定 --- */
-            /* 明朝体 */
-            .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="mincho"]::before,
-            .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="mincho"]::before { content: "明朝体"; font-family: "Yu Mincho", serif; }
-            /* ゴシック体 */
-            .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="gothic"]::before,
-            .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="gothic"]::before { content: "ゴシック体"; font-family: "Yu Gothic", sans-serif; }
-            /* デフォルト(未選択) */
-            .ql-snow .ql-picker.ql-font .ql-picker-label:not([data-value])::before,
-            .ql-snow .ql-picker.ql-font .ql-picker-item:not([data-value])::before { content: "標準"; }
-            /* その他 */
-            .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="serif"]::before,
-            .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="serif"]::before { content: "Serif (欧文)"; font-family: serif; }
-            .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="sans-serif"]::before,
-            .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="sans-serif"]::before { content: "Sans Serif (欧文)"; font-family: sans-serif; }
-            .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="monospace"]::before,
-            .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="monospace"]::before { content: "等幅"; font-family: monospace; }
+            .ql-container { height: auto !important; min-height: 500px; font-family: "Helvetica Neue", Arial, sans-serif; font-size: 16px; border: none !important; }
+            .ql-editor { height: auto; min-height: 500px; overflow-y: visible; padding-bottom: 50px; }
+            
+            /* --- ツールバーとアイコンのバグ修正 --- */
+            .ql-toolbar { position: sticky; top: 0; z-index: 30; background: #f9fafb; border-bottom: 1px solid #e5e7eb !important; }
+            .ql-snow .ql-stroke { stroke: #444; }
+            .ql-snow .ql-fill { fill: #444; }
+            .ql-picker-label { outline: none !important; }
+            
+            /* --- フォント定義 --- */
+            .ql-font-gothic { font-family: "Yu Gothic", sans-serif; }
+            .ql-font-mincho { font-family: "Yu Mincho", serif; }
         `;
         document.head.appendChild(style);
     };
 
+    // 初期化と設定
     useEffect(() => {
         if (!editorRef.current) return;
-        editorRef.current.innerHTML = ''; 
+        
+        // 既にインスタンスがある場合は再生成を防ぐ（二重表示防止）
+        if (quillInstanceRef.current) return;
 
-        // スタイル注入
+        editorRef.current.innerHTML = ''; 
         injectCustomStyles();
         
         if (window.Quill) {
-            // フォントのホワイトリスト登録
+            // フォント設定
             const Font = window.Quill.import('formats/font');
             Font.whitelist = ['gothic', 'mincho', 'serif', 'sans-serif', 'monospace'];
             window.Quill.register(Font, true);
@@ -1768,54 +1756,57 @@ const QuillEditor = ({ initialContent, onSave, nationName, nationFlag }) => {
                 theme: 'snow',
                 modules: {
                     toolbar: [
-                        // フォント選択を追加
-                        [{ 'font': Font.whitelist }],
-                        [{ 'header': [1, 2, 3, false] }],
+                        [{ 'font': Font.whitelist }, { 'header': [1, 2, false] }],
                         ['bold', 'italic', 'underline', 'strike'],
                         [{ 'color': [] }, { 'background': [] }],
                         [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                        [{ 'align': [] }],
-                        ['link', 'image', 'blockquote', 'code-block'],
+                        ['link', 'blockquote', 'code-block'],
                         ['clean']
                     ]
                 },
-                placeholder: '詳細な設定を記述します。\n\n【ルビの振り方】\n選択して「亜/あ」ボタン、または [漢字|かんじ] で記述。\n\n【フォント変更】\nツールバー左端のプルダウンから明朝体などを選択可能。'
+                placeholder: 'ここに国家の歴史や詳細を記述します...'
             });
 
+            // 初期値セット（初回マウント時）
             if (initialContent) {
                 quill.clipboard.dangerouslyPasteHTML(initialContent);
             }
+
+            // テキスト変更時の処理
+            quill.on('text-change', () => {
+                // 自動保存が必要ならここでタイマー処理などが可能
+            });
+
             quillInstanceRef.current = quill;
         }
     }, []);
 
+    // ★重要修正: データが遅れてやってきた場合にエディタに反映させる処理
+    useEffect(() => {
+        const quill = quillInstanceRef.current;
+        if (quill && initialContent) {
+            const currentText = quill.getText().trim();
+            // エディタが「空っぽ」または「改行のみ」の場合、ロードされたデータを入れる
+            // これにより「プレビューはあるのに入力欄が白い」を防ぐ
+            if (currentText.length === 0 && initialContent.length > 0) {
+                 quill.clipboard.dangerouslyPasteHTML(initialContent);
+            }
+        }
+    }, [initialContent]);
+
     const insertRuby = () => {
         const quill = quillInstanceRef.current;
         if (!quill) return;
-
         const range = quill.getSelection();
-        if (range) {
-            if (range.length > 0) {
-                const text = quill.getText(range.index, range.length);
-                const reading = prompt(`「${text}」のルビを入力してください:`);
-                if (reading) {
-                    const rubyText = `[${text}|${reading}]`;
-                    quill.deleteText(range.index, range.length);
-                    quill.insertText(range.index, rubyText);
-                    quill.setSelection(range.index + rubyText.length);
-                }
-            } else {
-                const text = prompt("ルビを振りたい文字(漢字)を入力してください:");
-                if (!text) return;
-                const reading = prompt(`「${text}」のルビを入力してください:`);
-                if (reading) {
-                    const rubyText = `[${text}|${reading}]`;
-                    quill.insertText(range.index, rubyText);
-                    quill.setSelection(range.index + rubyText.length);
-                }
+        if (range && range.length > 0) {
+            const text = quill.getText(range.index, range.length);
+            const reading = prompt(`「${text}」のルビを入力:`);
+            if (reading) {
+                quill.deleteText(range.index, range.length);
+                quill.insertText(range.index, `[${text}|${reading}]`);
             }
         } else {
-            alert('エディタ内をクリックしてからボタンを押してください。');
+            alert('文字を選択してから押してください');
         }
     };
 
@@ -1826,24 +1817,23 @@ const QuillEditor = ({ initialContent, onSave, nationName, nationFlag }) => {
     };
 
     return (
-        <div className="w-full bg-white rounded-lg shadow-lg border border-gray-200 overflow-visible relative">
-             <div className="p-3 border-b bg-gray-50 flex justify-between items-center z-40 relative">
+        <div className="w-full bg-white rounded-lg shadow-lg border border-gray-200">
+             <div className="p-3 border-b bg-gray-50 flex justify-between items-center sticky top-0 z-40">
                 <div className="flex items-center gap-2">
-                    {nationFlag && <img src={nationFlag} className="w-8 h-5 object-cover border border-gray-300" />}
-                    <span className="font-black text-lg text-gray-800 hidden sm:inline">{nationName}</span>
-                    <span className="text-xs text-gray-500 ml-2">の概要編集</span>
+                    {nationFlag && <img src={nationFlag} className="w-8 h-5 object-cover border" />}
+                    <span className="font-bold text-gray-700">{nationName}</span>
                 </div>
-                <div className="flex items-center gap-3">
-                    <button onClick={insertRuby} className="bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 px-3 py-1.5 rounded shadow-sm text-xs font-bold flex items-center gap-1 transition-colors" title="選択した文字にルビを振ります">
-                        <span className="text-[10px] bg-gray-200 px-1 rounded text-gray-500">亜/あ</span> ルビ
+                <div className="flex items-center gap-2">
+                    <button onClick={insertRuby} className="bg-white border hover:bg-gray-50 text-gray-700 px-3 py-1 rounded text-xs font-bold">
+                        ルビ
                     </button>
-                    <button onClick={handleSaveClick} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded shadow text-sm font-bold flex items-center gap-2 transition-colors">
+                    <button onClick={handleSaveClick} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded shadow text-sm font-bold flex items-center gap-2">
                         <Icons.Save size={16} /> 保存
                     </button>
                 </div>
             </div>
-            <div className="bg-white relative">
-                <div ref={editorRef}></div>
+            <div className="bg-white">
+                <div ref={editorRef} style={{minHeight: '500px'}}></div>
             </div>
         </div>
     );
@@ -2660,59 +2650,60 @@ const GraphView = ({ setView, stats, nations }) => (
     </div> 
 );
 
-// --- NationOverviewView コンポーネント (旧バージョン復元・現行システム対応版) ---
+// --- NationOverviewView コンポーネント (復活・修正版) ---
 const NationOverviewView = ({ setView, nations, setNations, targetNation }) => {
-    const [content, setContent] = useState('');
+    const [selectedNation, setSelectedNation] = useState(null);
 
     useEffect(() => {
         if (targetNation) {
-            // ★修正: 旧版の 'overview' ではなく、現行システムの 'note' を読み込むように変更
-            setContent(targetNation.note || targetNation.overview || '');
+            const current = nations.find(n => n.id === targetNation.id);
+            if (current) setSelectedNation(current);
         }
-    }, [targetNation]);
+    }, [targetNation, nations]);
 
-    const handleSave = () => {
-        if (!targetNation) return;
-        // ★修正: 保存先も 'note' に変更することで、用語集やプロファイルと同期させます
-        const newNations = nations.map(n => n.id === targetNation.id ? { ...n, note: content } : n);
+    const handleSave = (htmlContent) => {
+        const updatedNation = { ...selectedNation, note: htmlContent };
+        const newNations = nations.map(n => n.id === selectedNation.id ? updatedNation : n);
         setNations(newNations);
-        
-        // 親コンポーネントの自動保存が働くため、State更新のみでOK
-        alert('保存しました。用語集とプロファイルにも反映されます。');
+        setSelectedNation(updatedNation);
+        alert('概要を保存しました');
     };
 
-    if (!targetNation) return <div>国家が選択されていません</div>;
-
     return (
-        <div className="animate-fade-in pb-20 max-w-4xl mx-auto">
-            <div className="flex items-center gap-4 mb-6">
-                <button onClick={() => setView('settings')} className="bg-gray-200 hover:bg-gray-300 p-2 rounded-full transition-colors"><Icons.ArrowLeft size={20}/></button>
-                <div className="flex items-center gap-3">
-                    <span className="text-4xl">{targetNation.flag}</span>
-                    <h2 className="text-2xl font-bold">{targetNation.name} - 概要編集</h2>
-                </div>
-            </div>
+        <div className="min-h-[calc(100vh-120px)] flex flex-col gap-4 animate-fade-in pb-20">
+            
+            <SectionHeader icon={Icons.FileText} title="国家概要管理" desc="リッチテキストエディタを使用して、国家の詳細な設定（文化、地理、歴史詳細など）を記述します。" />
 
-            <div className="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
-                <div className="mb-4 bg-blue-50 p-4 rounded-lg text-sm text-blue-800 flex gap-3">
-                    <Icons.Info size={20} className="flex-shrink-0"/>
-                    <div>
-                        <p className="font-bold mb-1">国家の歴史や特徴、文化などを自由に記述できます。</p>
-                        <p>ルビを振る機能などが利用可能です。ここでの記述は「国家プロファイル」や「用語集」に反映されます。</p>
-                    </div>
+            <div className="flex gap-6 items-start flex-grow">
+                {/* 左側リスト: Sticky配置 + 高さ指定 */}
+                <div 
+                    className="w-full md:w-80 flex-shrink-0 sticky top-4"
+                    style={{ height: 'calc(100vh - 320px)', minHeight: '400px' }}
+                >
+                    <NationListPanel 
+                        nations={nations} 
+                        setNations={setNations} 
+                        selectedNationId={selectedNation?.id} 
+                        onSelect={setSelectedNation} 
+                    />
                 </div>
-                
-                <QuillEditor 
-                    initialContent={content} 
-                    onSave={(c) => { setContent(c); handleSave(); }} 
-                    nationName={targetNation.name}
-                    placeholder="この国の成り立ち、文化、政治体制など..."
-                />
 
-                {/* プレビューエリア */}
-                <div className="mt-8 border-t pt-6">
-                    <h3 className="text-sm font-bold text-gray-500 mb-4">プレビュー</h3>
-                    <div className="prose prose-lg max-w-none bg-gray-50 p-6 rounded-lg border border-gray-100 font-sans" dangerouslySetInnerHTML={{ __html: content }} />
+                {/* 右側: エディタエリア */}
+                <div className="flex-grow w-full min-w-[300px]">
+                    {selectedNation ? (
+                        <QuillEditor 
+                            key={selectedNation.id} 
+                            initialContent={selectedNation.note} 
+                            nationName={selectedNation.name}
+                            nationFlag={selectedNation.flag}
+                            onSave={handleSave} 
+                        />
+                    ) : (
+                        <div className="w-full min-h-[600px] flex flex-col bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden justify-center items-center text-gray-400 bg-gray-50">
+                            <Icons.FileText size={64} className="mb-4 opacity-20"/>
+                            <p>左のリストから編集したい国家を選択してください</p>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

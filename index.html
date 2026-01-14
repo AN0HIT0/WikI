@@ -4895,7 +4895,7 @@ const ProgressToast = ({ tasks }) => {
     );
 };
 
-// --- TimelineView コンポーネント (数直線 & 統計切替版) ---
+// --- TimelineView コンポーネント (等間隔・順序ベース版) ---
 const TimelineView = ({ 
     entries, 
     nations, 
@@ -4910,7 +4910,6 @@ const TimelineView = ({
     const [filterImportance, setFilterImportance] = useState([]);
     const [showFilters, setShowFilters] = useState(false);
     
-    // ★追加: 統計データを表示するかどうかのステート (デフォルトfalse)
     const [showStats, setShowStats] = useState(false);
     const [expandedStatsYears, setExpandedStatsYears] = useState([]);
 
@@ -4939,7 +4938,7 @@ const TimelineView = ({
             items.push({ type: 'entry', year: entry.year, month: entry.month || 0, day: entry.day || 0, data: entry });
         });
 
-        // 統計データ追加（showStatsがONの時のみ）
+        // 統計データ追加
         if (showStats) {
             const statsYears = [...new Set(stats.map(s => s.year))];
             statsYears.forEach(year => {
@@ -4955,72 +4954,88 @@ const TimelineView = ({
         });
     }, [entries, stats, searchTerm, filterTags, filterImportance, showStats]);
 
-    // 全タグ取得
     const allTags = useMemo(() => { 
         const tags = new Set(); 
         entries.forEach(e => e.tags?.forEach(t => tags.add(t))); 
         return Array.from(tags).sort(); 
     }, [entries]);
 
-    // --- ミニ数直線コンポーネント ---
+    // --- ★変更: 等間隔配置のミニ年表 ---
     const MiniTimeline = ({ items }) => {
         const events = items.filter(i => i.type === 'entry');
         if (events.length === 0) return null;
 
-        const minYear = events[0].year;
-        const maxYear = events[events.length - 1].year;
-        const totalSpan = maxYear - minYear || 1; 
-
-        // スタイル決定関数
+        // マーカーのスタイル
         const getMarkerStyle = (level) => {
             const lv = parseInt(level) || 2;
-            if (lv >= 6) return { color: "text-rose-500", bg: "bg-rose-500", size: 16, icon: Icons.Sun, z: 10 }; // 神話
-            if (lv === 5) return { color: "text-yellow-500", bg: "bg-yellow-500", size: 14, icon: Icons.Star, z: 8 }; // 伝説
-            if (lv === 4) return { color: "text-purple-500", bg: "bg-purple-500", size: 10, icon: Icons.Circle, z: 6 }; // 激動
-            if (lv === 3) return { color: "text-blue-500", bg: "bg-blue-500", size: 8, icon: Icons.Circle, z: 4 }; // 重要
-            return { color: "text-gray-300", bg: "bg-gray-300", size: 6, icon: Icons.Circle, z: 1 }; // 一般
+            if (lv >= 6) return { color: "text-rose-500", bg: "bg-rose-500", size: 16, icon: Icons.Sun, z: 10 }; 
+            if (lv === 5) return { color: "text-yellow-500", bg: "bg-yellow-500", size: 14, icon: Icons.Star, z: 8 }; 
+            if (lv === 4) return { color: "text-purple-500", bg: "bg-purple-500", size: 10, icon: Icons.Circle, z: 6 }; 
+            if (lv === 3) return { color: "text-blue-500", bg: "bg-blue-500", size: 8, icon: Icons.Circle, z: 4 }; 
+            return { color: "text-gray-400", bg: "bg-gray-300", size: 6, icon: Icons.Circle, z: 1 }; 
         };
 
         return (
             <div className="bg-white border-b border-gray-200 p-2 mb-4 shadow-sm sticky top-0 z-30 overflow-hidden">
                 <div className="overflow-x-auto custom-scrollbar pb-2">
-                    <div className="relative h-12 min-w-[800px] w-full mx-4 mt-4">
-                        {/* ベースライン */}
-                        <div className="absolute top-[20px] left-0 right-0 h-0.5 bg-gray-200 rounded-full"></div>
+                    {/* フレックスボックスで横並びにするコンテナ */}
+                    <div className="relative h-24 w-max min-w-full px-4 mt-6 flex items-end">
                         
-                        <div className="absolute top-[25px] left-0 text-[9px] font-mono text-gray-400">{minYear}</div>
-                        <div className="absolute top-[25px] right-0 text-[9px] font-mono text-gray-400">{maxYear}</div>
-
+                        {/* ベースライン（マーカーの後ろを通る線） */}
+                        <div className="absolute left-0 right-0 h-0.5 bg-gray-300 rounded-full" style={{ bottom: '24px' }}></div>
+                        
                         {events.map((item, idx) => {
                             const ev = item.data;
-                            const posPercent = Math.max(1, Math.min(99, ((ev.year - minYear) / totalSpan) * 100));
                             const style = getMarkerStyle(ev.importance);
                             const Icon = style.icon;
                             
-                            // タイトル省略 (10文字)
+                            // 段違い計算（5段階）
+                            const stagger = idx % 5; 
+                            const titleBottom = 34 + (stagger * 14); // 線(24px) + マーカー上(10px) + ずらし
+
+                            // タイトル省略
                             let shortTitle = ev.title;
                             if (shortTitle.length > 10) shortTitle = shortTitle.slice(0, 9) + '...';
 
                             return (
+                                // w-14 (56px) の固定幅を持つボックスを並べる
                                 <div 
                                     key={ev.id}
-                                    className="absolute transform -translate-x-1/2 flex flex-col items-center group cursor-pointer hover:z-50 transition-all"
-                                    style={{ left: `${posPercent}%`, top: '-5px', zIndex: style.z }}
+                                    className="relative flex flex-col items-center justify-end w-12 shrink-0 group cursor-pointer hover:z-50 transition-all"
+                                    style={{ height: '100%' }}
                                     onClick={() => document.getElementById(`event-${ev.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
                                 >
-                                    {/* タイトル (上部統一) */}
-                                    <div className={`text-[9px] whitespace-nowrap mb-0.5 transition-all origin-bottom ${style.color} font-bold opacity-70 group-hover:opacity-100 group-hover:scale-110 group-hover:-translate-y-1`}>
+                                    {/* タイトル (黒文字 & 高さずらし) */}
+                                    <div 
+                                        className="absolute whitespace-nowrap text-[9px] font-bold text-gray-900 opacity-80 group-hover:opacity-100 group-hover:scale-110 group-hover:font-black transition-all"
+                                        style={{ bottom: `${titleBottom}px` }}
+                                    >
                                         {shortTitle}
                                     </div>
+
+                                    {/* コネクタ線 */}
+                                    <div 
+                                        className="absolute w-px bg-gray-300 group-hover:bg-gray-400"
+                                        style={{ bottom: '24px', height: `${titleBottom - 24}px` }}
+                                    ></div>
                                     
-                                    {/* マーカー */}
-                                    <div className={`rounded-full bg-white ${style.color} shadow-sm group-hover:scale-125 transition-transform`}>
+                                    {/* マーカー (線の上に配置) */}
+                                    <div 
+                                        className={`absolute rounded-full bg-white ${style.color} shadow-sm group-hover:scale-150 transition-transform z-10 flex items-center justify-center`}
+                                        style={{ bottom: '16px' }} // 線(24px)の中心に合わせる調整
+                                    >
                                         <Icon size={style.size} fill={style.z >= 8 ? "currentColor" : "none"} />
                                     </div>
+
+                                    {/* 年号 (線の下に配置) */}
+                                    <div className="absolute bottom-0 text-[9px] font-mono text-gray-400 group-hover:text-blue-600 font-bold">
+                                        {ev.year}
+                                    </div>
                                     
-                                    {/* ツールチップ */}
-                                    <div className="absolute top-8 hidden group-hover:block bg-gray-800 text-white text-[9px] px-2 py-1 rounded whitespace-nowrap z-50 shadow-lg">
-                                        {ev.year}: {ev.title}
+                                    {/* ホバー時の詳細ツールチップ */}
+                                    <div className="absolute bottom-full mb-2 hidden group-hover:block bg-gray-900 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-50 shadow-xl border border-gray-700 left-1/2 transform -translate-x-1/2">
+                                        <span className="font-mono text-yellow-400 mr-1">{ev.year}年:</span>
+                                        {ev.title}
                                     </div>
                                 </div>
                             );
@@ -5059,7 +5074,7 @@ const TimelineView = ({
                         </button>
                     </div>
 
-                    {/* ★統計表示切り替えチェックボックス */}
+                    {/* 統計表示切り替えチェックボックス */}
                     <label className="flex items-center gap-2 cursor-pointer bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors select-none shrink-0">
                         <input 
                             type="checkbox" 
@@ -5102,7 +5117,7 @@ const TimelineView = ({
                 )}
             </div>
 
-            {/* ★ ミニ数直線 (上部に配置) */}
+            {/* ミニ数直線 (順序ベース) */}
             <MiniTimeline items={filteredItems} />
 
             {/* Main Timeline List */}

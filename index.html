@@ -4892,6 +4892,306 @@ const ProgressToast = ({ tasks }) => {
     );
 };
 
+// --- TimelineView コンポーネント (数直線 & 統計切替版) ---
+const TimelineView = ({ 
+    entries, 
+    nations, 
+    stats, 
+    onSelectEntry,
+    onEditEntry,
+    isAuthorized
+}) => {
+    // フィルタリング用ステート
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterTags, setFilterTags] = useState([]);
+    const [filterImportance, setFilterImportance] = useState([]);
+    const [showFilters, setShowFilters] = useState(false);
+    
+    // ★追加: 統計データを表示するかどうかのステート (デフォルトfalse)
+    const [showStats, setShowStats] = useState(false);
+    const [expandedStatsYears, setExpandedStatsYears] = useState([]);
+
+    // フィルタリング処理
+    const filteredItems = useMemo(() => {
+        let filteredEntries = entries;
+        if (searchTerm) {
+            const lowerTerm = searchTerm.toLowerCase();
+            filteredEntries = filteredEntries.filter(e => 
+                e.title.toLowerCase().includes(lowerTerm) || 
+                (e.reading && e.reading.toLowerCase().includes(lowerTerm)) || 
+                (e.content && e.content.toLowerCase().includes(lowerTerm)) || 
+                e.year.toString().includes(lowerTerm)
+            );
+        }
+        if (filterTags.length > 0) {
+            filteredEntries = filteredEntries.filter(e => e.tags && filterTags.every(tag => e.tags.includes(tag)));
+        }
+        if (filterImportance.length > 0) {
+            filteredEntries = filteredEntries.filter(e => filterImportance.includes(e.importance || 2));
+        }
+
+        const items = [];
+        // イベント追加
+        filteredEntries.forEach(entry => {
+            items.push({ type: 'entry', year: entry.year, month: entry.month || 0, day: entry.day || 0, data: entry });
+        });
+
+        // 統計データ追加（showStatsがONの時のみ）
+        if (showStats) {
+            const statsYears = [...new Set(stats.map(s => s.year))];
+            statsYears.forEach(year => {
+                if (searchTerm && !year.toString().includes(searchTerm)) return;
+                items.push({ type: 'stats_marker', year: year, month: -1, day: -1, id: `stats_marker_${year}` });
+            });
+        }
+
+        return items.sort((a, b) => {
+            if (a.year !== b.year) return a.year - b.year;
+            if (a.month !== b.month) return a.month - b.month;
+            return a.day - b.day;
+        });
+    }, [entries, stats, searchTerm, filterTags, filterImportance, showStats]);
+
+    // 全タグ取得
+    const allTags = useMemo(() => { 
+        const tags = new Set(); 
+        entries.forEach(e => e.tags?.forEach(t => tags.add(t))); 
+        return Array.from(tags).sort(); 
+    }, [entries]);
+
+    // --- ミニ数直線コンポーネント ---
+    const MiniTimeline = ({ items }) => {
+        const events = items.filter(i => i.type === 'entry');
+        if (events.length === 0) return null;
+
+        const minYear = events[0].year;
+        const maxYear = events[events.length - 1].year;
+        const totalSpan = maxYear - minYear || 1; 
+
+        // スタイル決定関数
+        const getMarkerStyle = (level) => {
+            const lv = parseInt(level) || 2;
+            if (lv >= 6) return { color: "text-rose-500", bg: "bg-rose-500", size: 16, icon: Icons.Sun, z: 10 }; // 神話
+            if (lv === 5) return { color: "text-yellow-500", bg: "bg-yellow-500", size: 14, icon: Icons.Star, z: 8 }; // 伝説
+            if (lv === 4) return { color: "text-purple-500", bg: "bg-purple-500", size: 10, icon: Icons.Circle, z: 6 }; // 激動
+            if (lv === 3) return { color: "text-blue-500", bg: "bg-blue-500", size: 8, icon: Icons.Circle, z: 4 }; // 重要
+            return { color: "text-gray-300", bg: "bg-gray-300", size: 6, icon: Icons.Circle, z: 1 }; // 一般
+        };
+
+        return (
+            <div className="bg-white border-b border-gray-200 p-2 mb-4 shadow-sm sticky top-0 z-30 overflow-hidden">
+                <div className="overflow-x-auto custom-scrollbar pb-2">
+                    <div className="relative h-12 min-w-[800px] w-full mx-4 mt-4">
+                        {/* ベースライン */}
+                        <div className="absolute top-[20px] left-0 right-0 h-0.5 bg-gray-200 rounded-full"></div>
+                        
+                        <div className="absolute top-[25px] left-0 text-[9px] font-mono text-gray-400">{minYear}</div>
+                        <div className="absolute top-[25px] right-0 text-[9px] font-mono text-gray-400">{maxYear}</div>
+
+                        {events.map((item, idx) => {
+                            const ev = item.data;
+                            const posPercent = Math.max(1, Math.min(99, ((ev.year - minYear) / totalSpan) * 100));
+                            const style = getMarkerStyle(ev.importance);
+                            const Icon = style.icon;
+                            
+                            // タイトル省略 (10文字)
+                            let shortTitle = ev.title;
+                            if (shortTitle.length > 10) shortTitle = shortTitle.slice(0, 9) + '...';
+
+                            return (
+                                <div 
+                                    key={ev.id}
+                                    className="absolute transform -translate-x-1/2 flex flex-col items-center group cursor-pointer hover:z-50 transition-all"
+                                    style={{ left: `${posPercent}%`, top: '-5px', zIndex: style.z }}
+                                    onClick={() => document.getElementById(`event-${ev.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                                >
+                                    {/* タイトル (上部統一) */}
+                                    <div className={`text-[9px] whitespace-nowrap mb-0.5 transition-all origin-bottom ${style.color} font-bold opacity-70 group-hover:opacity-100 group-hover:scale-110 group-hover:-translate-y-1`}>
+                                        {shortTitle}
+                                    </div>
+                                    
+                                    {/* マーカー */}
+                                    <div className={`rounded-full bg-white ${style.color} shadow-sm group-hover:scale-125 transition-transform`}>
+                                        <Icon size={style.size} fill={style.z >= 8 ? "currentColor" : "none"} />
+                                    </div>
+                                    
+                                    {/* ツールチップ */}
+                                    <div className="absolute top-8 hidden group-hover:block bg-gray-800 text-white text-[9px] px-2 py-1 rounded whitespace-nowrap z-50 shadow-lg">
+                                        {ev.year}: {ev.title}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    let entryCounter = 0;
+
+    // --- メイン描画 ---
+    return (
+        <div className="animate-fade-in h-full flex flex-col">
+            {/* Controls */}
+            <div className="bg-white border-b border-gray-200 p-4 shadow-sm flex flex-col gap-4 z-40">
+                <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                    {/* 検索バー & フィルタ */}
+                    <div className="relative flex-grow w-full md:w-auto flex gap-2">
+                        <div className="relative flex-grow">
+                            <Icons.Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                            <input 
+                                type="text" 
+                                placeholder="検索..." 
+                                className="pl-9 pr-4 py-2 bg-gray-100 border-transparent focus:bg-white focus:border-yellow-500 border rounded-full text-sm w-full transition-all"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <button 
+                            onClick={() => setShowFilters(!showFilters)} 
+                            className={`p-2 rounded-full transition-colors flex items-center gap-1 font-bold shrink-0 ${(showFilters || filterTags.length > 0 || filterImportance.length > 0) ? 'bg-yellow-500 text-white shadow' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                        >
+                            <Icons.Filter size={18} />
+                        </button>
+                    </div>
+
+                    {/* ★統計表示切り替えチェックボックス */}
+                    <label className="flex items-center gap-2 cursor-pointer bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors select-none shrink-0">
+                        <input 
+                            type="checkbox" 
+                            checked={showStats}
+                            onChange={(e) => setShowStats(e.target.checked)}
+                            className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 border-gray-300 cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-gray-600">
+                            統計データを表示
+                        </span>
+                    </label>
+                </div>
+
+                {/* 詳細フィルタパネル */}
+                {showFilters && (
+                    <div className="pt-2 border-t border-dashed border-gray-200 animate-fade-in">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-xs font-bold text-gray-400">FILTER OPTIONS</span>
+                            <button onClick={() => {setFilterTags([]); setFilterImportance([]);}} className="text-xs text-blue-600 hover:underline">クリア</button>
+                        </div>
+                        <div className="space-y-3">
+                            <div>
+                                <span className="text-[10px] font-bold text-gray-500 block mb-1">重要度:</span>
+                                <div className="flex flex-wrap gap-2">
+                                    {Object.entries(importanceLevels).map(([level, info]) => (
+                                        <button key={level} onClick={() => setFilterImportance(prev => prev.includes(parseInt(level)) ? prev.filter(l => l !== parseInt(level)) : [...prev, parseInt(level)])} className={`px-2 py-1 rounded text-[10px] border transition-all ${filterImportance.includes(parseInt(level)) ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>{info.label}</button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <span className="text-[10px] font-bold text-gray-500 block mb-1">タグ:</span>
+                                <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto custom-scrollbar">
+                                    {allTags.map(tag => (
+                                        <button key={tag} onClick={() => setFilterTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} className={`px-2 py-0.5 rounded-full text-[10px] border transition-all ${filterTags.includes(tag) ? 'bg-yellow-500 text-white border-yellow-500' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>#{tag}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* ★ ミニ数直線 (上部に配置) */}
+            <MiniTimeline items={filteredItems} />
+
+            {/* Main Timeline List */}
+            <div className="flex-grow p-4 relative min-h-[600px] pb-20">
+                {/* 中央の線 */}
+                <div className="absolute left-8 md:left-1/2 top-0 bottom-0 w-1.5 bg-gradient-to-b from-gray-800 via-gray-600 to-transparent transform -translate-x-1/2 rounded-full opacity-80 pointer-events-none"></div>
+
+                <div className="space-y-12">
+                    {filteredItems.map((item) => {
+                        // 統計マーカーの場合
+                        if (item.type === 'stats_marker') {
+                            const hasEntryInSameYear = filteredItems.some(i => i.type === 'entry' && i.year === item.year);
+                            return ( 
+                                <div key={item.id} className="relative z-10">
+                                    {!hasEntryInSameYear && (
+                                        <>
+                                            <div className="absolute left-1/2 transform -translate-x-1/2 top-4 w-3 h-3 bg-gray-300 rounded-full border-2 border-white"></div>
+                                            <div className="absolute left-1/2 transform -translate-x-1/2 top-8 bg-gray-100 text-gray-500 text-xs font-bold px-2 py-1 rounded shadow-sm border border-gray-200">{item.year}年</div>
+                                        </>
+                                    )}
+                                    <StatsDisplay year={item.year} stats={stats} expandedStatsYears={expandedStatsYears} setExpandedStatsYears={setExpandedStatsYears} nations={nations} />
+                                </div> 
+                            );
+                        }
+
+                        // 通常のイベントの場合
+                        const entry = item.data;
+                        const level = entry.importance || 2;
+                        const style = importanceLevels[level];
+                        const isRight = entryCounter % 2 !== 0;
+                        entryCounter++;
+
+                        let dotStyle = 'w-4 h-4 bg-gray-800 ring-4 ring-gray-200';
+                        if (level === 6) { dotStyle = 'w-8 h-8 bg-rose-600 ring-4 ring-rose-200 shadow-xl'; } 
+                        else if (level === 5) { dotStyle = 'w-6 h-6 bg-yellow-500 ring-4 ring-yellow-200'; } 
+                        else if (level === 4) { dotStyle = 'w-5 h-5 bg-purple-600 ring-4 ring-purple-200'; }
+
+                        return (
+                            <div key={entry.id} id={`event-${entry.id}`} className={`relative flex flex-col md:flex-row items-center ${isRight ? 'md:flex-row-reverse' : ''}`}>
+                                {/* 中央の日付マーカー */}
+                                <div className="absolute left-8 md:left-1/2 transform -translate-x-1/2 z-10 flex flex-col items-center group/date">
+                                    <div className={`${dotStyle} rounded-full shadow-lg mb-2 transition-all`}></div>
+                                    <div className={`bg-[#1a1a1a] text-xs font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap border flex flex-col items-center ${level === 6 ? 'border-rose-500 text-rose-400' : 'border-gray-700 text-yellow-500'}`}>
+                                        <span>{entry.year}年</span>
+                                        {entry.month && <span className="text-[10px] text-gray-300 font-normal mt-0.5">{CUSTOM_MONTHS[entry.month]}({entry.month}月){entry.day ? ` ${entry.day}日` : ''}</span>}
+                                    </div>
+                                </div>
+
+                                {/* 横線 */}
+                                <div className={`hidden md:block absolute w-[calc(50%-2rem)] border-t-2 ${level >= 4 ? 'border-yellow-500' : 'border-gray-300'} border-dashed ${isRight ? 'left-8' : 'right-8'}`}></div>
+                                <div className="hidden md:block w-1/2"></div>
+
+                                {/* コンテンツカード */}
+                                <div className={`w-full md:w-1/2 pl-16 md:pl-0 p-2 transition-all duration-300 ease-out hover:z-10 ${style.scale} ${isRight ? 'md:pr-12 md:pl-8' : 'md:pl-12 md:pr-8'}`}>
+                                    <div 
+                                        onClick={() => onSelectEntry(entry)} 
+                                        className={`relative cursor-pointer overflow-hidden rounded-lg shadow-md ${style.bg} border-l-4 ${style.color} hover:shadow-xl hover:-translate-y-1 transition-all p-5`}
+                                    >
+                                        <div className="mb-2">
+                                            {entry.reading && <p className="text-xs text-gray-500 mb-0.5 leading-none">{entry.reading}</p>}
+                                            <h3 className={`font-bold text-gray-900 leading-tight ${level >= 4 ? 'text-2xl' : 'text-lg'}`}>{entry.title}</h3>
+                                        </div>
+                                        <p className="text-gray-600 text-sm line-clamp-3 mb-3">{entry.content || '...'}</p>
+                                        <div className="flex flex-wrap gap-1">
+                                            {entry.tags?.map(tag => <NationTag key={tag} text={tag} nations={nations} year={entry.year} />)}
+                                        </div>
+                                        
+                                        {isAuthorized && (
+                                            <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={(e) => { e.stopPropagation(); onEditEntry(entry); }} className="p-1.5 bg-white text-gray-400 hover:text-blue-600 border border-gray-200 rounded-lg shadow-sm">
+                                                    <Icons.Edit2 size={14} />
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+
+                    {filteredItems.length === 0 && (
+                        <div className="text-center py-32">
+                            <Icons.Inbox size={48} className="mx-auto mb-4 opacity-20 text-gray-400" />
+                            <p className="text-gray-500 font-serif text-lg">表示する項目がありません</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- TimelineWiki (Main App) ---
 function TimelineWiki() {
     // --- State Definitions ---
@@ -5320,33 +5620,8 @@ function TimelineWiki() {
                              view === 'nation_profile' && selectedProfileNation ? <NationProfileView isAuthorized={canEdit} nation={selectedProfileNation} entries={entries} stats={stats} nations={nations} characters={characters} organizations={organizations} onClose={() => { setView('nation_list'); setSelectedProfileNation(null); }} onEdit={() => { setEditingNation(selectedProfileNation); setView('settings'); }} onEditEntry={handleEditEntryTransition} onEditNation={() => { setTargetNation(selectedProfileNation); setView('settings'); }} onEditStats={() => { setTargetNation(selectedProfileNation); setView('statsEdit'); }} onEditOverview={() => { setTargetNation(selectedProfileNation); setView('nation_overview'); }} updateNation={(updated) => { const newNations = nations.map(n => n.id === updated.id ? updated : n); setNations(newNations); saveToCloud({ nations: newNations }); setSelectedProfileNation(updated); }} onOpenDetail={handleOpenDetail} /> :
                              view === 'edit' && selectedEntry ? <EditForm entry={selectedEntry} nations={nations} onSave={(newData) => { const newEntries = [...entries]; const idx = newEntries.findIndex(e => e.id === newData.id); if (idx >= 0) newEntries[idx] = newData; else newEntries.push(newData); setEntries(newEntries); saveToCloud({ entries: newEntries }); setIsEditing(false); if(lastView === 'nation_profile') { setView('nation_profile'); } else { setView('timeline'); setSelectedEntry(null); } }} onCancel={() => { setIsEditing(false); if (lastView === 'detail') { setView('detail'); } else if (lastView === 'nation_profile') { setView('nation_profile'); setSelectedEntry(null); } else { setView('timeline'); setSelectedEntry(null); } }} /> :
                              view === 'help' ? <HelpView setView={setView} /> : 
-                             view === 'timeline' ? (
-                                <div className="animate-fade-in">
-                                    <div className="mb-8 sticky top-0 z-20 pt-4">
-                                        <div className="relative max-w-2xl mx-auto flex gap-2">
-                                            <div className="relative flex-grow"><Icons.Search className="absolute left-4 top-3.5 text-gray-400" size={20} /><input type="text" placeholder="検索..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-12 pr-6 py-3 rounded-lg shadow-lg border-none focus:ring-2 focus:ring-yellow-500 transition-all bg-white/95 backdrop-blur" /></div>
-                                            <button onClick={() => setShowFilters(!showFilters)} className={`p-3 rounded-lg shadow-lg transition-colors flex items-center gap-2 font-bold shrink-0 ${(showFilters || filterTags.length > 0 || filterImportance.length > 0) ? 'bg-yellow-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}><Icons.Filter size={20} /><span className="hidden md:inline">条件</span></button>
-                                        </div>
-                                        {showFilters && ( <div className="max-w-2xl mx-auto mt-4 bg-white p-6 rounded-lg shadow-xl border border-gray-200"><div className="flex justify-between items-center mb-4"><h3 className="font-bold text-gray-700">絞り込み条件</h3><button onClick={() => {setFilterTags([]); setFilterImportance([]);}} className="text-xs text-blue-600 hover:underline">条件をクリア</button></div><div className="mb-6"><label className="block text-xs font-bold text-gray-500 mb-2">重要度クラス</label><div className="flex flex-wrap gap-2">{Object.entries(importanceLevels).map(([level, info]) => <button key={level} onClick={() => setFilterImportance(prev => prev.includes(parseInt(level)) ? prev.filter(l => l !== parseInt(level)) : [...prev, parseInt(level)])} className={`px-3 py-1.5 rounded text-sm border transition-all ${filterImportance.includes(parseInt(level)) ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>{info.label}</button>)}</div></div><div><label className="block text-xs font-bold text-gray-500 mb-2">タグ</label><div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">{allTags.length > 0 ? allTags.map(tag => <button key={tag} onClick={() => setFilterTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} className={`px-3 py-1 rounded-full text-xs border flex items-center gap-1 transition-all ${filterTags.includes(tag) ? 'bg-yellow-500 text-white border-yellow-500' : 'bg-gray-50 text-gray-600 border-gray-200'}`}><Icons.Tag size={10} />{tag}</button>) : <span className="text-sm text-gray-400">タグなし</span>}</div></div></div> )}
-                                    </div>
-                                    <div className="relative min-h-[600px] pb-20">
-                                        <div className="absolute left-8 md:left-1/2 top-0 bottom-0 w-1.5 bg-gradient-to-b from-gray-800 via-gray-600 to-transparent transform -translate-x-1/2 rounded-full opacity-80"></div>
-                                        <div className="space-y-12">
-                                            {timelineItems.map((item, index) => {
-                                                if (item.type === 'stats_marker') {
-                                                    const hasEntryInSameYear = timelineItems.some(i => i.type === 'entry' && i.year === item.year);
-                                                    return ( <div key={item.id} className="relative z-10">{!hasEntryInSameYear && (<><div className="absolute left-1/2 transform -translate-x-1/2 top-4 w-3 h-3 bg-gray-300 rounded-full border-2 border-white"></div><div className="absolute left-1/2 transform -translate-x-1/2 top-8 bg-gray-100 text-gray-500 text-xs font-bold px-2 py-1 rounded shadow-sm border border-gray-200">{item.year}年</div></>)}<StatsDisplay year={item.year} stats={stats} expandedStatsYears={expandedStatsYears} setExpandedStatsYears={setExpandedStatsYears} nations={nations} /></div> );
-                                                }
-                                                const entry = item.data; const level = entry.importance || 2; const style = importanceLevels[level]; const isRight = entryCounter % 2 !== 0; entryCounter++;
-                                                let dotStyle = 'w-4 h-4 bg-gray-800 ring-4 ring-gray-200'; if (level === 6) { dotStyle = 'w-8 h-8 bg-rose-600 ring-4 ring-rose-200 shadow-xl'; } else if (level === 5) { dotStyle = 'w-6 h-6 bg-yellow-500 ring-4 ring-yellow-200'; } else if (level === 4) { dotStyle = 'w-5 h-5 bg-purple-600 ring-4 ring-purple-200'; }
-                                                return ( <div key={item.data.id} className={`relative flex flex-col md:flex-row items-center ${isRight ? 'md:flex-row-reverse' : ''}`}> <div className="absolute left-8 md:left-1/2 transform -translate-x-1/2 z-10 flex flex-col items-center group/date"><div className={`${dotStyle} rounded-full shadow-lg mb-2 transition-all`}></div><div className={`bg-[#1a1a1a] text-xs font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap border flex flex-col items-center ${level === 6 ? 'border-rose-500 text-rose-400' : 'border-gray-700 text-yellow-500'}`}><span>{entry.year}年</span>{entry.month && <span className="text-[10px] text-gray-300 font-normal mt-0.5">{CUSTOM_MONTHS[entry.month]}({entry.month}月){entry.day ? ` ${entry.day}日` : ''}</span>}</div></div> <div className={`hidden md:block absolute w-[calc(50%-2rem)] border-t-2 ${level >= 4 ? 'border-yellow-500' : 'border-gray-300'} border-dashed ${isRight ? 'left-8' : 'right-8'}`}></div><div className="hidden md:block w-1/2"></div> <div className={`w-full md:w-1/2 pl-16 md:pl-0 p-2 transition-all duration-300 ease-out hover:z-10 ${style.scale} ${isRight ? 'md:pr-12 md:pl-8' : 'md:pl-12 md:pr-8'}`}><div onClick={() => { setSelectedEntry(entry); setView('detail'); }} className={`relative cursor-pointer overflow-hidden rounded-lg shadow-md ${style.bg} border-l-4 ${style.color} hover:shadow-xl hover:-translate-y-1 transition-all p-5`}><div className="mb-2">{entry.reading && <p className="text-xs text-gray-500 mb-0.5 leading-none">{entry.reading}</p>}<h3 className={`font-bold text-gray-900 leading-tight ${level >= 4 ? 'text-2xl' : 'text-lg'}`}>{entry.title}</h3></div><p className="text-gray-600 text-sm line-clamp-3 mb-3">{entry.content || '...'}</p><div className="flex flex-wrap gap-1">{entry.tags?.map(tag => <NationTag key={tag} text={tag} nations={nations} year={entry.year} />)}</div></div></div> </div> );
-                                            })}
-                                            {timelineItems.length === 0 && <div className="text-center py-32"><p className="text-gray-500 font-serif text-lg">記録なし</p></div>}
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : 
-                            view === 'detail' && selectedEntry ? (
+                             view === 'timeline' ? (<TimelineView entries={entries} nations={nations} stats={stats} onSelectEntry={(entry) => { setSelectedEntry(entry); setView('detail'); }}onEditEntry={(entry) => handleEditEntryTransition(entry, 'timeline')} isAuthorized={canEdit}/>) : 
+                             view === 'detail' && selectedEntry ? (
                                 <DetailView 
                                     isAuthorized={canEdit} 
                                     entry={selectedEntry} 

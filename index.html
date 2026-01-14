@@ -5266,129 +5266,251 @@ const AdminConsoleView = ({ setView, allUsers, activeUserCount }) => {
     );
 };
 
-// ★チャットウィジェット（自動リンク対応版・修正済み）
-function ChatWidget({ user, db, userRole, glossary, onTermClick }) {
-    const [isOpen, setIsOpen] = React.useState(false);
-    const [messages, setMessages] = React.useState([]);
-    const [newMessage, setNewMessage] = React.useState('');
-    const [selectedIcon, setSelectedIcon] = React.useState('Star');
-    const messagesEndRef = React.useRef(null);
-
-    // チャット読み込み
-    React.useEffect(() => {
-        if (!isOpen) return;
-        return db.collection('chat')
-            .orderBy('createdAt', 'desc')
-            .limit(50)
-            .onSnapshot(snapshot => {
-                const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).reverse();
-                setMessages(msgs);
-                setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-            });
-    }, [isOpen, db]);
-
-    // メッセージ送信
-    const sendMessage = async (e) => {
-        e.preventDefault();
-        if (!newMessage.trim() || !user) return;
+// ★チャットウィジェット（自動リンク対応版）
+    function ChatWidget({ user, db, userRole, glossary, onTermClick }) { // glossaryとonTermClickを受け取る
+        const [isOpen, setIsOpen] = React.useState(false);
+        const [messages, setMessages] = React.useState([]);
+        const [inputText, setInputText] = React.useState("");
+        const [inputName, setInputName] = React.useState(user ? (user.displayName || '名無し') : 'ゲスト');
         
-        try {
-            await db.collection('chat').add({
-                text: newMessage,
-                uid: user.uid,
-                displayName: user.displayName || '名無し',
-                icon: selectedIcon,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            setNewMessage('');
-        } catch (error) {
-            console.error("Error sending message:", error);
-        }
-    };
+        // 新機能用ステート
+        const [selectedIcon, setSelectedIcon] = React.useState('Star');
+        const [selectedShape, setSelectedShape] = React.useState('std');
+        const [showIconPicker, setShowIconPicker] = React.useState(false);
 
-    if (!isOpen) {
-        return (
-            <button onClick={() => setIsOpen(true)} className="fixed bottom-6 right-6 bg-indigo-600 text-white p-4 rounded-full shadow-lg hover:bg-indigo-700 transition-all z-50">
-                <Icons.MessageCircle size={24} />
-            </button>
-        );
-    }
+        const BUBBLE_SHAPES = {
+            'std': { name: '標準', class: 'rounded-2xl rounded-tl-none' },
+            'box': { name: '四角', class: 'rounded-sm' },
+            'round': { name: '円形', class: 'rounded-3xl px-6' },
+            'sharp': { name: '鋭角', class: 'rounded-lg rounded-bl-none rounded-tr-none' }
+        };
 
-    return (
-        <div className="fixed bottom-6 right-6 w-96 h-[500px] bg-white rounded-xl shadow-2xl flex flex-col z-50 border border-gray-200 overflow-hidden animate-fade-in-up">
-            {/* ヘッダー */}
-            <div className="p-4 bg-indigo-600 text-white flex justify-between items-center">
-                <h3 className="font-bold flex items-center gap-2">
-                    <Icons.MessageCircle size={20} />
-                    チャット
-                </h3>
-                <button onClick={() => setIsOpen(false)} className="hover:bg-indigo-500 p-1 rounded">
-                    <Icons.X size={20} />
-                </button>
-            </div>
+        const canCustomize = ['admin', 'writer', 'super_admin'].includes(userRole);
 
-            {/* メッセージリスト */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-                {messages.map(msg => {
-                    const isOwn = user && msg.uid === user.uid;
-                    // ★ここを修正: 既存のIconsからコンポーネントを取得
-                    const IconComponent = Icons[msg.icon] || Icons['Star'];
-                    
+        // --- 用語集リンク生成関数 ---
+        const renderTextWithLinks = (text) => {
+            if (!glossary || !text) return text;
+
+            // 用語を用語集から抽出して長い順にソート（部分一致防止）
+            const terms = Object.keys(glossary).sort((a, b) => b.length - a.length);
+            if (terms.length === 0) return text;
+
+            // 正規表現を作成
+            const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const pattern = new RegExp(`(${terms.map(escapeRegExp).join('|')})`, 'g');
+
+            // テキストを分割してリンクに置換
+            const parts = text.split(pattern);
+            
+            return parts.map((part, index) => {
+                if (glossary[part]) {
+                    // 用語集にヒットした単語
                     return (
-                        <div key={msg.id} className={`flex gap-3 ${isOwn ? 'flex-row-reverse' : ''}`}>
-                            {/* ★ここを修正: コンポーネントとして描画 */}
-                            <div className={`p-2 rounded-full h-fit ${isOwn ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'}`}>
-                                <IconComponent size={20} />
-                            </div>
-                            
-                            <div className={`flex-1 max-w-[80%] ${isOwn ? 'text-right' : ''}`}>
-                                <div className="text-xs text-gray-500 mb-1">{msg.displayName}</div>
-                                <div className={`inline-block p-3 rounded-lg text-sm text-left ${
-                                    isOwn ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white border border-gray-200 rounded-tl-none shadow-sm'
-                                }`}>
-                                    <AutoLinkText text={msg.text} glossary={glossary} onTermClick={onTermClick} />
+                        <span 
+                            key={index} 
+                            className="text-blue-600 cursor-pointer hover:underline font-bold"
+                            title={glossary[part].desc || "クリックで用語集へ"} // ホバーで説明表示
+                            onClick={(e) => {
+                                e.stopPropagation(); // 吹き出し自体のクリックイベントなどを防止
+                                if (onTermClick) onTermClick(part);
+                            }}
+                        >
+                            {part}
+                        </span>
+                    );
+                }
+                // 通常のテキスト
+                return part;
+            });
+        };
+
+        // --- Firestoreからメッセージ取得 ---
+        React.useEffect(() => {
+            if (!isOpen) return;
+
+            const q = db.collection('chat_messages').orderBy('timestamp', 'asc').limit(50);
+            const unsubscribe = q.onSnapshot(snapshot => {
+                const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setMessages(msgs);
+                
+                setTimeout(() => {
+                    const div = document.getElementById('chat-messages-area');
+                    if(div) div.scrollTop = div.scrollHeight;
+                }, 100);
+            }, error => {
+                console.error("Chat Error:", error);
+            });
+            return () => unsubscribe();
+        }, [isOpen, db]);
+
+        // --- 送信処理 ---
+        const handleSend = async () => {
+            if (!inputText.trim()) return;
+
+            let idLabel = "(ゲスト)";
+            if (user && user.email) {
+                if (canCustomize) {
+                    const secretId = user.email.substring(0, 3).toUpperCase();
+                    idLabel = `ID:${secretId}`;
+                }
+            }
+
+            const payload = {
+                text: inputText,
+                name: inputName,
+                uid: user ? user.uid : 'guest',
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                icon: selectedIcon, 
+                userLabel: idLabel,
+                bubbleShape: canCustomize ? selectedShape : 'std'
+            };
+
+            try {
+                await db.collection('chat_messages').add(payload);
+                setInputText("");
+                setShowIconPicker(false);
+            } catch (e) {
+                alert("送信エラー: " + e.message);
+            }
+        };
+
+        const formatDate = (ts) => {
+            if (!ts) return '';
+            const date = ts.toDate ? ts.toDate() : new Date(ts);
+            return `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
+        };
+
+        return (
+            <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end">
+                {isOpen && (
+                    <div className="bg-white border border-gray-300 shadow-2xl rounded-lg w-80 mb-4 flex flex-col overflow-hidden animate-fade-in-up" style={{height: '500px'}}>
+                        
+                        {/* ヘッダー */}
+                        <div className="bg-gray-800 text-white p-3 font-bold flex justify-between items-center shadow">
+                            <span>💬 雑談・議論チャット</span>
+                            <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-white">✕</button>
+                        </div>
+
+                        {/* メッセージエリア */}
+                        <div id="chat-messages-area" className="flex-1 overflow-y-auto p-4 bg-gray-50 space-y-4">
+                            {messages.map(msg => {
+                                const isMe = user && msg.uid === user.uid;
+                                const shapeClass = BUBBLE_SHAPES[msg.bubbleShape || 'std'].class;
+                                // 既存のIconsコンポーネントを参照する
+const IconComponent = Icons[msg.icon] || Icons['Star'];
+
+                                return (
+                                    <div key={msg.id} className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+                                        {/* アイコン */}
+                                        <div className={`p-2 rounded-full ${isOwn ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'}`}>
+    {/* コンポーネントとして描画（サイズはCSSかpropsで調整） */}
+    <IconComponent />
+</div>
+
+                                        {/* 吹き出し */}
+                                        <div className={`max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                                            <div className="flex items-baseline gap-2 mb-1">
+                                                <span className="text-xs font-bold text-gray-700">{msg.name}</span>
+                                                <span className="text-[10px] text-gray-400 font-mono bg-gray-100 px-1 rounded">
+                                                    {msg.userLabel || '(ゲスト)'}
+                                                </span>
+                                            </div>
+                                            
+                                            <div className={`py-2 px-3 text-sm shadow-sm border ${isMe ? 'bg-blue-100 border-blue-200 text-blue-900' : 'bg-white border-gray-200 text-gray-800'} ${shapeClass}`}>
+                                                {/* ★リンク化関数を通して表示 */}
+                                                {renderTextWithLinks(msg.text)}
+                                            </div>
+
+                                            <span className="text-[10px] text-gray-400 mt-1">
+                                                {formatDate(msg.timestamp)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* 入力エリア */}
+                        <div className="p-3 bg-white border-t border-gray-200 relative">
+                            {showIconPicker && (
+                                <div className="absolute bottom-full left-0 w-full bg-white border border-gray-300 shadow-lg p-2 grid grid-cols-6 gap-2 max-h-40 overflow-y-auto z-10 rounded-t-lg">
+                                    {Object.keys(CONST.ICONS).map(key => (
+                                        <button 
+                                            key={key}
+                                            onClick={() => { setSelectedIcon(key); setShowIconPicker(false); }}
+                                            className={`p-1 rounded hover:bg-gray-100 ${selectedIcon === key ? 'bg-blue-100 ring-2 ring-blue-400' : ''}`}
+                                            title={key}
+                                        >
+                                            <div className="w-5 h-5 text-gray-600" dangerouslySetInnerHTML={{ __html: CONST.ICONS[key] }}></div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={() => setShowIconPicker(!showIconPicker)}
+                                        className="w-8 h-8 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-50 text-gray-600"
+                                        title="アイコン変更"
+                                    >
+                                        <div className="w-5 h-5" dangerouslySetInnerHTML={{ __html: CONST.ICONS[selectedIcon] || CONST.ICONS['Star'] }}></div>
+                                    </button>
+
+                                    <input 
+                                        type="text" 
+                                        className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs"
+                                        placeholder="名前"
+                                        value={inputName}
+                                        onChange={(e) => setInputName(e.target.value)}
+                                    />
+                                </div>
+
+                                {canCustomize && (
+                                    <div className="flex gap-1 overflow-x-auto pb-1">
+                                        {Object.keys(BUBBLE_SHAPES).map(key => (
+                                            <button
+                                                key={key}
+                                                onClick={() => setSelectedShape(key)}
+                                                className={`text-[10px] px-2 py-0.5 rounded border ${selectedShape === key ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-100 text-gray-600 border-gray-200'}`}
+                                            >
+                                                {BUBBLE_SHAPES[key].name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="text" 
+                                        className="flex-1 border border-gray-300 rounded px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                        placeholder="メッセージ..."
+                                        value={inputText}
+                                        onChange={(e) => setInputText(e.target.value)}
+                                        onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                                    />
+                                    <button 
+                                        onClick={handleSend}
+                                        className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 transition-colors"
+                                    >
+                                        <div className="w-4 h-4" dangerouslySetInnerHTML={{ __html: CONST.ICONS.ArrowRight || '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>' }}></div>
+                                    </button>
                                 </div>
                             </div>
                         </div>
-                    );
-                })}
-                <div ref={messagesEndRef} />
-            </div>
+                    </div>
+                )}
 
-            {/* 入力エリア */}
-            <form onSubmit={sendMessage} className="p-3 border-t bg-white">
-                <div className="flex gap-2 mb-2 overflow-x-auto pb-2 scrollbar-hide">
-                    {/* アイコン選択も既存のIconsを使用するように調整 */}
-                    {Object.keys(Icons).slice(0, 6).map(key => {
-                        const Icon = Icons[key];
-                        return (
-                            <button
-                                key={key}
-                                type="button"
-                                onClick={() => setSelectedIcon(key)}
-                                className={`p-2 rounded hover:bg-gray-100 flex-shrink-0 ${selectedIcon === key ? 'bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200' : 'text-gray-400'}`}
-                            >
-                                <Icon size={18} />
-                            </button>
-                        );
-                    })}
-                </div>
-                <div className="flex gap-2">
-                    <input
-                        type="text"
-                        value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
-                        placeholder="メッセージを入力..."
-                        className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    <button type="submit" disabled={!newMessage.trim()} className="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                        <Icons.Send size={18} />
-                    </button>
-                </div>
-            </form>
-        </div>
-    );
-}
+                <button 
+                    onClick={() => setIsOpen(!isOpen)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-transform hover:scale-105 flex items-center justify-center"
+                >
+                    <span className="text-2xl">💬</span>
+                </button>
+            </div>
+        );
+    }
+
 
 // --- TimelineWiki (Main App) ---
 function TimelineWiki() {

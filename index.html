@@ -5581,6 +5581,18 @@ function TimelineWiki() {
             }
 
             await Promise.all(promises);
+            // ★追加: 保存成功時にログを記録
+            // 何を保存したか判定してメッセージを作る
+            let details = [];
+            if (newData.entries) details.push("年表");
+            if (newData.nations) details.push("国家");
+            if (newData.stats) details.push("統計");
+            if (newData.characters) details.push("人物");
+            if (newData.organizations) details.push("組織");
+            if (newData.glossary) details.push("用語");
+            
+            const detailMsg = details.length > 0 ? `${details.join(', ')} を更新` : "データを更新";
+            logActivity('データ保存', detailMsg, currentUser); // <--- これを追加
         } catch (error) {
             console.error("Save error:", error);
         }
@@ -5601,7 +5613,7 @@ function TimelineWiki() {
 
     // --- Handlers ---
     const handleApplyAccount = async () => { if(!currentUser) return; try { await db.collection('users').doc(currentUser.uid).set({ email: currentUser.email, role: 'pending', appliedAt: new Date().toISOString() }, { merge: true }); alert("申請しました。管理者の承認をお待ちください。"); } catch(e) { alert("エラー: " + e.message); } };
-    const handleApproveUser = async (uid, newRole) => { try { if (newRole === 'reject') { await db.collection('users').doc(uid).update({ role: 'rejected' }); } else { await db.collection('users').doc(uid).update({ role: newRole }); } } catch(e) { alert("更新エラー"); } };
+    const handleApproveUser = async (uid, newRole) => { try { if (newRole === 'reject') { await db.collection('users').doc(uid).update({ role: 'rejected' }); } else { await db.collection('users').doc(uid).update({ role: newRole }); } logActivity('権限変更', `ユーザーID: ${uid} を ${newRole} に変更`, currentUser); } catch(e) { alert("更新エラー"); } };
     const handleLogin = async () => { try { await auth.signInWithPopup(googleProvider); } catch (e) { alert(e.message); } };
     const handleLogout = async () => { try { await auth.signOut(); setView('menu'); } catch (e) { console.error(e); } };
 

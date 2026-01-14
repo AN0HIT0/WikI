@@ -5825,26 +5825,20 @@ function TimelineWiki() {
 
     return (
         <>
-<ChatWidget 
-    // this.state.user を渡す
-    user={this.state.user} 
-    
-    // db はグローバル変数か props なのでそのままでOK（もしエラーなら this.props.db か firebase.firestore() を確認）
-    db={db} 
-    
-    // this.state.userRole を渡す
-    userRole={this.state.userRole} 
-    
-    // ★ここが重要: this.state.glossary を渡さないとリンクが作られません
-    glossary={this.state.glossary} 
-    
-    onTermClick={(term) => {
-        console.log("Jump to:", term);
-        // クラスコンポーネントなので this.setState で画面を切り替えます
-        // もし用語検索欄に自動入力させたい場合は、searchTerm: term なども追加すると良いでしょう
-        this.setState({ view: 'glossary' }); 
-    }}
-/>
+   {/* チャットウィジェット呼び出し部分の修正版 */}
+            <ChatWidget 
+                user={currentUser} 
+                db={db} 
+                userRole={userRole} // 修正: 正しい変数名に変更
+                glossary={glossaryData} // 修正: 正しい変数名に変更
+                onTermClick={(term) => {
+                    // 簡易的な移動処理
+                    setView('glossary');
+                    // ※用語の自動選択機能は、GlossaryViewの状態管理を変える必要があるため
+                    //   一旦「用語集画面を開く」だけにしています。
+                    console.log("Jump to:", term); 
+                }}
+            />
             <input type="file" ref={fileInputRef} onChange={handleImportFile} className="hidden" accept=".json" disabled={!canEdit} />
             <input type="file" ref={convertFileInputRef} onChange={handleConvertFile} className="hidden" accept=".json" disabled={!canEdit} />
             <StatsInputModal showStatsInput={showStatsInput} setShowStatsInput={setShowStatsInput} nations={nations} stats={stats} setStats={setStats} />

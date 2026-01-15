@@ -5524,7 +5524,7 @@ function ChatWidget({ user, db, userRole, glossary, onTermClick }) {
     );
 }
 
-// --- TimelineWiki (Main App) - ヘッダー修正完全版 ---
+// --- TimelineWiki (Main App) - 修正完全版 ---
 function TimelineWiki() {
     // --- State Definitions ---
     const [entries, setEntries] = React.useState([]);
@@ -5545,14 +5545,14 @@ function TimelineWiki() {
     const [selectedEntry, setSelectedEntry] = React.useState(null);
     const [selectedProfileNation, setSelectedProfileNation] = React.useState(null);
     const [isEditing, setIsEditing] = React.useState(false);
-    const [editingNation, setEditingNation] = React.useState(null); // 追加: SettingsView用
-    const [targetNation, setTargetNation] = React.useState(null);   // 追加: Overview/Settings用
+    const [editingNation, setEditingNation] = React.useState(null);
+    const [targetNation, setTargetNation] = React.useState(null);
     const [showStatsInput, setShowStatsInput] = React.useState(false);
 
     // User & Auth
     const [currentUser, setCurrentUser] = React.useState(null);
     const [userRole, setUserRole] = React.useState('guest'); 
-    const [allUsers, setAllUsers] = React.useState([]);
+    const [allUsers, setAllUsers] = React.useState([]); // 管理者用
     const [activeUserCount, setActiveUserCount] = React.useState(0);
     
     // History & Tasks
@@ -5564,11 +5564,10 @@ function TimelineWiki() {
     const fileInputRef = React.useRef(null);
     const convertFileInputRef = React.useRef(null);
 
-    const ADMIN_EMAIL = 'anohitodayoanohito@gmail.com';
+    const ADMIN_EMAIL = 'anohitodayoanohito@gmail.com'; // 管理者メアド
     const canEdit = userRole === 'admin' || userRole === 'writer' || (currentUser && currentUser.email === ADMIN_EMAIL);
     const isAdmin = userRole === 'admin' || (currentUser && currentUser.email === ADMIN_EMAIL);
     
-    // 権限がない場合の無効化スタイル
     const disabledClass = !canEdit ? "opacity-30 grayscale pointer-events-none select-none" : "";
 
     // --- Helper Functions ---
@@ -5582,8 +5581,6 @@ function TimelineWiki() {
     // --- Effects: Load Data ---
     React.useEffect(() => {
         const unsubscribers = [];
-        
-        // Load Categories
         const categories = [
             { key: 'entries', label: '年表データ', setter: setEntries },
             { key: 'nations', label: '国家データ', setter: setNations },
@@ -5639,7 +5636,7 @@ function TimelineWiki() {
         return () => unsubscribers.forEach(u => u());
     }, []);
 
-    // --- Effects: Auth ---
+    // --- Effects: Auth & Admin ---
     React.useEffect(() => {
         const unsub = auth.onAuthStateChanged(async (u) => {
             setCurrentUser(u);
@@ -5662,6 +5659,16 @@ function TimelineWiki() {
         return () => unsub();
     }, []);
 
+    // ★追加: 管理者用ユーザーリスト取得
+    React.useEffect(() => {
+        if (!isAdmin) return;
+        const unsub = db.collection('users').onSnapshot(snap => {
+            const users = snap.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+            setAllUsers(users);
+        }, err => console.error("Users load error:", err));
+        return () => unsub();
+    }, [isAdmin]);
+
     // --- Active User Count ---
     React.useEffect(() => {
         const sid = sessionStorage.getItem('sid') || Math.random().toString(36);
@@ -5676,6 +5683,33 @@ function TimelineWiki() {
     }, [currentUser]);
 
     // --- Actions ---
+
+    // ★追加: ユーザー承認・権限変更関数
+    const handleApproveUser = async (uid, newRole) => {
+        if (!isAdmin) return;
+        try {
+            await db.collection('users').doc(uid).update({ role: newRole });
+            // ※onSnapshotで自動更新されるためstateの手動更新は不要
+        } catch (error) {
+            alert("権限更新エラー: " + error.message);
+        }
+    };
+
+    // ★追加: アカウント申請（再申請など）
+    const handleApplyAccount = async () => {
+        if (!currentUser) return;
+        try {
+            await db.collection('users').doc(currentUser.uid).set({
+                email: currentUser.email,
+                role: 'pending',
+                appliedAt: new Date().toISOString()
+            }, { merge: true });
+            alert("編集権限を申請しました。管理者の承認をお待ちください。");
+        } catch (e) {
+            alert("申請エラー: " + e.message);
+        }
+    };
+
     // 告知保存
     const saveAnnouncements = (text) => {
         if (!canEdit) return;
@@ -5684,7 +5718,7 @@ function TimelineWiki() {
             .catch(e => alert("告知保存エラー: " + e.message));
     };
 
-    // クラウド保存 (Chunking)
+    // クラウド保存
     const CHUNK_SIZE = 800000;
     const chunkString = (str, len) => {
         const size = Math.ceil(str.length / len);
@@ -5741,7 +5775,7 @@ function TimelineWiki() {
         return () => clearTimeout(timer);
     }, [entries, nations, stats, characters, organizations, glossaryData, uiScale]);
 
-    // Navigation Handlers
+    // Navigation & Auth Handlers
     const handleLogin = async () => { try { await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); } catch (e) { alert(e.message); } };
     const handleLogout = async () => { await auth.signOut(); setView('menu'); };
     const handleCreateNew = () => { if(!canEdit) return; setSelectedEntry({ id: Date.now().toString(), title: '', year: 2000 }); setIsEditing(true); setView('edit'); };
@@ -5788,10 +5822,10 @@ function TimelineWiki() {
                 />
             ) : (
                 <div className="min-h-screen bg-[#f0f2f5] font-sans text-gray-800 flex flex-col h-screen overflow-hidden">
-                    {/* ★★★ ヘッダー完全版 (アイコン群復活) ★★★ */}
+                    {/* Header */}
                     <header className="bg-[#1a1a1a] text-white p-2 shadow-lg shrink-0 z-50 border-b-4 border-yellow-600">
                         <div className="max-w-7xl mx-auto flex justify-between items-center overflow-x-auto custom-scrollbar pb-1 gap-4">
-                            {/* 左側: MENUとタイトル */}
+                            {/* 左側 */}
                             <div className="flex items-center gap-4 shrink-0">
                                 <button onClick={() => setView('menu')} className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors border border-gray-600">
                                     <Icons.ArrowLeft size={16} /> MENU
@@ -5803,7 +5837,7 @@ function TimelineWiki() {
                                 </div>
                             </div>
 
-                            {/* 右側: ツールバー群 */}
+                            {/* 右側: ツールバー */}
                             <div className="flex items-center gap-3 shrink-0">
                                 {/* ZOOM */}
                                 <div className="flex flex-col items-center gap-0.5">
@@ -5815,7 +5849,7 @@ function TimelineWiki() {
                                     </div>
                                 </div>
 
-                                {/* MANAGE (権限必要) */}
+                                {/* MANAGE */}
                                 <div className={`flex flex-col items-center gap-0.5 ${disabledClass}`}>
                                     <span className="text-[8px] text-yellow-600/80 font-bold uppercase tracking-widest">MANAGE</span>
                                     <div className="flex items-center bg-gray-800/80 p-1 rounded-xl border border-gray-700 gap-1">
@@ -5834,7 +5868,7 @@ function TimelineWiki() {
                                     </div>
                                 </div>
 
-                                {/* VIEW (全員OK) */}
+                                {/* VIEW */}
                                 <div className="flex flex-col items-center gap-0.5">
                                     <span className="text-[8px] text-blue-400/60 font-bold uppercase tracking-widest">VIEW</span>
                                     <div className="flex items-center bg-gray-800/80 p-1 rounded-xl border border-gray-700 gap-1">
@@ -5877,12 +5911,11 @@ function TimelineWiki() {
                         </div>
                     </header>
 
-                    {/* メインコンテンツ */}
+                    {/* Main Content */}
                     <div className="flex-grow overflow-auto bg-[#f0f2f5] relative w-full h-full">
                         <main className={(view === 'power_structure' || view === 'genealogy') ? "w-full h-full p-0 overflow-hidden" : "max-w-5xl mx-auto p-4 origin-top-left"} 
                               style={(view === 'power_structure' || view === 'genealogy') ? {} : { zoom: uiScale / 100 }}>
                              
-                             {/* 条件分岐: 各Viewの表示 */}
                              {view === 'settings' ? (canEdit ? <SettingsView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} setTargetNation={setTargetNation} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
                              view === 'nation_overview' ? (canEdit ? <NationOverviewView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
                              view === 'characters' ? (canEdit ? <CharacterManager setView={setView} nations={nations} characters={characters} setCharacters={setCharacters} organizations={organizations} setOrganizations={setOrganizations} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 

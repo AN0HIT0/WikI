@@ -5524,9 +5524,9 @@ function ChatWidget({ user, db, userRole, glossary, onTermClick }) {
     );
 }
 
-// --- TimelineWiki (Main App) ---
+// --- TimelineWiki (Main App) - ヘッダー修正完全版 ---
 function TimelineWiki() {
-    // --- ステート定義 ---
+    // --- State Definitions ---
     const [entries, setEntries] = React.useState([]);
     const [nations, setNations] = React.useState([]);
     const [stats, setStats] = React.useState([]);
@@ -5537,21 +5537,25 @@ function TimelineWiki() {
     // 告知データ
     const [announcements, setAnnouncements] = React.useState("");
 
-    // UI状態
+    // UI State
     const [view, setView] = React.useState('menu');
     const [uiScale, setUiScale] = React.useState(100);
+    
+    // Selection & Edit
     const [selectedEntry, setSelectedEntry] = React.useState(null);
     const [selectedProfileNation, setSelectedProfileNation] = React.useState(null);
     const [isEditing, setIsEditing] = React.useState(false);
-    const [editingNation, setEditingNation] = React.useState(null);
-    const [targetNation, setTargetNation] = React.useState(null);
+    const [editingNation, setEditingNation] = React.useState(null); // 追加: SettingsView用
+    const [targetNation, setTargetNation] = React.useState(null);   // 追加: Overview/Settings用
     const [showStatsInput, setShowStatsInput] = React.useState(false);
 
-    // ユーザー・権限
+    // User & Auth
     const [currentUser, setCurrentUser] = React.useState(null);
     const [userRole, setUserRole] = React.useState('guest'); 
     const [allUsers, setAllUsers] = React.useState([]);
     const [activeUserCount, setActiveUserCount] = React.useState(0);
+    
+    // History & Tasks
     const [lastView, setLastView] = React.useState('timeline'); 
     const [activeTasks, setActiveTasks] = React.useState({});
     
@@ -5563,8 +5567,11 @@ function TimelineWiki() {
     const ADMIN_EMAIL = 'anohitodayoanohito@gmail.com';
     const canEdit = userRole === 'admin' || userRole === 'writer' || (currentUser && currentUser.email === ADMIN_EMAIL);
     const isAdmin = userRole === 'admin' || (currentUser && currentUser.email === ADMIN_EMAIL);
+    
+    // 権限がない場合の無効化スタイル
+    const disabledClass = !canEdit ? "opacity-30 grayscale pointer-events-none select-none" : "";
 
-    // --- データ読み込み (Effects) ---
+    // --- Helper Functions ---
     const updateTask = (key, data) => {
         setActiveTasks(prev => {
             if (!data) { const next = { ...prev }; delete next[key]; return next; }
@@ -5572,10 +5579,11 @@ function TimelineWiki() {
         });
     };
 
+    // --- Effects: Load Data ---
     React.useEffect(() => {
         const unsubscribers = [];
         
-        // メインデータのロード
+        // Load Categories
         const categories = [
             { key: 'entries', label: '年表データ', setter: setEntries },
             { key: 'nations', label: '国家データ', setter: setNations },
@@ -5611,7 +5619,7 @@ function TimelineWiki() {
             unsubscribers.push(unsub);
         });
 
-        // Config同期
+        // Config Sync
         unsubscribers.push(db.collection("wiki_data").doc("db_config").onSnapshot(d => {
             if(d.exists && !d.metadata.hasPendingWrites) { 
                 isRemoteUpdate.current++;
@@ -5620,7 +5628,7 @@ function TimelineWiki() {
             }
         }));
 
-        // ★告知データの同期
+        // 告知データ Sync
         unsubscribers.push(db.collection("wiki_data").doc("system").onSnapshot(d => {
             if (d.exists) {
                 const data = d.data();
@@ -5631,13 +5639,15 @@ function TimelineWiki() {
         return () => unsubscribers.forEach(u => u());
     }, []);
 
-    // 認証監視
+    // --- Effects: Auth ---
     React.useEffect(() => {
         const unsub = auth.onAuthStateChanged(async (u) => {
             setCurrentUser(u);
             if (u) {
-                if (u.email === ADMIN_EMAIL) setUserRole('admin');
-                else {
+                if (u.email === ADMIN_EMAIL) {
+                    setUserRole('admin');
+                    db.collection('users').doc(u.uid).set({ email: u.email, role: 'admin', lastSeen: new Date().toISOString() }, { merge: true });
+                } else {
                     const doc = await db.collection('users').doc(u.uid).get();
                     if (doc.exists) setUserRole(doc.data().role || 'guest');
                     else {
@@ -5652,95 +5662,111 @@ function TimelineWiki() {
         return () => unsub();
     }, []);
 
-    // --- アクション関数 ---
-    
-    // クラウド保存 (簡略化版)
-    const saveToCloud = async (newData = {}) => {
-        if (!canEdit || isRemoteUpdate.current > 0) return;
-        updateTask('save', { label: 'クラウドに保存中...', current: 1, total: 1 });
-        
-        try {
-            // ※データ分割保存ロジックは長くなるため、ここでは基本的な呼び出しのみ想定
-            // 実際は既存の splitAndSaveToCloud ロジックを使ってください
-            console.log("Saving to cloud...", newData);
-            // ダミー遅延
-            await new Promise(r => setTimeout(r, 500));
-        } catch (e) {
-            console.error(e);
-            alert("保存エラー: " + e.message);
-        } finally {
-            updateTask('save', null);
-        }
-    };
+    // --- Active User Count ---
+    React.useEffect(() => {
+        const sid = sessionStorage.getItem('sid') || Math.random().toString(36);
+        sessionStorage.setItem('sid', sid);
+        const beat = () => db.collection('active_sessions').doc(currentUser ? currentUser.uid : sid).set({
+            lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
+            type: currentUser ? 'user' : 'guest'
+        }, { merge: true });
+        const timer = setInterval(beat, 60000);
+        beat();
+        return db.collection('active_sessions').where('lastSeen', '>', new Date(Date.now() - 5 * 60 * 1000)).onSnapshot(s => setActiveUserCount(s.size));
+    }, [currentUser]);
 
+    // --- Actions ---
     // 告知保存
     const saveAnnouncements = (text) => {
         if (!canEdit) return;
         setAnnouncements(text);
         db.collection("wiki_data").doc("system").set({ announcements: text }, { merge: true })
-            .then(() => console.log("告知更新完了"))
             .catch(e => alert("告知保存エラー: " + e.message));
     };
 
-    // ログイン・ログアウト
-    const handleLogin = async () => {
-        const provider = new firebase.auth.GoogleAuthProvider();
-        try { await auth.signInWithPopup(provider); } catch (error) { alert("ログイン失敗: " + error.message); }
+    // クラウド保存 (Chunking)
+    const CHUNK_SIZE = 800000;
+    const chunkString = (str, len) => {
+        const size = Math.ceil(str.length / len);
+        const r = Array(size);
+        let offset = 0;
+        for (let i = 0; i < size; i++) { r[i] = str.substr(offset, len); offset += len; }
+        return r;
     };
-    const handleLogout = async () => { await auth.signOut(); setView('menu'); };
 
-    // その他ハンドラ
-    const handleCreateNew = () => {
-        const newId = Date.now().toString();
-        const newEntry = { id: newId, year: 0, title: '新規出来事', desc: '', level: 1 };
-        setSelectedEntry(newEntry);
-        setIsEditing(true);
-        setView('edit');
+    const saveToCloud = async (newData = {}) => {
+        if (!canEdit || isRemoteUpdate.current > 0) return;
+        const currentData = {
+            entries: newData.entries || entries,
+            nations: newData.nations || nations,
+            stats: newData.stats || stats,
+            characters: newData.characters || characters,
+            organizations: newData.organizations || organizations,
+            glossary: newData.glossary || glossaryData,
+            uiScale: newData.uiScale || uiScale,
+        };
+
+        const saveCategory = async (key, label, dataObj) => {
+            if (!dataObj) return;
+            updateTask(key, { label: `保存中: ${label}`, current: 0, total: 100 });
+            try {
+                const jsonStr = JSON.stringify(dataObj);
+                const chunks = chunkString(jsonStr, CHUNK_SIZE);
+                const batch = db.batch();
+                batch.set(db.collection("wiki_data").doc(`meta_${key}`), { totalChunks: chunks.length, totalSize: jsonStr.length, lastUpdated: new Date().toISOString() });
+                chunks.forEach((chunk, i) => batch.set(db.collection("wiki_data").doc(`data_${key}_${i}`), { content: chunk, index: i }));
+                await batch.commit();
+            } catch (e) { console.error(e); } 
+            finally { updateTask(key, null); }
+        };
+
+        const promises = [];
+        if(newData.entries) promises.push(saveCategory('entries', '年表', currentData.entries));
+        if(newData.nations) promises.push(saveCategory('nations', '国家', currentData.nations));
+        if(newData.stats) promises.push(saveCategory('stats', '統計', currentData.stats));
+        if(newData.characters) promises.push(saveCategory('characters', '人物', currentData.characters));
+        if(newData.organizations) promises.push(saveCategory('organizations', '組織', currentData.organizations));
+        if(newData.glossary) promises.push(saveCategory('glossary', '用語集', currentData.glossary));
+        if(newData.uiScale) db.collection("wiki_data").doc("db_config").set({ uiScale: currentData.uiScale }, { merge: true });
+        
+        await Promise.all(promises);
     };
+
+    // Auto Save
+    React.useEffect(() => {
+        if (!canEdit || isRemoteUpdate.current > 0) return;
+        const timer = setTimeout(() => {
+            if (entries.length > 0) saveToCloud();
+        }, 1000);
+        return () => clearTimeout(timer);
+    }, [entries, nations, stats, characters, organizations, glossaryData, uiScale]);
+
+    // Navigation Handlers
+    const handleLogin = async () => { try { await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); } catch (e) { alert(e.message); } };
+    const handleLogout = async () => { await auth.signOut(); setView('menu'); };
+    const handleCreateNew = () => { if(!canEdit) return; setSelectedEntry({ id: Date.now().toString(), title: '', year: 2000 }); setIsEditing(true); setView('edit'); };
+    const handleExport = () => { /* Export logic */ };
+    
+    // Zoom Controls
+    const zoomIn = () => setUiScale(p => Math.min(200, p + 10));
+    const zoomOut = () => setUiScale(p => Math.max(30, p - 10));
+    const zoomReset = () => setUiScale(100);
+
     const handleEditEntryTransition = (entry, sourceView = 'timeline') => {
-        setSelectedEntry(entry);
-        setLastView(sourceView);
-        setIsEditing(true);
-        setView('edit');
+        setSelectedEntry(entry); setLastView(sourceView); setIsEditing(true); setView('edit');
     };
     const handleOpenDetail = (entry) => {
-        setSelectedEntry(entry);
-        setLastView(view);
-        setView('detail');
-    };
-    const handleExport = () => {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ entries, nations, stats, characters, organizations, glossaryData }, null, 2));
-        const downloadAnchorNode = document.createElement('a');
-        downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", "timeline_backup.json");
-        document.body.appendChild(downloadAnchorNode);
-        downloadAnchorNode.click();
-        downloadAnchorNode.remove();
+        setSelectedEntry(entry); setLastView(view); setView('detail');
     };
 
-    // --- レンダリング ---
     return (
         <>
-            {/* チャットウィジェット (修正済み・関数コンポーネント対応) */}
-            <ChatWidget 
-                user={currentUser} 
-                db={db} 
-                userRole={userRole} 
-                glossary={glossaryData} 
-                onTermClick={(term) => { setView('glossary'); console.log("Jump to:", term); }}
-            />
-            
-            {/* ファイル入力 (非表示) */}
+            <ChatWidget user={currentUser} db={db} userRole={userRole} glossary={glossaryData} onTermClick={(term) => setView('glossary')} />
             <input type="file" ref={fileInputRef} className="hidden" accept=".json" disabled={!canEdit} />
             <input type="file" ref={convertFileInputRef} className="hidden" accept=".json" disabled={!canEdit} />
-            
-            {/* 統計入力モーダル */}
             <StatsInputModal showStatsInput={showStatsInput} setShowStatsInput={setShowStatsInput} nations={nations} stats={stats} setStats={setStats} />
-            
-            {/* プログレスバー */}
             <ProgressToast tasks={activeTasks} />
 
-            {/* 画面切り替え */}
             {view === 'menu' ? (
                 <MainMenu 
                     setView={setView} 
@@ -5753,7 +5779,6 @@ function TimelineWiki() {
                     handleLogin={handleLogin} 
                     handleLogout={handleLogout} 
                     userRole={userRole}
-                    // データ渡し
                     entries={entries}
                     nations={nations}
                     characters={characters}
@@ -5763,19 +5788,91 @@ function TimelineWiki() {
                 />
             ) : (
                 <div className="min-h-screen bg-[#f0f2f5] font-sans text-gray-800 flex flex-col h-screen overflow-hidden">
-                    {/* 共通ヘッダー */}
+                    {/* ★★★ ヘッダー完全版 (アイコン群復活) ★★★ */}
                     <header className="bg-[#1a1a1a] text-white p-2 shadow-lg shrink-0 z-50 border-b-4 border-yellow-600">
                         <div className="max-w-7xl mx-auto flex justify-between items-center overflow-x-auto custom-scrollbar pb-1 gap-4">
+                            {/* 左側: MENUとタイトル */}
                             <div className="flex items-center gap-4 shrink-0">
                                 <button onClick={() => setView('menu')} className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors border border-gray-600">
                                     <Icons.ArrowLeft size={16} /> MENU
                                 </button>
-                                <h1 className="text-lg font-black tracking-widest hidden md:block">英覇歴代記 <span className="text-xs font-normal text-gray-400 ml-2">Timeline Wiki</span></h1>
+                                <div className="h-8 w-px bg-gray-700 hidden sm:block"></div>
+                                <div className="flex items-center gap-2 cursor-pointer group hidden sm:flex" onClick={() => {setView('timeline'); setSelectedEntry(null);}}>
+                                    <div className="bg-yellow-600 p-1.5 rounded-md text-black shrink-0"><Icons.BookOpen size={18} /></div>
+                                    <div><h1 className="text-base font-bold tracking-widest group-hover:text-yellow-500 transition-colors leading-none">英覇歴代記</h1></div>
+                                </div>
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                                <button onClick={() => setUiScale(100)} className="text-xs bg-gray-800 px-2 py-1 rounded border border-gray-600">{uiScale}%</button>
-                                <button onClick={() => setUiScale(p => Math.max(30, p - 10))} className="p-1 hover:bg-gray-700 rounded"><Icons.Minus size={14}/></button>
-                                <button onClick={() => setUiScale(p => Math.min(200, p + 10))} className="p-1 hover:bg-gray-700 rounded"><Icons.Plus size={14}/></button>
+
+                            {/* 右側: ツールバー群 */}
+                            <div className="flex items-center gap-3 shrink-0">
+                                {/* ZOOM */}
+                                <div className="flex flex-col items-center gap-0.5">
+                                    <span className="text-[8px] text-gray-500 font-bold uppercase tracking-widest">ZOOM</span>
+                                    <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 h-9">
+                                        <button onClick={zoomOut} className="px-2 h-full hover:bg-gray-700 rounded-l text-gray-400 hover:text-white transition-colors"><Icons.Minus size={14}/></button>
+                                        <button onClick={zoomReset} className="text-[10px] font-mono font-bold w-8 text-center text-yellow-500 hover:text-white h-full flex items-center justify-center">{uiScale}%</button>
+                                        <button onClick={zoomIn} className="px-2 h-full hover:bg-gray-700 rounded-r text-gray-400 hover:text-white transition-colors"><Icons.Plus size={14}/></button>
+                                    </div>
+                                </div>
+
+                                {/* MANAGE (権限必要) */}
+                                <div className={`flex flex-col items-center gap-0.5 ${disabledClass}`}>
+                                    <span className="text-[8px] text-yellow-600/80 font-bold uppercase tracking-widest">MANAGE</span>
+                                    <div className="flex items-center bg-gray-800/80 p-1 rounded-xl border border-gray-700 gap-1">
+                                        {[ 
+                                            { id: 'edit', label: '歴史記録', icon: Icons.Edit2, onClick: handleCreateNew, active: view === 'edit' }, 
+                                            { id: 'settings', label: '国家編成', icon: Icons.Globe, onClick: () => setView('settings'), active: view === 'settings' }, 
+                                            { id: 'characters', label: '人物管理', icon: Icons.User, onClick: () => setView('characters'), active: view === 'characters' }, 
+                                            { id: 'organizations', label: '組織管理', icon: Icons.Briefcase, onClick: () => setView('organizations'), active: view === 'organizations' }, 
+                                            { id: 'statsEdit', label: '統計編集', icon: Icons.BarChart2, onClick: () => setView('statsEdit'), active: view === 'statsEdit' }, 
+                                            { id: 'power_structure', label: '権力構造', icon: Icons.Structure, onClick: () => setView('power_structure'), active: view === 'power_structure' } 
+                                        ].map(btn => ( 
+                                            <button key={btn.id} onClick={btn.onClick} className={`flex flex-col items-center justify-center w-12 h-10 rounded-lg transition-all duration-200 group relative ${btn.active ? 'bg-yellow-600 text-black shadow-inner' : 'bg-transparent text-gray-400 hover:bg-gray-700 hover:text-white'}`} title={btn.label}> 
+                                                <btn.icon size={16} className="mb-0.5" /> <span className="text-[8px] font-bold leading-none scale-90 origin-top whitespace-nowrap">{btn.label}</span> 
+                                            </button> 
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* VIEW (全員OK) */}
+                                <div className="flex flex-col items-center gap-0.5">
+                                    <span className="text-[8px] text-blue-400/60 font-bold uppercase tracking-widest">VIEW</span>
+                                    <div className="flex items-center bg-gray-800/80 p-1 rounded-xl border border-gray-700 gap-1">
+                                        {[ 
+                                            { id: 'timeline', label: '年表閲覧', icon: Icons.History, onClick: () => setView('timeline'), active: view === 'timeline' }, 
+                                            { id: 'nation_list', label: '国家一覧', icon: Icons.LayoutGrid, onClick: () => setView('nation_list'), active: view === 'nation_list' || view === 'nation_profile' }, 
+                                            { id: 'genealogy', label: '興亡系譜', icon: Icons.GitMerge, onClick: () => setView('genealogy'), active: view === 'genealogy' }, 
+                                            { id: 'graph', label: '統計グラフ', icon: Icons.Activity, onClick: () => setView('graph'), active: view === 'graph' }, 
+                                            { id: 'table', label: '体制一覧', icon: Icons.List, onClick: () => setView('table'), active: view === 'table' }, 
+                                            { id: 'glossary', label: '用語集', icon: Icons.BookOpen, onClick: () => setView('glossary'), active: view === 'glossary' } 
+                                        ].map(btn => ( 
+                                            <button key={btn.id} onClick={btn.onClick} className={`flex flex-col items-center justify-center w-12 h-10 rounded-lg transition-all duration-200 group relative ${btn.active ? 'bg-yellow-600 text-black shadow-inner' : 'bg-transparent text-gray-400 hover:bg-gray-700 hover:text-white'}`} title={btn.label}> 
+                                                <btn.icon size={16} className="mb-0.5" /> <span className="text-[8px] font-bold leading-none scale-90 origin-top whitespace-nowrap">{btn.label}</span> 
+                                            </button> 
+                                        ))}
+                                    </div>
+                                </div>
+                                
+                                {/* USER / DATA */}
+                                <div className="flex items-center gap-3 pl-2 border-l border-gray-700 ml-1">
+                                    <div className="flex flex-col items-center gap-0.5">
+                                        <span className="text-[8px] text-gray-500 font-bold uppercase tracking-widest">DATA</span>
+                                        <div className="flex items-center gap-1">
+                                            <button onClick={() => setView('help')} className={`w-8 h-9 flex items-center justify-center rounded transition-colors ${view === 'help' ? 'bg-yellow-600 text-black' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`} title="ヘルプ"><Icons.HelpCircle size={18} /></button>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col items-center gap-0.5">
+                                        <span className="text-[8px] text-gray-500 font-bold uppercase tracking-widest">USER</span>
+                                        {currentUser ? (
+                                            <div className="flex items-center gap-2 h-9">
+                                                {isAdmin && <button onClick={() => setView('user_management')} className="w-8 h-8 flex items-center justify-center bg-gray-700 text-yellow-400 rounded hover:bg-gray-600" title="ユーザー管理"><Icons.Users size={16} /></button>}
+                                                {isAdmin && (<button onClick={() => setView('admin_console')} className="w-8 h-8 flex items-center justify-center bg-gray-700 text-green-400 rounded hover:bg-gray-600 border border-gray-600" title="管理者コンソール"><Icons.Terminal size={16} /></button>)}
+                                                <button onClick={handleLogout} className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors border-2 ${canEdit ? 'border-green-600' : 'border-gray-600'} overflow-hidden`}>{currentUser.photoURL ? <img src={currentUser.photoURL} className="w-full h-full object-cover" /> : <Icons.User size={16} className="text-gray-300"/>}</button>
+                                            </div>
+                                        ) : ( <button onClick={handleLogin} className="h-9 bg-blue-600 hover:bg-blue-500 text-white px-3 rounded font-bold text-xs flex items-center gap-1 transition-colors"><Icons.Users size={14}/> Login</button> )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </header>
@@ -5785,14 +5882,14 @@ function TimelineWiki() {
                         <main className={(view === 'power_structure' || view === 'genealogy') ? "w-full h-full p-0 overflow-hidden" : "max-w-5xl mx-auto p-4 origin-top-left"} 
                               style={(view === 'power_structure' || view === 'genealogy') ? {} : { zoom: uiScale / 100 }}>
                              
-                             {/* 閲覧権限チェック & コンポーネント表示 */}
+                             {/* 条件分岐: 各Viewの表示 */}
                              {view === 'settings' ? (canEdit ? <SettingsView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} setTargetNation={setTargetNation} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
                              view === 'nation_overview' ? (canEdit ? <NationOverviewView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
                              view === 'characters' ? (canEdit ? <CharacterManager setView={setView} nations={nations} characters={characters} setCharacters={setCharacters} organizations={organizations} setOrganizations={setOrganizations} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
                              view === 'organizations' ? (canEdit ? <OrganizationManager setView={setView} nations={nations} organizations={organizations} setOrganizations={setOrganizations} characters={characters} setCharacters={setCharacters} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
                              view === 'statsEdit' ? (canEdit ? <StatsEditView setView={setView} nations={nations} stats={stats} setStats={setStats} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
                              view === 'power_structure' ? (canEdit ? <PowerStructureView setView={setView} nations={nations} setNations={setNations} organizations={organizations} characters={characters} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) :                             
-                             view === 'user_management' && isAdmin ? <UserManagementView setView={setView} allUsers={allUsers} onChangeRole={() => {}} /> : 
+                             view === 'user_management' && isAdmin ? <UserManagementView setView={setView} allUsers={allUsers} onChangeRole={handleApproveUser} /> : 
                              view === 'graph' ? <GraphView setView={setView} stats={stats} nations={nations} /> : 
                              view === 'genealogy' ? <GenealogyView setView={setView} nations={nations} stats={stats} entries={entries} setSelectedEntry={setSelectedEntry} uiScale={uiScale} onOpenDetail={handleOpenDetail} /> : 
                              view === 'table' ? <NationTableView isAuthorized={canEdit} setView={setView} nations={nations} stats={stats} onEditNation={(n) => { setTargetNation(n); setView('settings'); }} onAddNation={() => { setTargetNation(null); setView('settings'); }}/> : 

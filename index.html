@@ -5683,17 +5683,44 @@ function TimelineWiki() {
     }, [currentUser]);
 
     // --- Actions ---
+    // ▼▼▼ 追加・修正コード ここから ▼▼▼
 
-    // ★追加: ユーザー承認・権限変更関数
+    // 1. ユーザー一覧をデータベースから取得する (管理者のみ)
+    React.useEffect(() => {
+        if (!isAdmin) return;
+        // usersコレクションをリアルタイム監視
+        const unsubscribe = db.collection('users').onSnapshot(snapshot => {
+            const usersList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setAllUsers(usersList);
+        }, error => {
+            console.error("ユーザー取得エラー:", error);
+        });
+        return () => unsubscribe();
+    }, [isAdmin]);
+
+    // 2. 権限を変更する関数 (これが無いとボタンが動きません)
     const handleApproveUser = async (uid, newRole) => {
         if (!isAdmin) return;
+        // 自分自身の権限は変更できないようにガード
+        if (currentUser && currentUser.uid === uid && newRole !== 'admin') {
+            alert("自分自身の管理者権限を外すことはできません。");
+            return;
+        }
+
         try {
-            await db.collection('users').doc(uid).update({ role: newRole });
-            // ※onSnapshotで自動更新されるためstateの手動更新は不要
+            await db.collection('users').doc(uid).update({ 
+                role: newRole,
+                updatedAt: new Date().toISOString()
+            });
+            alert(`ユーザー権限を【${newRole}】に変更しました。\n対象ユーザーは再ログイン後に有効になります。`);
         } catch (error) {
-            alert("権限更新エラー: " + error.message);
+            console.error("権限変更エラー:", error);
+            alert("権限の変更に失敗しました: " + error.message);
         }
     };
+
+    // ▲▲▲ 追加・修正コード ここまで ▲▲▲
+
 
     // ★追加: アカウント申請（再申請など）
     const handleApplyAccount = async () => {
@@ -5750,7 +5777,10 @@ function TimelineWiki() {
                 batch.set(db.collection("wiki_data").doc(`meta_${key}`), { totalChunks: chunks.length, totalSize: jsonStr.length, lastUpdated: new Date().toISOString() });
                 chunks.forEach((chunk, i) => batch.set(db.collection("wiki_data").doc(`data_${key}_${i}`), { content: chunk, index: i }));
                 await batch.commit();
-            } catch (e) { console.error(e); } 
+            } catch (e) { 
+        console.error(e);
+        alert("データの保存に失敗しました。\n\n・権限がない(Guest/Pending)\n・通信エラー\n・データベースのルール設定\n\nなどが原因の可能性があります。\nエラー詳細: " + e.message);
+    } 
             finally { updateTask(key, null); }
         };
 

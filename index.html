@@ -4728,12 +4728,13 @@ const NationProfileView = ({ isAuthorized, setView, nation: initialNation, natio
     );
 };
 
-// --- MainMenu コンポーネント (修正版: ログイン制限対応) ---
+// --- MainMenu コンポーネント (整理・拡張版) ---
 const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, convertFileInputRef, currentUser, isAuthorized, handleLogin, handleLogout, userRole }) => {
     
     // 権限がない場合の無効化スタイルクラス
     const disabledClass = !isAuthorized ? "opacity-40 grayscale pointer-events-none select-none" : "";
 
+    // メニューボタン共通コンポーネント
     const MenuBtn = ({ onClick, icon: Icon, label, subLabel, color }) => (
         <button onClick={onClick} className="group relative flex flex-col items-center justify-center p-4 bg-white border-2 border-gray-200 rounded-xl shadow-sm hover:shadow-lg hover:border-yellow-400 hover:-translate-y-1 transition-all duration-200 h-32 w-full">
             <div className={`p-3 rounded-full mb-2 transition-colors ${color || 'bg-gray-100 text-gray-500 group-hover:bg-yellow-100 group-hover:text-yellow-700'}`}>
@@ -4744,6 +4745,7 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
         </button>
     );
 
+    // 小さなアクションボタン
     const ActionBtn = ({ onClick, icon: Icon, label, className = "" }) => (
         <button onClick={onClick} className={`flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors shadow-sm ${className}`}>
             <Icon size={16}/> {label}
@@ -4753,7 +4755,7 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
     return (
         <div className="min-h-screen bg-[#f0f2f5] flex flex-col items-center justify-center p-6 animate-fade-in">
             {/* タイトルロゴ */}
-            <div className="text-center mb-10 scale-110">
+            <div className="text-center mb-8 scale-110">
                 <div className="inline-flex items-center justify-center p-4 bg-[#1a1a1a] rounded-2xl shadow-2xl mb-4 ring-4 ring-yellow-500/20">
                     <Icons.BookOpen size={48} className="text-yellow-500" />
                 </div>
@@ -4761,43 +4763,57 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                 <p className="text-xs font-mono text-gray-400 tracking-[0.5em] uppercase">ヘルメネアの大地 設定集</p>
             </div>
 
-            <div className="w-full max-w-5xl space-y-8">
+            <div className="w-full max-w-5xl space-y-6">
                 
-                {/* 上部アクションボタン群 (ログイン・保存・読込) */}
-                <div className="flex flex-wrap justify-center gap-4 items-center">
-{/* ログイン/ログアウト・ステータス表示 */}
+                {/* ログイン・ユーザー情報エリア */}
+                <div className="flex flex-wrap justify-center gap-4 items-center mb-4">
                     {!currentUser ? (
                         <ActionBtn onClick={handleLogin} icon={Icons.Users} label="ログイン" className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" />
                     ) : (
                         <div className="flex items-center gap-3">
-                            {/* 役割に応じたステータス表示 */}
                             <div className="flex flex-col items-end">
                                 {userRole === 'pending' ? (
-                                    <span className="text-xs font-bold text-yellow-600 bg-yellow-100 px-2 py-0.5 rounded border border-yellow-200 animate-pulse">
-                                        承認待ち
-                                    </span>
+                                    <span className="text-xs font-bold text-yellow-600 bg-yellow-100 px-2 py-0.5 rounded border border-yellow-200 animate-pulse">承認待ち</span>
                                 ) : isAuthorized ? (
-                                    <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
-                                        編集可能
-                                    </span>
+                                    <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">編集可能</span>
                                 ) : (
-                                    <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
-                                        ゲスト
-                                    </span>
+                                    <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">ゲスト</span>
                                 )}
                                 <span className="text-[10px] text-gray-400 mt-0.5">{currentUser.displayName || 'ユーザー'}</span>
                             </div>
-
                             <ActionBtn onClick={handleLogout} icon={Icons.X} label="ログアウト" className="bg-gray-100 text-gray-600 hover:bg-gray-200" />
                         </div>
                     )}
-
                     <div className="h-8 w-px bg-gray-300 mx-2 hidden sm:block"></div>
-                    
-                    <ActionBtn onClick={() => setView('help')} icon={Icons.HelpCircle} label="使い方 (Help)" />
+                    <ActionBtn onClick={() => setView('help')} icon={Icons.HelpCircle} label="ヘルプ" />
                 </div>
 
-                {/* MANAGE セクション*/}
+                {/* ★新規追加: ダッシュボード・インフォメーション */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <button onClick={() => setView('board')} className="flex items-center p-4 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md hover:border-orange-300 transition-all group">
+                        <div className="p-3 bg-orange-50 text-orange-500 rounded-full mr-4 group-hover:bg-orange-100 group-hover:text-orange-600">
+                            <Icons.MessageCircle size={24} />
+                        </div>
+                        <div className="text-left">
+                            <div className="font-bold text-gray-800">運営による掲示板</div>
+                            <div className="text-xs text-gray-500">お知らせ・更新予定などを確認</div>
+                        </div>
+                        <Icons.ChevronRight className="ml-auto text-gray-300 group-hover:text-orange-400" size={20} />
+                    </button>
+
+                    <button onClick={() => setView('recent_updates')} className="flex items-center p-4 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md hover:border-green-300 transition-all group">
+                        <div className="p-3 bg-green-50 text-green-500 rounded-full mr-4 group-hover:bg-green-100 group-hover:text-green-600">
+                            <Icons.Activity size={24} />
+                        </div>
+                        <div className="text-left">
+                            <div className="font-bold text-gray-800">最近更新されたコンテンツ</div>
+                            <div className="text-xs text-gray-500">最新の変更履歴をチェック</div>
+                        </div>
+                        <Icons.ChevronRight className="ml-auto text-gray-300 group-hover:text-green-400" size={20} />
+                    </button>
+                </div>
+
+                {/* MANAGE セクション */}
                 <div className={`bg-gray-50/50 p-6 rounded-2xl border border-dashed border-gray-300 relative transition-all ${disabledClass}`}>
                     {!isAuthorized && (
                         <div className="absolute inset-0 z-10 flex items-center justify-center">
@@ -4826,7 +4842,7 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                     </div>
                 </div>
 
-                {/* VIEW セクション (全員可能) */}
+                {/* VIEW セクション */}
                 <div className="bg-gray-50/50 p-6 rounded-2xl border border-dashed border-gray-300">
                     <div className="flex items-center gap-3 mb-4">
                         <span className="bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded-full tracking-widest">VIEW</span>
@@ -4845,7 +4861,6 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                         <MenuBtn onClick={() => setView('genealogy')} icon={Icons.GitMerge} label="興亡系譜図" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
                         <MenuBtn onClick={() => setView('graph')} icon={Icons.Activity} label="統計グラフ" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
                         <MenuBtn onClick={() => setView('table')} icon={Icons.List} label="体制一覧表" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
-                        {/* ★追加: 用語集ボタン */}
                         <MenuBtn onClick={() => setView('glossary')} icon={Icons.BookOpen} label="用語集" subLabel="Encyclopedia" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
                     </div>
                 </div>
@@ -5215,17 +5230,34 @@ const TimelineView = ({
 
 // --- ▼▼▼ ここから追加コード (Step 1) ▼▼▼ ---
 
-// ログ記録ヘルパー
+// ログ記録ヘルパー（コンソール出力強化版）
 const logActivity = async (action, detail, currentUser) => {
+    // 1. コンソールへの詳細出力
+    const time = new Date().toLocaleTimeString();
+    const userName = currentUser ? (currentUser.displayName || currentUser.email || 'Anonymous') : 'Guest';
+    const uid = currentUser ? currentUser.uid : 'guest';
+    
+    // グループ化して見やすく出力
+    console.group(`%c[${time}] 📝 ${action}`, "color: #2563eb; font-weight: bold; font-size: 1.1em;");
+    console.log(`%cUser:`, "font-weight: bold; color: #4b5563;", `${userName} (ID: ${uid})`);
+    console.log(`%cDetail:`, "font-weight: bold; color: #374151;", detail);
+    if (currentUser) {
+        console.log(`%cContext:`, "font-weight: bold; color: #9ca3af;", currentUser);
+    }
+    console.groupEnd();
+
+    // 2. Firestoreへの保存
     try {
-        db.collection('audit_logs').add({
+        await db.collection('audit_logs').add({
             timestamp: new Date().toISOString(),
-            uid: currentUser ? currentUser.uid : 'guest',
-            userName: currentUser ? (currentUser.displayName || '名無し') : 'ゲスト',
+            uid: uid,
+            userName: userName,
             action: action,
             detail: detail
         });
-    } catch (e) { console.error("Log error", e); }
+    } catch (e) { 
+        console.error("❌ Log save error:", e); 
+    }
 };
 
 // 管理者コンソール画面
@@ -5823,21 +5855,16 @@ function TimelineWiki() {
     const zoomOut = () => setUiScale(p => Math.max(30, p - 10));
     const zoomReset = () => setUiScale(100);
 
+
+    // --- Render ---
     return (
         <>
-   {/* チャットウィジェット呼び出し部分の修正版 */}
             <ChatWidget 
                 user={currentUser} 
                 db={db} 
-                userRole={userRole} // 修正: 正しい変数名に変更
-                glossary={glossaryData} // 修正: 正しい変数名に変更
-                onTermClick={(term) => {
-                    // 簡易的な移動処理
-                    setView('glossary');
-                    // ※用語の自動選択機能は、GlossaryViewの状態管理を変える必要があるため
-                    //   一旦「用語集画面を開く」だけにしています。
-                    console.log("Jump to:", term); 
-                }}
+                userRole={userRole} 
+                glossary={glossaryData} 
+                onTermClick={(term) => { setView('glossary'); console.log("Jump to:", term); }}
             />
             <input type="file" ref={fileInputRef} onChange={handleImportFile} className="hidden" accept=".json" disabled={!canEdit} />
             <input type="file" ref={convertFileInputRef} onChange={handleConvertFile} className="hidden" accept=".json" disabled={!canEdit} />
@@ -5854,7 +5881,8 @@ function TimelineWiki() {
                             <div className="flex items-center gap-4 shrink-0">
                                 <button onClick={() => setView('menu')} className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors border border-gray-600"><Icons.ArrowLeft size={16} /> MENU</button>
                                 <div className="h-8 w-px bg-gray-700 hidden sm:block"></div>
-                                <div className="flex items-center gap-2 cursor-pointer group hidden sm:flex" onClick={() => {setView('timeline'); setSelectedEntry(null);}}>
+                                {/* ★変更: ロゴクリックでメニューへ戻るように修正 */}
+                                <div className="flex items-center gap-2 cursor-pointer group hidden sm:flex" onClick={() => setView('menu')}>
                                     <div className="bg-yellow-600 p-1.5 rounded-md text-black shrink-0"><Icons.BookOpen size={18} /></div>
                                     <div><h1 className="text-base font-bold tracking-widest group-hover:text-yellow-500 transition-colors leading-none">英覇歴代記</h1></div>
                                 </div>
@@ -5925,10 +5953,11 @@ function TimelineWiki() {
                              view === 'help' ? <HelpView setView={setView} /> : 
                              view === 'timeline' ? (<TimelineView entries={entries} nations={nations} stats={stats} onSelectEntry={(entry) => { setSelectedEntry(entry); setView('detail'); }}onEditEntry={(entry) => handleEditEntryTransition(entry, 'timeline')} isAuthorized={canEdit}/>) : 
                              view === 'admin_console' && isAdmin ? <AdminConsoleView setView={setView} allUsers={allUsers} activeUserCount={activeUserCount} /> :
-                             view === 'detail' && selectedEntry ? (<DetailView isAuthorized={canEdit} entry={selectedEntry} onEdit={() => { setIsEditing(true); setView('edit'); }} onClose={() => { setView(lastView); setSelectedEntry(null); }} onDelete={(id) => { if(window.confirm('削除しますか？')) { const newEntries = entries.filter(e => e.id !== id); setEntries(newEntries); saveToCloud({ entries: newEntries }); setView('timeline'); setSelectedEntry(null); } }} nations={nations}backLabel={lastView === 'timeline' ? '年表に戻る' : lastView === 'genealogy' ? '系譜図に戻る' : lastView === 'nation_profile' ? '国家に戻る' : '戻る'}/>
-                             
-                                
-                            ) : null
+                             view === 'detail' && selectedEntry ? (<DetailView isAuthorized={canEdit} entry={selectedEntry} onEdit={() => { setIsEditing(true); setView('edit'); }} onClose={() => { setView(lastView); setSelectedEntry(null); }} onDelete={(id) => { if(window.confirm('削除しますか？')) { const newEntries = entries.filter(e => e.id !== id); setEntries(newEntries); saveToCloud({ entries: newEntries }); setView('timeline'); setSelectedEntry(null); } }} nations={nations}backLabel={lastView === 'timeline' ? '年表に戻る' : lastView === 'genealogy' ? '系譜図に戻る' : lastView === 'nation_profile' ? '国家に戻る' : '戻る'}/>) :
+                             // ★追加: 新規追加した項目のプレースホルダー
+                             view === 'board' ? <div className="p-20 text-center bg-white rounded-lg shadow"><Icons.MessageCircle size={48} className="mx-auto text-orange-200 mb-4"/><h2 className="text-xl font-bold text-gray-500">運営による掲示板</h2><p className="text-gray-400 mt-2">現在準備中です。</p></div> :
+                             view === 'recent_updates' ? <div className="p-20 text-center bg-white rounded-lg shadow"><Icons.Activity size={48} className="mx-auto text-green-200 mb-4"/><h2 className="text-xl font-bold text-gray-500">最近更新されたコンテンツ</h2><p className="text-gray-400 mt-2">現在準備中です。</p></div> :
+                             null
                         }
                         </main>
                     </div>
@@ -5936,6 +5965,7 @@ function TimelineWiki() {
             )}
         </>
     );
+
 }
 
         // エラー発生時に真っ白になるのを防ぐコンポーネント

@@ -4728,146 +4728,230 @@ const NationProfileView = ({ isAuthorized, setView, nation: initialNation, natio
     );
 };
 
-// --- MainMenu コンポーネント (整理・拡張版) ---
-const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, convertFileInputRef, currentUser, isAuthorized, handleLogin, handleLogout, userRole }) => {
-    
-    // 権限がない場合の無効化スタイルクラス
-    const disabledClass = !isAuthorized ? "opacity-40 grayscale pointer-events-none select-none" : "";
+// --- ダッシュボード用パーツ: 最近の更新パネル ---
+const RecentUpdatesPanel = () => {
+    const [logs, setLogs] = useState([]);
 
-    // メニューボタン共通コンポーネント
-    const MenuBtn = ({ onClick, icon: Icon, label, subLabel, color }) => (
-        <button onClick={onClick} className="group relative flex flex-col items-center justify-center p-4 bg-white border-2 border-gray-200 rounded-xl shadow-sm hover:shadow-lg hover:border-yellow-400 hover:-translate-y-1 transition-all duration-200 h-32 w-full">
-            <div className={`p-3 rounded-full mb-2 transition-colors ${color || 'bg-gray-100 text-gray-500 group-hover:bg-yellow-100 group-hover:text-yellow-700'}`}>
-                <Icon size={28} />
+    useEffect(() => {
+        // 最新の5件だけ取得
+        const unsubscribe = db.collection('audit_logs')
+            .orderBy('timestamp', 'desc')
+            .limit(5)
+            .onSnapshot(snap => {
+                setLogs(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            }, err => console.log("Log load err:", err)); // 権限エラー時は静かに失敗
+        return () => unsubscribe();
+    }, []);
+
+    // アクション内容からアイコンと色を決定するヘルパー
+    const getLogStyle = (action, detail) => {
+        if (action.includes('人物') || detail.includes('人物')) return { icon: Icons.User, color: 'text-blue-600', bg: 'bg-blue-100', label: '人物' };
+        if (action.includes('組織') || detail.includes('組織')) return { icon: Icons.Briefcase, color: 'text-orange-600', bg: 'bg-orange-100', label: '組織' };
+        if (action.includes('国家') || detail.includes('国家')) return { icon: Icons.Globe, color: 'text-indigo-600', bg: 'bg-indigo-100', label: '国家' };
+        if (action.includes('年表') || detail.includes('年表') || action.includes('記録')) return { icon: Icons.History, color: 'text-green-600', bg: 'bg-green-100', label: '歴史' };
+        return { icon: Icons.Edit2, color: 'text-gray-600', bg: 'bg-gray-100', label: '編集' };
+    };
+
+    return (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 h-full">
+            <h3 className="font-bold text-gray-600 mb-4 flex items-center gap-2">
+                <Icons.Clock size={20} /> 最近追加・更新された項目
+            </h3>
+            <div className="space-y-3">
+                {logs.length === 0 ? (
+                    <div className="text-center text-gray-400 py-10 text-xs">更新履歴がありません</div>
+                ) : (
+                    logs.map(log => {
+                        const style = getLogStyle(log.action, log.detail);
+                        const isNew = (new Date() - new Date(log.timestamp)) < 24 * 60 * 60 * 1000; // 24時間以内ならNEW
+                        
+                        return (
+                            <div key={log.id} className="flex items-center gap-4 p-3 bg-gray-50 border border-gray-100 rounded-lg hover:shadow-md transition-all group">
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${style.bg} ${style.color}`}>
+                                    <style.icon size={20} />
+                                </div>
+                                <div className="flex-grow min-w-0">
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                        <span className="text-[10px] font-bold text-gray-400">
+                                            {style.label} #{log.id.substr(0, 4)}
+                                        </span>
+                                        {isNew && <span className="text-[9px] bg-red-400 text-white px-1.5 py-0.5 rounded font-bold">NEW</span>}
+                                    </div>
+                                    <div className="font-bold text-gray-800 text-sm truncate group-hover:text-blue-600 transition-colors">
+                                        {log.detail}
+                                    </div>
+                                </div>
+                                <div className="text-[10px] text-gray-400 font-mono text-right shrink-0">
+                                    <div>{new Date(log.timestamp).toLocaleDateString()}</div>
+                                    <div>by {log.userName}</div>
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
+            </div>
+        </div>
+    );
+};
+
+// --- ダッシュボード用パーツ: 運営掲示板パネル ---
+const NoticeBoardPanel = ({ isAdmin }) => {
+    const [latestPost, setLatestPost] = useState(null);
+
+    useEffect(() => {
+        // 最新の1件だけ取得
+        const unsubscribe = db.collection('announcements')
+            .orderBy('timestamp', 'desc')
+            .limit(1)
+            .onSnapshot(snap => {
+                if (!snap.empty) setLatestPost({ id: snap.docs[0].id, ...snap.docs[0].data() });
+            }, err => console.log("Notice load err:", err));
+        return () => unsubscribe();
+    }, []);
+
+    return (
+        <div className="bg-[#fffbeb] rounded-xl shadow-sm border border-yellow-200 p-6 h-full flex flex-col relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-16 h-16 bg-yellow-300 opacity-20 rounded-bl-full pointer-events-none"></div>
+            
+            <h3 className="font-bold text-yellow-800 mb-4 flex items-center gap-2 relative z-10">
+                <Icons.Info size={20} /> 運営からのお知らせ
+                {isAdmin && <Icons.Edit2 size={12} className="text-yellow-400 ml-auto opacity-50"/>}
+            </h3>
+            
+            <div className="flex-grow bg-white/60 rounded-lg p-4 border border-yellow-100 text-sm text-gray-700 leading-relaxed shadow-inner">
+                {latestPost ? (
+                    <>
+                        <div className="font-bold mb-2 text-yellow-900 border-b border-yellow-200 pb-1">{latestPost.title}</div>
+                        <div className="whitespace-pre-wrap text-xs text-gray-600">{latestPost.body}</div>
+                        <div className="mt-4 text-right text-[10px] text-gray-400">
+                            {new Date(latestPost.timestamp).toLocaleDateString()} 更新
+                        </div>
+                    </>
+                ) : (
+                    <div className="text-center text-gray-400 py-10">お知らせはありません</div>
+                )}
+            </div>
+            
+            <div className="mt-4 text-center">
+                <span className="text-[10px] font-mono text-yellow-400 tracking-[0.3em] uppercase">System Notice Board</span>
+            </div>
+        </div>
+    );
+};
+
+// --- メインメニュー (リニューアル版) ---
+const MainMenu = ({ setView, handleCreateNew, currentUser, isAuthorized, handleLogin, handleLogout, userRole }) => {
+    
+    // スタイル定義
+    const sectionTitleStyle = "text-xs font-bold text-gray-400 mb-3 flex items-center gap-2";
+    const badgeStyle = "text-[10px] font-bold px-2 py-0.5 rounded border ml-2";
+
+    // 通常ボタン（白カード）
+    const CardBtn = ({ onClick, icon: Icon, label, subLabel }) => (
+        <button onClick={onClick} className="flex flex-col items-center justify-center p-4 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-blue-300 transition-all duration-200 h-32 w-full group">
+            <div className="p-3 bg-gray-50 text-gray-500 rounded-full mb-2 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                <Icon size={24} />
             </div>
             <span className="font-bold text-gray-700 group-hover:text-gray-900">{label}</span>
-            {subLabel && <span className="text-[10px] text-gray-400 mt-1">{subLabel}</span>}
+            <span className="text-[10px] text-gray-400 mt-1">{subLabel}</span>
         </button>
     );
 
-    // 小さなアクションボタン
-    const ActionBtn = ({ onClick, icon: Icon, label, className = "" }) => (
-        <button onClick={onClick} className={`flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors shadow-sm ${className}`}>
-            <Icon size={16}/> {label}
+    // 強調ボタン（色付き）
+    const HeroBtn = ({ onClick, icon: Icon, label, subLabel, colorClass, iconBgClass }) => (
+        <button onClick={onClick} className={`flex flex-col items-center justify-center p-4 ${colorClass} rounded-xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-200 h-32 w-full text-white relative overflow-hidden group`}>
+            <div className={`absolute top-[-20%] right-[-20%] w-32 h-32 bg-white opacity-10 rounded-full group-hover:scale-150 transition-transform duration-500`}></div>
+            <div className={`p-3 rounded-full mb-2 ${iconBgClass} text-white shadow-sm`}>
+                <Icon size={28} />
+            </div>
+            <span className="font-black tracking-wider text-lg">{label}</span>
+            <span className="text-[10px] opacity-80 mt-1 font-bold">{subLabel}</span>
         </button>
     );
 
     return (
-        <div className="min-h-screen bg-[#f0f2f5] flex flex-col items-center justify-center p-6 animate-fade-in">
-            {/* タイトルロゴ */}
-            <div className="text-center mb-8 scale-110">
-                <div className="inline-flex items-center justify-center p-4 bg-[#1a1a1a] rounded-2xl shadow-2xl mb-4 ring-4 ring-yellow-500/20">
-                    <Icons.BookOpen size={48} className="text-yellow-500" />
-                </div>
-                <h1 className="text-4xl font-black text-gray-800 tracking-[0.2em] mb-2" style={{textShadow: '2px 2px 0px white'}}>英覇歴代記</h1>
-                <p className="text-xs font-mono text-gray-400 tracking-[0.5em] uppercase">ヘルメネアの大地 設定集</p>
-            </div>
-
-            <div className="w-full max-w-5xl space-y-6">
+        <div className="min-h-screen bg-[#f0f2f5] p-4 md:p-8 animate-fade-in custom-scrollbar">
+            <div className="max-w-6xl mx-auto space-y-10">
                 
-                {/* ログイン・ユーザー情報エリア */}
-                <div className="flex flex-wrap justify-center gap-4 items-center mb-4">
-                    {!currentUser ? (
-                        <ActionBtn onClick={handleLogin} icon={Icons.Users} label="ログイン" className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" />
-                    ) : (
-                        <div className="flex items-center gap-3">
-                            <div className="flex flex-col items-end">
-                                {userRole === 'pending' ? (
-                                    <span className="text-xs font-bold text-yellow-600 bg-yellow-100 px-2 py-0.5 rounded border border-yellow-200 animate-pulse">承認待ち</span>
-                                ) : isAuthorized ? (
-                                    <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">編集可能</span>
-                                ) : (
-                                    <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">ゲスト</span>
-                                )}
-                                <span className="text-[10px] text-gray-400 mt-0.5">{currentUser.displayName || 'ユーザー'}</span>
+                {/* ヘッダーエリア */}
+                <div className="flex justify-between items-end pb-4 border-b border-gray-200">
+                    <div>
+                        <h1 className="text-2xl font-black text-gray-800 tracking-wider flex items-center gap-3">
+                            <div className="bg-gray-900 text-yellow-500 p-2 rounded-lg"><Icons.BookOpen size={24}/></div>
+                            英覇歴代記 <span className="text-xs text-gray-400 font-normal tracking-normal self-end mb-1">Timeline Wiki System</span>
+                        </h1>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        {!currentUser ? (
+                            <button onClick={handleLogin} className="flex items-center gap-2 px-4 py-2 bg-white border border-blue-200 text-blue-600 rounded-full text-xs font-bold hover:bg-blue-50 transition-colors">
+                                <Icons.Users size={14}/> ログイン
+                            </button>
+                        ) : (
+                            <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-full border border-gray-200 shadow-sm">
+                                <div className="w-6 h-6 rounded-full bg-gray-200 overflow-hidden">
+                                    {currentUser.photoURL ? <img src={currentUser.photoURL} className="w-full h-full object-cover"/> : <Icons.User className="p-1 text-gray-400"/>}
+                                </div>
+                                <div className="text-xs">
+                                    <div className="font-bold text-gray-700">{currentUser.displayName}</div>
+                                    <div className="text-[9px] text-gray-400">
+                                        {userRole === 'admin' ? '管理者' : userRole === 'writer' ? '執筆者' : 'ゲスト'}
+                                    </div>
+                                </div>
+                                <button onClick={handleLogout} className="ml-2 text-gray-400 hover:text-red-500"><Icons.X size={14}/></button>
                             </div>
-                            <ActionBtn onClick={handleLogout} icon={Icons.X} label="ログアウト" className="bg-gray-100 text-gray-600 hover:bg-gray-200" />
-                        </div>
-                    )}
-                    <div className="h-8 w-px bg-gray-300 mx-2 hidden sm:block"></div>
-                    <ActionBtn onClick={() => setView('help')} icon={Icons.HelpCircle} label="ヘルプ" />
-                </div>
-
-                {/* ★新規追加: ダッシュボード・インフォメーション */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <button onClick={() => setView('board')} className="flex items-center p-4 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md hover:border-orange-300 transition-all group">
-                        <div className="p-3 bg-orange-50 text-orange-500 rounded-full mr-4 group-hover:bg-orange-100 group-hover:text-orange-600">
-                            <Icons.MessageCircle size={24} />
-                        </div>
-                        <div className="text-left">
-                            <div className="font-bold text-gray-800">運営による掲示板</div>
-                            <div className="text-xs text-gray-500">お知らせ・更新予定などを確認</div>
-                        </div>
-                        <Icons.ChevronRight className="ml-auto text-gray-300 group-hover:text-orange-400" size={20} />
-                    </button>
-
-                    <button onClick={() => setView('recent_updates')} className="flex items-center p-4 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md hover:border-green-300 transition-all group">
-                        <div className="p-3 bg-green-50 text-green-500 rounded-full mr-4 group-hover:bg-green-100 group-hover:text-green-600">
-                            <Icons.Activity size={24} />
-                        </div>
-                        <div className="text-left">
-                            <div className="font-bold text-gray-800">最近更新されたコンテンツ</div>
-                            <div className="text-xs text-gray-500">最新の変更履歴をチェック</div>
-                        </div>
-                        <Icons.ChevronRight className="ml-auto text-gray-300 group-hover:text-green-400" size={20} />
-                    </button>
+                        )}
+                        <button onClick={() => setView('help')} className="text-gray-400 hover:text-gray-600"><Icons.HelpCircle size={20}/></button>
+                    </div>
                 </div>
 
                 {/* MANAGE セクション */}
-                <div className={`bg-gray-50/50 p-6 rounded-2xl border border-dashed border-gray-300 relative transition-all ${disabledClass}`}>
-                    {!isAuthorized && (
-                        <div className="absolute inset-0 z-10 flex items-center justify-center">
-                            <div className="bg-white/80 backdrop-blur-sm px-6 py-3 rounded-full border border-gray-200 shadow-sm font-bold text-gray-500 flex items-center gap-2">
-                                <Icons.Lock size={16}/> 編集機能はロックされています
-                            </div>
-                        </div>
-                    )}
-                    <div className="flex items-center gap-3 mb-4">
-                        <span className="bg-yellow-500 text-white text-xs font-bold px-3 py-1 rounded-full tracking-widest">MANAGE</span>
-                        <span className="text-sm text-gray-500 font-bold">情報の編集・記録</span>
+                <div className={!isAuthorized ? "opacity-60 grayscale pointer-events-none relative" : ""}>
+                    {!isAuthorized && <div className="absolute top-0 right-0 bg-gray-800 text-white text-xs px-3 py-1 rounded-full z-10 flex items-center gap-1"><Icons.Lock size={12}/> 編集権限が必要です</div>}
+                    <div className={sectionTitleStyle}>
+                        <span className="bg-yellow-500 text-white px-2 py-0.5 rounded text-[10px]">MANAGE</span> 情報の編集・記録
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                        <button onClick={handleCreateNew} className="group relative flex flex-col items-center justify-center p-4 bg-yellow-500 border-2 border-yellow-600 rounded-xl shadow-md hover:shadow-xl hover:bg-yellow-400 hover:-translate-y-1 transition-all duration-200 h-32 w-full text-white">
-                            <div className="p-3 rounded-full mb-2 bg-yellow-700/20">
-                                <Icons.Edit2 size={28} />
-                            </div>
-                            <span className="font-black tracking-wider">歴史を刻む</span>
-                            <span className="text-[10px] opacity-80 mt-1">年表に追加</span>
-                        </button>
-                        <MenuBtn onClick={() => setView('settings')} icon={Icons.Globe} label="国家編成" subLabel="基本設定・変遷" />
-                        <MenuBtn onClick={() => setView('characters')} icon={Icons.User} label="人物管理" subLabel="重要人物" />
-                        <MenuBtn onClick={() => setView('organizations')} icon={Icons.Briefcase} label="組織管理" subLabel="ギルド・結社" />
-                        <MenuBtn onClick={() => setView('statsEdit')} icon={Icons.BarChart2} label="統計編集" subLabel="人口・GDP" />
-                        <MenuBtn onClick={() => setView('power_structure')} icon={Icons.Structure} label="権力構造" subLabel="組織図" />
+                        <div className="col-span-2 md:col-span-1 lg:col-span-1">
+                            <HeroBtn onClick={handleCreateNew} icon={Icons.Edit2} label="歴史を刻む" subLabel="年表に追加" colorClass="bg-yellow-500 border-yellow-600" iconBgClass="bg-yellow-600/30" />
+                        </div>
+                        <CardBtn onClick={() => setView('settings')} icon={Icons.Globe} label="国家編成" subLabel="基本設定・変遷" />
+                        <CardBtn onClick={() => setView('characters')} icon={Icons.User} label="人物管理" subLabel="重要人物" />
+                        <CardBtn onClick={() => setView('organizations')} icon={Icons.Briefcase} label="組織管理" subLabel="ギルド・結社" />
+                        <CardBtn onClick={() => setView('statsEdit')} icon={Icons.BarChart2} label="統計編集" subLabel="人口・GDP" />
+                        <CardBtn onClick={() => setView('power_structure')} icon={Icons.Structure} label="権力構造" subLabel="組織図" />
                     </div>
                 </div>
 
                 {/* VIEW セクション */}
-                <div className="bg-gray-50/50 p-6 rounded-2xl border border-dashed border-gray-300">
-                    <div className="flex items-center gap-3 mb-4">
-                        <span className="bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded-full tracking-widest">VIEW</span>
-                        <span className="text-sm text-gray-500 font-bold">情報の閲覧・分析</span>
+                <div>
+                    <div className={sectionTitleStyle}>
+                        <span className="bg-blue-600 text-white px-2 py-0.5 rounded text-[10px]">VIEW</span> 情報の閲覧・分析
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                        <button onClick={() => setView('timeline')} className="group relative flex flex-col items-center justify-center p-4 bg-blue-600 border-2 border-blue-700 rounded-xl shadow-md hover:shadow-xl hover:bg-blue-500 hover:-translate-y-1 transition-all duration-200 h-32 w-full text-white">
-                            <div className="p-3 rounded-full mb-2 bg-blue-800/30">
-                                <Icons.History size={28} />
-                            </div>
-                            <span className="font-black tracking-wider">年表閲覧</span>
-                            <span className="text-[10px] opacity-80 mt-1">全歴史を確認</span>
-                        </button>
-                        
-                        <MenuBtn onClick={() => setView('nation_list')} icon={Icons.LayoutGrid} label="国家一覧" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
-                        <MenuBtn onClick={() => setView('genealogy')} icon={Icons.GitMerge} label="興亡系譜図" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
-                        <MenuBtn onClick={() => setView('graph')} icon={Icons.Activity} label="統計グラフ" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
-                        <MenuBtn onClick={() => setView('table')} icon={Icons.List} label="体制一覧表" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
-                        <MenuBtn onClick={() => setView('glossary')} icon={Icons.BookOpen} label="用語集" subLabel="Encyclopedia" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        <div className="col-span-2 md:col-span-1 lg:col-span-1">
+                            <HeroBtn onClick={() => setView('timeline')} icon={Icons.History} label="年表閲覧" subLabel="全歴史を確認" colorClass="bg-blue-600 border-blue-700" iconBgClass="bg-blue-800/30" />
+                        </div>
+                        <CardBtn onClick={() => setView('nation_list')} icon={Icons.LayoutGrid} label="国家一覧" subLabel="国力・地域別" />
+                        <CardBtn onClick={() => setView('genealogy')} icon={Icons.GitMerge} label="興亡系譜図" subLabel="歴史の流れ" />
+                        <CardBtn onClick={() => setView('graph')} icon={Icons.Activity} label="統計グラフ" subLabel="人口・経済推移" />
+                        <CardBtn onClick={() => setView('table')} icon={Icons.List} label="体制一覧表" subLabel="政体・宗教比較" />
+                        <CardBtn onClick={() => setView('glossary')} icon={Icons.BookOpen} label="用語集" subLabel="百科事典" />
                     </div>
                 </div>
-            </div>
-            
-            <div className="mt-12 text-center text-gray-400 text-xs font-mono">
-                <p>by HELMENEA PROJECT</p>
+
+                {/* ダッシュボード (下段) */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4">
+                    {/* 左側：最近の更新 (2カラム分) */}
+                    <div className="lg:col-span-2 min-h-[300px]">
+                        <RecentUpdatesPanel />
+                    </div>
+                    
+                    {/* 右側：運営掲示板 (1カラム分) */}
+                    <div className="lg:col-span-1 min-h-[300px]">
+                        <NoticeBoardPanel isAdmin={userRole === 'admin'} />
+                    </div>
+                </div>
+
             </div>
         </div>
     );

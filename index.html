@@ -4729,12 +4729,12 @@ const NationProfileView = ({ isAuthorized, setView, nation: initialNation, natio
     );
 };
 
-// --- MainMenu コンポーネント (最新版) ---
+// --- MainMenu コンポーネント (修正版: glossaryData対応) ---
 const MainMenu = ({ 
     setView, handleCreateNew, handleExport, fileInputRef, convertFileInputRef, 
     currentUser, isAuthorized, handleLogin, handleLogout, userRole,
-    // 追加: データと告知機能用プロップス
-    entries = [], nations = [], characters = [], organizations = [], 
+    // ★修正: glossaryData を受け取るように追加
+    entries = [], nations = [], characters = [], organizations = [], glossaryData = {},
     announcements = "", onSaveAnnouncements 
 }) => {
     
@@ -4751,15 +4751,20 @@ const MainMenu = ({
 
     // 最近作成された項目を抽出 (IDがタイムスタンプであることを利用して降順ソート)
     const recentItems = React.useMemo(() => {
+        // ★修正: 用語データを取り出す
+        const terms = glossaryData.terms || [];
+
         const all = [
             ...entries.map(e => ({ ...e, dataType: 'history', label: '歴史', icon: Icons.History, id: e.id || '0' })),
             ...nations.map(n => ({ ...n, dataType: 'nation', label: '国家', icon: Icons.Globe, id: n.id || '0' })),
             ...characters.map(c => ({ ...c, dataType: 'char', label: '人物', icon: Icons.User, id: c.id || '0' })),
-            ...organizations.map(o => ({ ...o, dataType: 'org', label: '組織', icon: Icons.Briefcase, id: o.id || '0' }))
+            ...organizations.map(o => ({ ...o, dataType: 'org', label: '組織', icon: Icons.Briefcase, id: o.id || '0' })),
+            // ★修正: 用語集を含める
+            ...terms.map(t => ({ ...t, dataType: 'term', label: '用語', icon: Icons.BookOpen, id: (t.id || '').replace('term_', '') || '0', title: t.name }))
         ];
         // ID(文字列)を数値変換して比較。変換できない場合は0扱い
         return all.sort((a, b) => (parseInt(b.id) || 0) - (parseInt(a.id) || 0)).slice(0, 6);
-    }, [entries, nations, characters, organizations]);
+    }, [entries, nations, characters, organizations, glossaryData]); // ★依存配列にglossaryDataを追加
 
     // 権限がない場合の無効化スタイル
     const disabledClass = !isAuthorized ? "opacity-40 grayscale pointer-events-none select-none" : "";
@@ -4869,8 +4874,15 @@ const MainMenu = ({
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {recentItems.length > 0 ? recentItems.map((item, idx) => (
-                                <div key={idx} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 border border-gray-100 hover:bg-white hover:shadow-md hover:border-blue-200 transition-all cursor-default group">
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${item.dataType === 'nation' ? 'bg-indigo-100 text-indigo-600' : item.dataType === 'char' ? 'bg-blue-100 text-blue-600' : item.dataType === 'org' ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>
+                                <button key={idx} onClick={() => {
+                                    // ★修正: クリック時の遷移ロジックを用語に対応
+                                    if(item.dataType === 'term') setView('glossary');
+                                    else if(item.dataType === 'history') setView('timeline');
+                                    else if(item.dataType === 'nation') setView('nation_list'); // 修正: nation_listへ
+                                    else if(item.dataType === 'char') setView('characters');
+                                    else if(item.dataType === 'org') setView('organizations');
+                                }} className="w-full flex items-center gap-3 p-2 rounded-lg bg-gray-50 border border-gray-100 hover:bg-white hover:shadow-md hover:border-blue-200 transition-all group text-left">
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${item.dataType === 'nation' ? 'bg-indigo-100 text-indigo-600' : item.dataType === 'char' ? 'bg-blue-100 text-blue-600' : item.dataType === 'org' ? 'bg-orange-100 text-orange-600' : item.dataType === 'term' ? 'bg-gray-100 text-gray-600' : 'bg-green-100 text-green-600'}`}>
                                         <item.icon size={14} />
                                     </div>
                                     <div className="overflow-hidden">
@@ -4883,7 +4895,7 @@ const MainMenu = ({
                                     </div>
                                     {/* 新着バッジ (最新2件のみ) */}
                                     {idx < 2 && <span className="ml-auto text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded animate-pulse">NEW</span>}
-                                </div>
+                                </button>
                             )) : (
                                 <div className="col-span-2 text-center text-gray-400 text-xs py-4">データがありません</div>
                             )}
@@ -4936,7 +4948,6 @@ const MainMenu = ({
         </div>
     );
 };
-
 
 // --- データ分割保存用の定数と関数 ---
 const CHUNK_SIZE = 300000; // Firestoreの制限対策 (約1MB)
@@ -5834,14 +5845,25 @@ function TimelineWiki() {
     };
 
 
-    // Auto Save
+// =================================================================
+    // ★修正: 自動保存トリガー (Auto Save Effect)
+    // 以下の useEffect ブロックを、TimelineWiki 内の既存の保存用 useEffect と置き換えてください
+    // =================================================================
     React.useEffect(() => {
+        // 1. 編集権限がない、またはリモートからのデータ反映中(isRemoteUpdate > 0)は保存しない
         if (!canEdit || isRemoteUpdate.current > 0) return;
+
+        // 2. 変更があってから3秒後に保存を実行するタイマーをセット (Debounce処理)
         const timer = setTimeout(() => {
-            if (entries.length > 0) saveToCloud();
-        }, 1000);
+            console.log("Auto-save triggered..."); // 動作確認用ログ
+            saveToCloud({}); // 引数なしで呼び出すと「自動保存」として処理される
+        }, 3000);
+
+        // クリーンアップ関数: 3秒以内に次の変更があったら前のタイマーをキャンセル
         return () => clearTimeout(timer);
-    }, [entries, nations, stats, characters, organizations, glossaryData, uiScale]);
+
+    }, [entries, nations, characters, organizations, glossaryData, announcements]); 
+    // ↑ ★重要: ここに glossaryData などを全て含めないと、そのデータ変更時に自動保存が動きません
 
     // Navigation & Auth Handlers
     const handleLogin = async () => { try { await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); } catch (e) { alert(e.message); } };

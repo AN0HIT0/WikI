@@ -5382,7 +5382,7 @@ const AdminConsoleView = ({ setView, allUsers, activeUserCount }) => {
     );
 };
 
-// --- RecentUpdatesView コンポーネント (更新履歴) ---
+// --- RecentUpdatesView コンポーネント (修正版: 匿名化・フィルタリング済み) ---
 const RecentUpdatesView = ({ setView }) => {
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -5403,56 +5403,71 @@ const RecentUpdatesView = ({ setView }) => {
         return () => unsubscribe();
     }, []);
 
-    const getActionIcon = (action) => {
-        if (action.includes('作成') || action.includes('追加')) return <Icons.Plus size={14} className="text-green-600"/>;
-        if (action.includes('削除')) return <Icons.Trash2 size={14} className="text-red-600"/>;
-        if (action.includes('編集') || action.includes('更新')) return <Icons.Edit2 size={14} className="text-blue-600"/>;
-        return <Icons.Activity size={14} className="text-gray-500"/>;
+    // 管理者向けログ（権限変更など）を除外するフィルタ
+    const visibleLogs = logs.filter(log => {
+        const action = log.action || '';
+        // 「権限変更」「ユーザー」を含むログは表示しない
+        if (action.includes('権限') || action.includes('ユーザー')) return false;
+        return true;
+    });
+
+    const getActionBadge = (action) => {
+        let color = "bg-gray-100 text-gray-600";
+        let icon = <Icons.Activity size={12}/>;
+
+        if (action.includes('作成') || action.includes('追加')) {
+            color = "bg-green-100 text-green-700 border-green-200";
+            icon = <Icons.Plus size={12}/>;
+        } else if (action.includes('削除')) {
+            color = "bg-red-100 text-red-700 border-red-200";
+            icon = <Icons.Trash2 size={12}/>;
+        } else if (action.includes('編集') || action.includes('更新') || action.includes('保存')) {
+            color = "bg-blue-100 text-blue-700 border-blue-200";
+            icon = <Icons.Edit2 size={12}/>;
+        }
+
+        return (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold shadow-sm ${color}`}>
+                {icon} {action}
+            </span>
+        );
     };
 
     return (
         <div className="min-h-[calc(100vh-120px)] flex flex-col gap-4 animate-fade-in pb-20">
-            <SectionHeader icon={Icons.Activity} title="最近更新されたコンテンツ" desc="このWikiで行われた最新の変更履歴（50件）を表示しています。" />
+            <SectionHeader icon={Icons.Activity} title="最近更新されたコンテンツ" desc="このWikiで行われた最新の更新履歴です。" />
             
             <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden flex-grow flex flex-col">
                 <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
-                    <span className="font-bold text-gray-700">更新ログ</span>
+                    <span className="font-bold text-gray-700">更新履歴</span>
                     <button onClick={() => setView('menu')} className="text-xs text-blue-600 hover:underline">メニューへ戻る</button>
                 </div>
                 
                 <div className="overflow-y-auto custom-scrollbar flex-grow p-0">
                     {loading ? (
                         <div className="p-10 text-center text-gray-400">読み込み中...</div>
-                    ) : logs.length === 0 ? (
+                    ) : visibleLogs.length === 0 ? (
                         <div className="p-10 text-center text-gray-400">履歴がありません</div>
                     ) : (
                         <table className="w-full text-sm text-left whitespace-nowrap">
                             <thead className="bg-gray-100 text-gray-500 font-bold border-b text-xs uppercase sticky top-0 z-10 shadow-sm">
                                 <tr>
-                                    <th className="px-4 py-3 w-40">日時</th>
-                                    <th className="px-4 py-3 w-32">ユーザー</th>
-                                    <th className="px-4 py-3 w-32">操作</th>
-                                    <th className="px-4 py-3">詳細内容</th>
+                                    <th className="px-6 py-3 w-48">日時</th>
+                                    <th className="px-6 py-3 w-40">タイプ</th>
+                                    <th className="px-6 py-3">更新された項目</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {logs.map(log => (
+                                {visibleLogs.map(log => (
                                     <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-4 py-3 font-mono text-xs text-gray-500">
-                                            {new Date(log.timestamp).toLocaleString()}
+                                        <td className="px-6 py-3 font-mono text-xs text-gray-400">
+                                            {new Date(log.timestamp).toLocaleString([], { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                         </td>
-                                        <td className="px-4 py-3 font-bold text-gray-700 flex items-center gap-2">
-                                            <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-gray-400">
-                                                <Icons.User size={12}/>
-                                            </div>
-                                            {log.userName}
+                                        <td className="px-6 py-3">
+                                            {getActionBadge(log.action)}
                                         </td>
-                                        <td className="px-4 py-3">
-                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white border border-gray-200 text-xs font-bold text-gray-600 shadow-sm">
-                                                {getActionIcon(log.action)} {log.action}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3 text-gray-600 text-xs truncate max-w-xs md:max-w-md">
+                                        <td className="px-6 py-3 font-bold text-gray-700 text-sm">
+                                            {/* 詳細テキストをそのまま表示（例: "年表, 国家 を更新"） */}
                                             {log.detail}
                                         </td>
                                     </tr>

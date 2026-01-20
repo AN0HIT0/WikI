@@ -5306,27 +5306,30 @@ const TimelineView = ({
 
 // --- ▼▼▼ ここから追加コード (Step 1) ▼▼▼ ---
 
-// ログ記録ヘルパー
-const logActivity = async (action, detail, currentUser) => {
-    try {
-        db.collection('audit_logs').add({
-            timestamp: new Date().toISOString(),
-            uid: currentUser ? currentUser.uid : 'guest',
-            userName: currentUser ? (currentUser.displayName || '名無し') : 'ゲスト',
-            action: action,
-            detail: detail
-        });
-    } catch (e) { console.error("Log error", e); }
-};
+// ログ記録関数（修正版）
+    const logActivity = (action, detail, user) => {
+        const timestamp = new Date().toLocaleTimeString();
+        const userName = user ? (user.displayName || 'User') : 'System';
+        
+        const newLog = {
+            id: Date.now() + Math.random(), // ユニークID
+            timestamp,
+            action,
+            detail,
+            user: userName
+        };
+
+        // コンソール（F12）にも出力して動作確認
+        console.log(`[Log] ${action}: ${detail}`);
+
+        // 画面上のログリストに追加
+        setActivityLog(prevLogs => [newLog, ...prevLogs].slice(0, 50)); // 最新50件のみ保持
+    };
+
 
 // 管理者コンソール画面
-const AdminConsoleView = ({ setView, allUsers, activeUserCount }) => {
-    const [logs, setLogs] = useState([]);
-    useEffect(() => {
-        return db.collection('audit_logs').orderBy('timestamp', 'desc').limit(50).onSnapshot(snap => {
-            setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        });
-    }, []);
+// 管理者コンソール画面 (修正版: ログ表示対応)
+const AdminConsoleView = ({ setView, allUsers, activeUserCount, activityLog = [] }) => {
     return (
         <div className="min-h-[calc(100vh-120px)] flex flex-col gap-4 pb-20 animate-fade-in">
             <SectionHeader icon={Icons.Terminal} title="管理者コンソール" desc="現在のアクティビティ状況" />
@@ -5340,17 +5343,26 @@ const AdminConsoleView = ({ setView, allUsers, activeUserCount }) => {
                     <div className="text-3xl font-black text-blue-600">{allUsers.length} <span className="text-sm text-gray-400">accounts</span></div>
                 </div>
             </div>
+            
+            {/* ログ表示エリア */}
             <div className="bg-white rounded shadow overflow-hidden flex-grow flex flex-col max-h-[60vh]">
-                <div className="p-3 bg-gray-800 text-white font-bold text-sm"><Icons.List size={14} className="inline mr-2"/>操作ログ</div>
-                <div className="overflow-y-auto custom-scrollbar flex-grow bg-gray-50 p-2 space-y-2">
-                    {logs.map(log => (
-                        <div key={log.id} className="text-xs bg-white p-2 border rounded flex gap-2 items-center">
-                            <span className="text-gray-400 font-mono">{new Date(log.timestamp).toLocaleString()}</span>
-                            <span className="font-bold text-blue-600 w-24 truncate">{log.userName}</span>
-                            <span className="font-bold bg-gray-100 px-1 rounded">{log.action}</span>
-                            <span className="text-gray-600 truncate flex-grow">{log.detail}</span>
-                        </div>
-                    ))}
+                <div className="p-3 bg-gray-800 text-white font-bold text-sm flex justify-between items-center">
+                    <span><Icons.List size={14} className="inline mr-2"/>操作ログ (直近50件)</span>
+                    <span className="text-xs font-normal opacity-70">※リロードで消えます</span>
+                </div>
+                <div className="overflow-y-auto custom-scrollbar flex-grow bg-gray-900 p-4 space-y-1 font-mono text-xs">
+                    {activityLog.length === 0 ? (
+                        <div className="text-gray-500 text-center italic py-4">ログはありません</div>
+                    ) : (
+                        activityLog.map(log => (
+                            <div key={log.id} className="border-b border-gray-800 pb-1 mb-1 last:border-0">
+                                <span className="text-gray-500 mr-2">[{log.timestamp}]</span>
+                                <span className="text-yellow-500 mr-2">[{log.user}]</span>
+                                <span className="text-blue-400 font-bold mr-2">{log.action}:</span>
+                                <span className="text-gray-300">{log.detail}</span>
+                            </div>
+                        ))
+                    )}
                 </div>
             </div>
         </div>
@@ -5567,6 +5579,7 @@ function TimelineWiki() {
     const [userRole, setUserRole] = React.useState('guest'); 
     const [allUsers, setAllUsers] = React.useState([]); // 管理者用
     const [activeUserCount, setActiveUserCount] = React.useState(0);
+    const [activityLog, setActivityLog] = React.useState([]);
     
     // History & Tasks
     const [lastView, setLastView] = React.useState('timeline'); 
@@ -5846,24 +5859,32 @@ function TimelineWiki() {
 
 
 // =================================================================
-    // ★修正: 自動保存トリガー (Auto Save Effect)
-    // 以下の useEffect ブロックを、TimelineWiki 内の既存の保存用 useEffect と置き換えてください
+    // ★修正: 強制感度オートセーブ (Deep Watch)
     // =================================================================
     React.useEffect(() => {
-        // 1. 編集権限がない、またはリモートからのデータ反映中(isRemoteUpdate > 0)は保存しない
+        // 1. 編集権限がない、またはロード直後(isRemoteUpdate > 0)は保存しない
         if (!canEdit || isRemoteUpdate.current > 0) return;
 
-        // 2. 変更があってから3秒後に保存を実行するタイマーをセット (Debounce処理)
-        const timer = setTimeout(() => {
-            console.log("Auto-save triggered..."); // 動作確認用ログ
-            saveToCloud({}); // 引数なしで呼び出すと「自動保存」として処理される
-        }, 3000);
+        console.log("Change detected. Scheduling auto-save..."); // 動作確認用ログ
 
-        // クリーンアップ関数: 3秒以内に次の変更があったら前のタイマーをキャンセル
+        // 2. 変更から2秒後に保存 (Debounce)
+        const timer = setTimeout(() => {
+            console.log("Executing auto-save...");
+            saveToCloud({}); // 保存実行
+        }, 2000);
+
         return () => clearTimeout(timer);
 
-    }, [entries, nations, characters, organizations, glossaryData, announcements]); 
-    // ↑ ★重要: ここに glossaryData などを全て含めないと、そのデータ変更時に自動保存が動きません
+    // ★重要: JSON.stringifyを使うことで、中身の値が変わったら確実に発火させる
+    // (データ量が膨大な場合は重くなりますが、確実性は最強です)
+    }, [
+        JSON.stringify(entries), 
+        JSON.stringify(nations), 
+        JSON.stringify(characters), 
+        JSON.stringify(organizations), 
+        JSON.stringify(glossaryData), 
+        announcements
+    ]);
 
     // Navigation & Auth Handlers
     const handleLogin = async () => { try { await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); } catch (e) { alert(e.message); } };
@@ -6023,7 +6044,7 @@ function TimelineWiki() {
                              view === 'edit' && selectedEntry ? <EditForm entry={selectedEntry} nations={nations} onSave={(newData) => { const newEntries = [...entries]; const idx = newEntries.findIndex(e => e.id === newData.id); if (idx >= 0) newEntries[idx] = newData; else newEntries.push(newData); setEntries(newEntries); saveToCloud({ entries: newEntries }); setIsEditing(false); if(lastView === 'nation_profile') { setView('nation_profile'); } else { setView('timeline'); setSelectedEntry(null); } }} onCancel={() => { setIsEditing(false); if (lastView === 'detail') { setView('detail'); } else if (lastView === 'nation_profile') { setView('nation_profile'); setSelectedEntry(null); } else { setView('timeline'); setSelectedEntry(null); } }} /> :
                              view === 'help' ? <HelpView setView={setView} /> : 
                              view === 'timeline' ? (<TimelineView entries={entries} nations={nations} stats={stats} onSelectEntry={(entry) => { setSelectedEntry(entry); setView('detail'); }} onEditEntry={(entry) => handleEditEntryTransition(entry, 'timeline')} isAuthorized={canEdit}/>) : 
-                             view === 'admin_console' && isAdmin ? <AdminConsoleView setView={setView} allUsers={allUsers} activeUserCount={activeUserCount} /> :
+                             view === 'admin_console' && isAdmin ? <AdminConsoleView setView={setView} allUsers={allUsers} activeUserCount={activeUserCount} activityLog={activityLog} /> :
                              view === 'detail' && selectedEntry ? (<DetailView isAuthorized={canEdit} entry={selectedEntry} onEdit={() => { setIsEditing(true); setView('edit'); }} onClose={() => { setView(lastView); setSelectedEntry(null); }} onDelete={(id) => { if(window.confirm('削除しますか？')) { const newEntries = entries.filter(e => e.id !== id); setEntries(newEntries); saveToCloud({ entries: newEntries }); setView('timeline'); setSelectedEntry(null); } }} nations={nations} backLabel={lastView === 'timeline' ? '年表に戻る' : lastView === 'genealogy' ? '系譜図に戻る' : lastView === 'nation_profile' ? '国家に戻る' : '戻る'}/>
                             ) : null
                         }

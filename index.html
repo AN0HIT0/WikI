@@ -4737,6 +4737,9 @@ const MainMenu = ({
     const [isEditingAnnounce, setIsEditingAnnounce] = React.useState(false);
     const [announceText, setAnnounceText] = React.useState(announcements);
 
+    // ★修正: Loginアイコンがない場合のフォールバックを定義
+    const LoginIcon = Icons.Login || Icons.User;
+
     React.useEffect(() => {
         setAnnounceText(announcements);
     }, [announcements]);
@@ -4789,7 +4792,8 @@ const MainMenu = ({
                         </div>
                     ) : (
                         <button onClick={handleLogin} className="flex items-center gap-2 bg-gray-900 text-white px-6 py-3 rounded-full hover:bg-gray-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
-                            <Icons.Login size={18} />
+                            {/* ★修正: LoginIconを使用 */}
+                            <LoginIcon size={18} />
                             <span>Googleでログインして編集</span>
                         </button>
                     )}

@@ -4728,14 +4728,50 @@ const NationProfileView = ({ isAuthorized, setView, nation: initialNation, natio
     );
 };
 
-// --- MainMenu コンポーネント (修正版: ログイン制限対応) ---
-const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, convertFileInputRef, currentUser, isAuthorized, handleLogin, handleLogout, userRole }) => {
+// --- MainMenu コンポーネント (修正版: 掲示板・新着表示機能追加) ---
+const MainMenu = ({ 
+    setView, handleCreateNew, handleExport, fileInputRef, convertFileInputRef, 
+    currentUser, isAuthorized, handleLogin, handleLogout, userRole,
+    // ★追加: 新着判定用のデータ受け取り
+    entries = [], nations = [], characters = [], organizations = [], glossaryData = {},
+    // ★追加: 告知データと保存関数
+    announcements = "", onSaveAnnouncements 
+}) => {
     
-    // 権限がない場合の無効化スタイルクラス
+    // 告知編集用ステート
+    const [isEditingAnnounce, setIsEditingAnnounce] = React.useState(false);
+    const [announceText, setAnnounceText] = React.useState(announcements);
+
+    // 親からデータが来たら同期
+    React.useEffect(() => { setAnnounceText(announcements); }, [announcements]);
+
+    const handleSaveAnnounce = () => {
+        if(onSaveAnnouncements) onSaveAnnouncements(announceText);
+        setIsEditingAnnounce(false);
+    };
+
+    // 最近作成された項目を抽出 (IDがタイムスタンプであることを利用して降順ソート)
+    const recentItems = React.useMemo(() => {
+        // 用語データの整形
+        const terms = glossaryData.terms || [];
+
+        const all = [
+            ...entries.map(e => ({ ...e, dataType: 'history', label: '歴史', icon: Icons.History, id: e.id || '0', title: e.date ? `${e.date}の出来事` : '出来事' })),
+            ...nations.map(n => ({ ...n, dataType: 'nation', label: '国家', icon: Icons.Globe, id: n.id || '0', title: n.name })),
+            ...characters.map(c => ({ ...c, dataType: 'char', label: '人物', icon: Icons.User, id: c.id || '0', title: c.name })),
+            ...organizations.map(o => ({ ...o, dataType: 'org', label: '組織', icon: Icons.Briefcase, id: o.id || '0', title: o.name })),
+            ...terms.map(t => ({ ...t, dataType: 'term', label: '用語', icon: Icons.BookOpen, id: (t.id || '').replace('term_', '') || '0', title: t.name }))
+        ];
+        // ID(文字列)を数値変換して比較。変換できない場合は0扱い
+        // IDがタイムスタンプ(Date.now())生成である前提
+        return all.sort((a, b) => (parseInt(b.id) || 0) - (parseInt(a.id) || 0)).slice(0, 6);
+    }, [entries, nations, characters, organizations, glossaryData]);
+
+    // 権限がない場合の無効化スタイル
     const disabledClass = !isAuthorized ? "opacity-40 grayscale pointer-events-none select-none" : "";
 
-    const MenuBtn = ({ onClick, icon: Icon, label, subLabel, color }) => (
-        <button onClick={onClick} className="group relative flex flex-col items-center justify-center p-4 bg-white border-2 border-gray-200 rounded-xl shadow-sm hover:shadow-lg hover:border-yellow-400 hover:-translate-y-1 transition-all duration-200 h-32 w-full">
+    const MenuBtn = ({ onClick, icon: Icon, label, subLabel, color, className="" }) => (
+        <button onClick={onClick} className={`group relative flex flex-col items-center justify-center p-4 bg-white border-2 border-gray-200 rounded-xl shadow-sm hover:shadow-lg hover:border-yellow-400 hover:-translate-y-1 transition-all duration-200 h-32 w-full ${className}`}>
             <div className={`p-3 rounded-full mb-2 transition-colors ${color || 'bg-gray-100 text-gray-500 group-hover:bg-yellow-100 group-hover:text-yellow-700'}`}>
                 <Icon size={28} />
             </div>
@@ -4753,7 +4789,7 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
     return (
         <div className="min-h-screen bg-[#f0f2f5] flex flex-col items-center justify-center p-6 animate-fade-in">
             {/* タイトルロゴ */}
-            <div className="text-center mb-10 scale-110">
+            <div className="text-center mb-8 scale-110">
                 <div className="inline-flex items-center justify-center p-4 bg-[#1a1a1a] rounded-2xl shadow-2xl mb-4 ring-4 ring-yellow-500/20">
                     <Icons.BookOpen size={48} className="text-yellow-500" />
                 </div>
@@ -4761,43 +4797,28 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                 <p className="text-xs font-mono text-gray-400 tracking-[0.5em] uppercase">ヘルメネアの大地 設定集</p>
             </div>
 
-            <div className="w-full max-w-5xl space-y-8">
+            <div className="w-full max-w-6xl space-y-6">
                 
-                {/* 上部アクションボタン群 (ログイン・保存・読込) */}
-                <div className="flex flex-wrap justify-center gap-4 items-center">
-{/* ログイン/ログアウト・ステータス表示 */}
+                {/* 上部アクションボタン群 */}
+                <div className="flex flex-wrap justify-center gap-4 items-center mb-4">
                     {!currentUser ? (
                         <ActionBtn onClick={handleLogin} icon={Icons.Users} label="ログイン" className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" />
                     ) : (
                         <div className="flex items-center gap-3">
-                            {/* 役割に応じたステータス表示 */}
                             <div className="flex flex-col items-end">
-                                {userRole === 'pending' ? (
-                                    <span className="text-xs font-bold text-yellow-600 bg-yellow-100 px-2 py-0.5 rounded border border-yellow-200 animate-pulse">
-                                        承認待ち
-                                    </span>
-                                ) : isAuthorized ? (
-                                    <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
-                                        編集可能
-                                    </span>
-                                ) : (
-                                    <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
-                                        ゲスト
-                                    </span>
-                                )}
+                                {userRole === 'pending' ? <span className="text-xs font-bold text-yellow-600 bg-yellow-100 px-2 py-0.5 rounded border border-yellow-200 animate-pulse">承認待ち</span> : 
+                                 isAuthorized ? <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">編集可能</span> : 
+                                 <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">ゲスト</span>}
                                 <span className="text-[10px] text-gray-400 mt-0.5">{currentUser.displayName || 'ユーザー'}</span>
                             </div>
-
                             <ActionBtn onClick={handleLogout} icon={Icons.X} label="ログアウト" className="bg-gray-100 text-gray-600 hover:bg-gray-200" />
                         </div>
                     )}
-
                     <div className="h-8 w-px bg-gray-300 mx-2 hidden sm:block"></div>
-                    
                     <ActionBtn onClick={() => setView('help')} icon={Icons.HelpCircle} label="使い方 (Help)" />
                 </div>
 
-                {/* MANAGE セクション*/}
+                {/* MANAGE セクション */}
                 <div className={`bg-gray-50/50 p-6 rounded-2xl border border-dashed border-gray-300 relative transition-all ${disabledClass}`}>
                     {!isAuthorized && (
                         <div className="absolute inset-0 z-10 flex items-center justify-center">
@@ -4812,11 +4833,8 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                         <button onClick={handleCreateNew} className="group relative flex flex-col items-center justify-center p-4 bg-yellow-500 border-2 border-yellow-600 rounded-xl shadow-md hover:shadow-xl hover:bg-yellow-400 hover:-translate-y-1 transition-all duration-200 h-32 w-full text-white">
-                            <div className="p-3 rounded-full mb-2 bg-yellow-700/20">
-                                <Icons.Edit2 size={28} />
-                            </div>
-                            <span className="font-black tracking-wider">歴史を刻む</span>
-                            <span className="text-[10px] opacity-80 mt-1">年表に追加</span>
+                            <div className="p-3 rounded-full mb-2 bg-yellow-700/20"><Icons.Edit2 size={28} /></div>
+                            <span className="font-black tracking-wider">歴史を刻む</span><span className="text-[10px] opacity-80 mt-1">年表に追加</span>
                         </button>
                         <MenuBtn onClick={() => setView('settings')} icon={Icons.Globe} label="国家編成" subLabel="基本設定・変遷" />
                         <MenuBtn onClick={() => setView('characters')} icon={Icons.User} label="人物管理" subLabel="重要人物" />
@@ -4826,29 +4844,103 @@ const MainMenu = ({ setView, handleCreateNew, handleExport, fileInputRef, conver
                     </div>
                 </div>
 
-                {/* VIEW セクション (全員可能) */}
+                {/* VIEW セクション (1行に統一) */}
                 <div className="bg-gray-50/50 p-6 rounded-2xl border border-dashed border-gray-300">
                     <div className="flex items-center gap-3 mb-4">
-                        <span className="bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded-full tracking-widest">VIEW</span>
+                        <span className="bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full tracking-widest">VIEW</span>
                         <span className="text-sm text-gray-500 font-bold">情報の閲覧・分析</span>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                         <button onClick={() => setView('timeline')} className="group relative flex flex-col items-center justify-center p-4 bg-blue-600 border-2 border-blue-700 rounded-xl shadow-md hover:shadow-xl hover:bg-blue-500 hover:-translate-y-1 transition-all duration-200 h-32 w-full text-white">
-                            <div className="p-3 rounded-full mb-2 bg-blue-800/30">
-                                <Icons.History size={28} />
-                            </div>
-                            <span className="font-black tracking-wider">年表閲覧</span>
-                            <span className="text-[10px] opacity-80 mt-1">全歴史を確認</span>
+                            <div className="p-3 rounded-full mb-2 bg-blue-800/30"><Icons.History size={28} /></div>
+                            <span className="font-black tracking-wider">年表閲覧</span><span className="text-[10px] opacity-80 mt-1">全歴史を確認</span>
                         </button>
                         
                         <MenuBtn onClick={() => setView('nation_list')} icon={Icons.LayoutGrid} label="国家一覧" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
                         <MenuBtn onClick={() => setView('genealogy')} icon={Icons.GitMerge} label="興亡系譜図" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
                         <MenuBtn onClick={() => setView('graph')} icon={Icons.Activity} label="統計グラフ" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
                         <MenuBtn onClick={() => setView('table')} icon={Icons.List} label="体制一覧表" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
-                        {/* ★追加: 用語集ボタン */}
-                        <MenuBtn onClick={() => setView('glossary')} icon={Icons.BookOpen} label="用語集" subLabel="Encyclopedia" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
+                        <MenuBtn onClick={() => setView('glossary')} icon={Icons.BookOpen} label="用語集" subLabel="百科事典" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
                     </div>
                 </div>
+
+                {/* 新規追加: 下部インフォメーションエリア */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
+                    
+                    {/* 左側: 最近作成された設定 */}
+                    <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-5 overflow-hidden relative">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-gray-400 to-gray-200"></div>
+                        <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2 pb-2 border-b border-gray-100">
+                            <Icons.Clock size={20} className="text-gray-400"/> 最近追加された項目
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {recentItems.length > 0 ? recentItems.map((item, idx) => (
+                                <button key={idx} onClick={() => {
+                                    // クリック時の遷移ロジック
+                                    if(item.dataType === 'term') setView('glossary');
+                                    else if(item.dataType === 'history') setView('timeline');
+                                    else if(item.dataType === 'nation') setView('nation_list');
+                                    else if(item.dataType === 'char') setView('characters');
+                                    else if(item.dataType === 'org') setView('organizations');
+                                }} className="w-full flex items-center gap-3 p-2 rounded-lg bg-gray-50 border border-gray-100 hover:bg-white hover:shadow-md hover:border-blue-200 transition-all group text-left">
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${item.dataType === 'nation' ? 'bg-indigo-100 text-indigo-600' : item.dataType === 'char' ? 'bg-blue-100 text-blue-600' : item.dataType === 'org' ? 'bg-orange-100 text-orange-600' : item.dataType === 'term' ? 'bg-gray-100 text-gray-600' : 'bg-green-100 text-green-600'}`}>
+                                        <item.icon size={14} />
+                                    </div>
+                                    <div className="overflow-hidden">
+                                        <div className="text-xs font-bold text-gray-400 flex items-center gap-1">
+                                            {item.label} <span className="opacity-50">#{typeof item.id === 'string' ? item.id.slice(-4) : item.id}</span>
+                                        </div>
+                                        <div className="font-bold text-gray-800 text-sm truncate group-hover:text-blue-700">
+                                            {item.title || item.name}
+                                        </div>
+                                    </div>
+                                    {/* 新着バッジ (最新2件のみ) */}
+                                    {idx < 2 && <span className="ml-auto text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded animate-pulse">NEW</span>}
+                                </button>
+                            )) : (
+                                <div className="col-span-2 text-center text-gray-400 text-xs py-4">データがありません</div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 右側: 告知ボード */}
+                    <div className="bg-yellow-50/50 rounded-xl shadow-sm border border-yellow-200 p-5 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-yellow-200/20 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+                        <div className="flex justify-between items-start mb-4 border-b border-yellow-100 pb-2">
+                            <h3 className="font-bold text-yellow-800 flex items-center gap-2">
+                                <Icons.Info size={20} /> 運営からのお知らせ
+                            </h3>
+                            {isAuthorized && !isEditingAnnounce && (
+                                <button onClick={() => setIsEditingAnnounce(true)} className="text-yellow-600 hover:bg-yellow-100 p-1.5 rounded transition-colors" title="編集">
+                                    <Icons.Edit2 size={16} />
+                                </button>
+                            )}
+                        </div>
+
+                        {isEditingAnnounce ? (
+                            <div className="animate-fade-in">
+                                <textarea 
+                                    value={announceText} 
+                                    onChange={(e) => setAnnounceText(e.target.value)} 
+                                    className="w-full h-32 p-2 border border-yellow-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 mb-2 bg-white"
+                                    placeholder="告知内容を入力..."
+                                />
+                                <div className="flex justify-end gap-2">
+                                    <button onClick={() => setIsEditingAnnounce(false)} className="px-3 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded">キャンセル</button>
+                                    <button onClick={handleSaveAnnounce} className="px-3 py-1 text-xs bg-yellow-500 text-white font-bold rounded shadow hover:bg-yellow-600">保存</button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="bg-white/60 p-3 rounded-lg border border-yellow-100 min-h-[100px] text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-medium relative z-10">
+                                {announceText || <span className="text-gray-400 italic">お知らせはありません。</span>}
+                            </div>
+                        )}
+                        <div className="mt-4 text-center">
+                            <span className="text-[10px] text-yellow-600/50 font-mono">SYSTEM NOTICE BOARD</span>
+                        </div>
+                    </div>
+                </div>
+
             </div>
             
             <div className="mt-12 text-center text-gray-400 text-xs font-mono">
@@ -5215,18 +5307,30 @@ const TimelineView = ({
 
 // --- ▼▼▼ ここから追加コード (Step 1) ▼▼▼ ---
 
-// ログ記録ヘルパー
-const logActivity = async (action, detail, currentUser) => {
-    try {
-        db.collection('audit_logs').add({
-            timestamp: new Date().toISOString(),
-            uid: currentUser ? currentUser.uid : 'guest',
-            userName: currentUser ? (currentUser.displayName || '名無し') : 'ゲスト',
-            action: action,
-            detail: detail
-        });
-    } catch (e) { console.error("Log error", e); }
-};
+// アクティビティログを記録する関数（コンソール出力の強化）
+    const logActivity = (action, detail, user) => {
+        const timestamp = new Date().toLocaleTimeString();
+        const userName = user ? (user.displayName || 'User') : 'System';
+        
+        // 開発者ツールコンソール用（見やすく色付け）
+        console.log(
+            `%c[TimelineWiki] %c${action} %c${detail}`, 
+            "color: #9ca3af; font-weight: bold;", 
+            "color: #2563eb; font-weight: bold;", 
+            "color: #374151;"
+        );
+        
+        // 内部ログState用
+        const newLog = {
+            id: Date.now() + Math.random(), 
+            timestamp,
+            action,
+            detail,
+            user: userName
+        };
+        setActivityLog(prevLogs => [newLog, ...prevLogs].slice(0, 50));
+    };
+
 
 // 管理者コンソール画面
 const AdminConsoleView = ({ setView, allUsers, activeUserCount }) => {
@@ -5481,7 +5585,8 @@ function TimelineWiki() {
 
     // Async Task Management (Gauge)
     const [activeTasks, setActiveTasks] = useState({});
-    
+    // 告知データ用
+    const [announcements, setAnnouncements] = React.useState("");
     // Loop Prevention
     const isRemoteUpdate = useRef(0);
     
@@ -5639,88 +5744,72 @@ function TimelineWiki() {
         return () => unsubscribers.forEach(u => u());
     }, []);
 
-    // --- Save Logic ---
+ // データを保存する関数
     const saveToCloud = async (newData = {}) => {
-        if (!canEdit) return;
-        // 受信中は保存しない（無限ループ防止）
-        if (isRemoteUpdate.current > 0) return;
+        if (!canEdit || isRemoteUpdate.current > 0) return;
 
-        const currentData = {
-            entries: newData.entries || entries,
-            nations: newData.nations || nations,
-            stats: newData.stats || stats,
-            characters: newData.characters || characters,
-            organizations: newData.organizations || organizations,
-            uiScale: newData.uiScale || uiScale,
-            glossary: newData.glossary || glossaryData,
-        };
+        // 手動更新かどうかの判定（newDataが空でないなら手動保存とみなす）
+        const isManualUpdate = Object.keys(newData).length > 0;
 
-        const saveCategory = async (key, label, dataObj) => {
-            if (!dataObj) return;
-            if (Array.isArray(dataObj) && dataObj.length === 0) return;
-
-            updateTask(key, { label: `準備中: ${label}`, current: 0, total: 100 });
-
-            try {
-                const jsonStr = JSON.stringify(dataObj);
-                const chunks = chunkString(jsonStr, CHUNK_SIZE);
-                const timestamp = new Date().toISOString();
-
-                updateTask(key, { label: `送信中: ${label}`, current: 0, total: chunks.length });
-
-                const batch = db.batch();
-                const metaRef = db.collection("wiki_data").doc(`meta_${key}`);
-                batch.set(metaRef, { totalChunks: chunks.length, totalSize: jsonStr.length, lastUpdated: timestamp });
-
-                chunks.forEach((chunk, index) => {
-                    const chunkRef = db.collection("wiki_data").doc(`data_${key}_${index}`);
-                    batch.set(chunkRef, { content: chunk, index: index });
-                });
-
-                await batch.commit();
-                updateTask(key, { label: `完了: ${label}`, current: chunks.length, total: chunks.length });
-
-            } catch (e) {
-                console.error(`Save failed for ${key}:`, e);
-                alert(`保存エラー: ${label}`);
-            } finally {
-                setTimeout(() => updateTask(key, null), 800);
-            }
-        };
-
+        setIsSaving(true);
         try {
-            const promises = [];
-            if (newData.entries || entries.length > 0) promises.push(saveCategory('entries', '年表', currentData.entries));
-            if (newData.nations || nations.length > 0) promises.push(saveCategory('nations', '国家', currentData.nations));
-            if (newData.stats || stats.length > 0) promises.push(saveCategory('stats', '統計', currentData.stats));
-            if (newData.characters || characters.length > 0) promises.push(saveCategory('characters', '人物', currentData.characters));
-            if (newData.organizations || organizations.length > 0) promises.push(saveCategory('organizations', '組織', currentData.organizations));
+            const batch = db.batch();
+            const mainRef = db.collection('data').doc('main');
             
-            // ★修正: 用語集も saveCategory で保存する（これでゲージが出る & ガードが効く）
-            if (newData.glossary || (glossaryData.terms && glossaryData.terms.length > 0) || Object.keys(glossaryData.overrides || {}).length > 0) {
-                promises.push(saveCategory('glossary', '用語集', currentData.glossary));
-            }
-            
-            if (newData.uiScale) {
-                db.collection("wiki_data").doc("db_config").set({ uiScale: currentData.uiScale }, { merge: true });
+            // 現在のデータと新しいデータをマージ
+            const currentData = {
+                entries, nations, characters, organizations, glossaryData, announcements, 
+                updatedAt: new Date().toISOString(),
+                ...newData
+            };
+
+            // メインデータ保存 (ここに告知データも含める)
+            batch.set(mainRef, {
+                announcements: currentData.announcements,
+                updatedAt: currentData.updatedAt,
+                entryCount: currentData.entries.length
+            }, { merge: true });
+
+            // 各データカテゴリ保存
+            batch.set(db.collection('data').doc('entries'), { values: currentData.entries });
+            batch.set(db.collection('data').doc('nations'), { values: currentData.nations });
+            batch.set(db.collection('data').doc('characters'), { values: currentData.characters });
+            batch.set(db.collection('data').doc('organizations'), { values: currentData.organizations });
+            batch.set(db.collection('data').doc('glossary'), { values: currentData.glossaryData });
+
+            await batch.commit();
+
+            // 具体的に何が変わったかログに出す
+            if (isManualUpdate) {
+                let details = [];
+                if (newData.entries) details.push(`年表(${newData.entries.length}件)`);
+                if (newData.nations) details.push(`国家(${newData.nations.length}件)`);
+                if (newData.characters) details.push(`人物(${newData.characters.length}件)`);
+                if (newData.organizations) details.push(`組織(${newData.organizations.length}件)`);
+                if (newData.glossaryData) details.push(`用語集`);
+                if (newData.announcements) details.push(`告知更新`);
+                
+                logActivity('データ保存完了', `更新対象: ${details.join(', ')}`, currentUser);
+            } else {
+                console.log("[AutoSave] Completed.");
             }
 
-            await Promise.all(promises);
-            // ★追加: 保存成功時にログを記録
-            // 何を保存したか判定してメッセージを作る
-            let details = [];
-            if (newData.entries) details.push("年表");
-            if (newData.nations) details.push("国家");
-            if (newData.stats) details.push("統計");
-            if (newData.characters) details.push("人物");
-            if (newData.organizations) details.push("組織");
-            if (newData.glossary) details.push("用語");
-            
-            const detailMsg = details.length > 0 ? `${details.join(', ')} を更新` : "データを更新";
-            logActivity('データ保存', detailMsg, currentUser); // <--- これを追加
         } catch (error) {
             console.error("Save error:", error);
+            logActivity('保存エラー', error.message, currentUser);
+            if (error.code === 'permission-denied') {
+                alert("保存に失敗しました：権限がありません。");
+            }
+        } finally {
+            setTimeout(() => setIsSaving(false), 500);
         }
+    };
+
+// 告知のみを保存する関数
+    const saveAnnouncements = (text) => {
+        if (!canEdit) return;
+        setAnnouncements(text);
+        saveToCloud({ announcements: text });
     };
 
     // --- Auto Save ---
@@ -5845,67 +5934,84 @@ function TimelineWiki() {
 
             <ProgressToast tasks={activeTasks} />
 
-            {view === 'menu' ? (
-                <MainMenu setView={setView} handleCreateNew={handleCreateNew} handleExport={handleExport} fileInputRef={fileInputRef} convertFileInputRef={convertFileInputRef} currentUser={currentUser} isAuthorized={canEdit} handleLogin={handleLogin} handleLogout={handleLogout} userRole={userRole} />
-            ) : (
+{view === 'menu' ? (
+            <MainMenu 
+                setView={setView} 
+                handleCreateNew={() => { setView('timeline'); setIsEditing(true); }}
+                handleExport={exportData}
+                fileInputRef={fileInputRef}
+                convertFileInputRef={convertFileInputRef}
+                currentUser={currentUser}
+                isAuthorized={canEdit}
+                handleLogin={login}
+                handleLogout={logout}
+                userRole={userRole}
+                // ★追加: 新着・告知用データ渡し
+                entries={entries}
+                nations={nations}
+                characters={characters}
+                organizations={organizations}
+                glossaryData={glossaryData}
+                announcements={announcements}
+                onSaveAnnouncements={saveAnnouncements}
+            />
+        ) : (
                 <div className="min-h-screen bg-[#f0f2f5] font-sans text-gray-800 flex flex-col h-screen overflow-hidden">
-                    <header className="bg-[#1a1a1a] text-white p-2 shadow-lg shrink-0 z-50 border-b-4 border-yellow-600">
-                        <div className="max-w-7xl mx-auto flex justify-between items-center overflow-x-auto custom-scrollbar pb-1 gap-4">
-                            <div className="flex items-center gap-4 shrink-0">
-                                <button onClick={() => setView('menu')} className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors border border-gray-600"><Icons.ArrowLeft size={16} /> MENU</button>
-                                <div className="h-8 w-px bg-gray-700 hidden sm:block"></div>
-                                <div className="flex items-center gap-2 cursor-pointer group hidden sm:flex" onClick={() => {setView('timeline'); setSelectedEntry(null);}}>
-                                    <div className="bg-yellow-600 p-1.5 rounded-md text-black shrink-0"><Icons.BookOpen size={18} /></div>
-                                    <div><h1 className="text-base font-bold tracking-widest group-hover:text-yellow-500 transition-colors leading-none">英覇歴代記</h1></div>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-3 shrink-0">
-                                <div className="flex flex-col items-center gap-0.5">
-                                    <span className="text-[8px] text-gray-500 font-bold uppercase tracking-widest">ZOOM</span>
-                                    <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 h-9">
-                                        <button onClick={zoomOut} className="px-2 h-full hover:bg-gray-700 rounded-l text-gray-400 hover:text-white transition-colors"><Icons.Minus size={14}/></button>
-                                        <button onClick={zoomReset} className="text-[10px] font-mono font-bold w-8 text-center text-yellow-500 hover:text-white h-full flex items-center justify-center">{uiScale}%</button>
-                                        <button onClick={zoomIn} className="px-2 h-full hover:bg-gray-700 rounded-r text-gray-400 hover:text-white transition-colors"><Icons.Plus size={14}/></button>
-                                    </div>
-                                </div>
-
-                                <div className={`flex flex-col items-center gap-0.5 ${disabledClass}`}>
-                                    <span className="text-[8px] text-yellow-600/80 font-bold uppercase tracking-widest">MANAGE</span>
-                                    <div className="flex items-center bg-gray-800/80 p-1 rounded-xl border border-gray-700 gap-1">
-                                        {[ { id: 'edit', label: '歴史記録', icon: Icons.Edit2, onClick: handleCreateNew, active: view === 'edit' }, { id: 'settings', label: '国家編成', icon: Icons.Globe, onClick: () => setView('settings'), active: view === 'settings' }, { id: 'characters', label: '人物管理', icon: Icons.User, onClick: () => setView('characters'), active: view === 'characters' }, { id: 'organizations', label: '組織管理', icon: Icons.Briefcase, onClick: () => setView('organizations'), active: view === 'organizations' }, { id: 'statsEdit', label: '統計編集', icon: Icons.BarChart2, onClick: () => setView('statsEdit'), active: view === 'statsEdit' }, { id: 'power_structure', label: '権力構造', icon: Icons.Structure, onClick: () => setView('power_structure'), active: view === 'power_structure' } ].map(btn => ( <button key={btn.id} onClick={btn.onClick} className={`flex flex-col items-center justify-center w-12 h-10 rounded-lg transition-all duration-200 group relative ${btn.active ? 'bg-yellow-600 text-black shadow-inner' : 'bg-transparent text-gray-400 hover:bg-gray-700 hover:text-white'}`} title={btn.label}> <btn.icon size={16} className="mb-0.5" /> <span className="text-[8px] font-bold leading-none scale-90 origin-top whitespace-nowrap">{btn.label}</span> </button> ))}
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-col items-center gap-0.5">
-                                    <span className="text-[8px] text-blue-400/60 font-bold uppercase tracking-widest">VIEW</span>
-                                    <div className="flex items-center bg-gray-800/80 p-1 rounded-xl border border-gray-700 gap-1">
-                                        {[ { id: 'timeline', label: '年表閲覧', icon: Icons.History, onClick: () => setView('timeline'), active: view === 'timeline' }, { id: 'nation_list', label: '国家一覧', icon: Icons.LayoutGrid, onClick: () => setView('nation_list'), active: view === 'nation_list' || view === 'nation_profile' }, { id: 'genealogy', label: '興亡系譜', icon: Icons.GitMerge, onClick: () => setView('genealogy'), active: view === 'genealogy' }, { id: 'graph', label: '統計グラフ', icon: Icons.Activity, onClick: () => setView('graph'), active: view === 'graph' }, { id: 'table', label: '体制一覧', icon: Icons.List, onClick: () => setView('table'), active: view === 'table' }, { id: 'glossary', label: '用語集', icon: Icons.BookOpen, onClick: () => setView('glossary'), active: view === 'glossary' } ].map(btn => ( <button key={btn.id} onClick={btn.onClick} className={`flex flex-col items-center justify-center w-12 h-10 rounded-lg transition-all duration-200 group relative ${btn.active ? 'bg-yellow-600 text-black shadow-inner' : 'bg-transparent text-gray-400 hover:bg-gray-700 hover:text-white'}`} title={btn.label}> <btn.icon size={16} className="mb-0.5" /> <span className="text-[8px] font-bold leading-none scale-90 origin-top whitespace-nowrap">{btn.label}</span> </button> ))}
-                                    </div>
-                                </div>
-                                
-                                <div className="flex items-center gap-3 pl-2 border-l border-gray-700 ml-1">
-                                    <div className="flex flex-col items-center gap-0.5">
-                                        <span className="text-[8px] text-gray-500 font-bold uppercase tracking-widest">DATA</span>
-                                        <div className="flex items-center gap-1">
-                                            <button onClick={() => setView('help')} className={`w-8 h-9 flex items-center justify-center rounded transition-colors ${view === 'help' ? 'bg-yellow-600 text-black' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`} title="ヘルプ"><Icons.HelpCircle size={18} /></button>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex flex-col items-center gap-0.5">
-                                        <span className="text-[8px] text-gray-500 font-bold uppercase tracking-widest">USER</span>
-                                        {currentUser ? (
-                                            <div className="flex items-center gap-2 h-9">
-                                                {isAdmin && <button onClick={() => setView('user_management')} className="w-8 h-8 flex items-center justify-center bg-gray-700 text-yellow-400 rounded hover:bg-gray-600" title="ユーザー管理"><Icons.Users size={16} /></button>}
-                                                {isAdmin && (<button onClick={() => setView('admin_console')} className="w-8 h-8 flex items-center justify-center bg-gray-700 text-green-400 rounded hover:bg-gray-600 border border-gray-600" title="管理者コンソール"><Icons.Terminal size={16} /></button>)}
-                                                <button onClick={handleLogout} className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors border-2 ${canEdit ? 'border-green-600' : 'border-gray-600'} overflow-hidden`}>{currentUser.photoURL ? <img src={currentUser.photoURL} className="w-full h-full object-cover" /> : <Icons.User size={16} className="text-gray-300"/>}</button>
-                                            </div>
-                                        ) : ( <button onClick={handleLogin} className="h-9 bg-blue-600 hover:bg-blue-500 text-white px-3 rounded font-bold text-xs flex items-center gap-1 transition-colors"><Icons.Users size={14}/> Login</button> )}
-                                    </div>
-                                </div>
-                            </div>
+<header className="bg-[#1a1a1a] text-white p-2 shadow-lg shrink-0 z-50 border-b-4 border-yellow-600">
+                <div className="max-w-7xl mx-auto flex justify-between items-center overflow-x-auto custom-scrollbar pb-1 gap-4">
+                    <div className="flex items-center gap-4 shrink-0">
+                        {/* 戻るボタン */}
+                        <button 
+                            onClick={() => {
+                                if (selectedEntry) setSelectedEntry(null);
+                                else if (view !== 'timeline') setView('menu');
+                            }} 
+                            className="p-2 hover:bg-gray-700 rounded-full transition-colors" title="戻る"
+                        >
+                            <Icons.ArrowLeft size={20} />
+                        </button>
+                        
+                        {/* ★修正: ロゴクリックでメニューへ戻る */}
+                        <div 
+                            className="flex items-center gap-2 cursor-pointer group hidden sm:flex" 
+                            onClick={() => {
+                                logActivity('画面遷移', 'ロゴクリック -> メインメニュー', currentUser);
+                                setView('menu'); 
+                                setSelectedEntry(null);
+                            }}
+                        >
+                            <div className="bg-yellow-600 p-1.5 rounded-md text-black shrink-0"><Icons.BookOpen size={18} /></div>
+                            <div><h1 className="text-base font-bold tracking-widest group-hover:text-yellow-500 transition-colors leading-none">英覇歴代記</h1></div>
                         </div>
-                    </header>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                        {/* 検索バー */}
+                        <div className="relative">
+                            <input 
+                                type="text" 
+                                placeholder="検索..." 
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="pl-8 pr-3 py-1.5 bg-gray-800 border border-gray-700 rounded-full text-sm w-32 focus:w-48 transition-all focus:border-yellow-500 focus:outline-none"
+                            />
+                            <Icons.Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
+                        </div>
+
+                        <div className="h-6 w-px bg-gray-700 mx-1"></div>
+
+                        {/* 保存ボタン */}
+                        <button 
+                            onClick={() => saveToCloud({})} 
+                            disabled={!canEdit || isSaving}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold transition-all ${isSaving ? 'bg-green-600 text-white' : canEdit ? 'bg-yellow-600 text-black hover:bg-yellow-500' : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`}
+                        >
+                            {isSaving ? <Icons.RefreshCw size={14} className="animate-spin" /> : <Icons.Save size={14} />}
+                            <span className="hidden sm:inline">{isSaving ? '保存中...' : '保存'}</span>
+                        </button>
+                    </div>
+                </div>
+            </header>
                     <div className="flex-grow overflow-auto bg-[#f0f2f5] relative w-full h-full">
                         <main className={(view === 'power_structure' || view === 'genealogy') ? "w-full h-full p-0 overflow-hidden" : "max-w-5xl mx-auto p-4 origin-top-left"} style={(view === 'power_structure' || view === 'genealogy') ? {} : { zoom: uiScale / 100 }}>
                              {view === 'settings' ? (canEdit ? <SettingsView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} setTargetNation={setTargetNation} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 

@@ -5298,6 +5298,198 @@ const AdminConsoleView = ({ setView, allUsers, activeUserCount }) => {
     );
 };
 
+// --- RecentUpdatesView コンポーネント (更新履歴) ---
+const RecentUpdatesView = ({ setView }) => {
+    const [logs, setLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        // 直近50件のログを取得
+        const unsubscribe = db.collection('audit_logs')
+            .orderBy('timestamp', 'desc')
+            .limit(50)
+            .onSnapshot(snap => {
+                const fetchedLogs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setLogs(fetchedLogs);
+                setLoading(false);
+            }, err => {
+                console.error(err);
+                setLoading(false);
+            });
+        return () => unsubscribe();
+    }, []);
+
+    const getActionIcon = (action) => {
+        if (action.includes('作成') || action.includes('追加')) return <Icons.Plus size={14} className="text-green-600"/>;
+        if (action.includes('削除')) return <Icons.Trash2 size={14} className="text-red-600"/>;
+        if (action.includes('編集') || action.includes('更新')) return <Icons.Edit2 size={14} className="text-blue-600"/>;
+        return <Icons.Activity size={14} className="text-gray-500"/>;
+    };
+
+    return (
+        <div className="min-h-[calc(100vh-120px)] flex flex-col gap-4 animate-fade-in pb-20">
+            <SectionHeader icon={Icons.Activity} title="最近更新されたコンテンツ" desc="このWikiで行われた最新の変更履歴（50件）を表示しています。" />
+            
+            <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden flex-grow flex flex-col">
+                <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
+                    <span className="font-bold text-gray-700">更新ログ</span>
+                    <button onClick={() => setView('menu')} className="text-xs text-blue-600 hover:underline">メニューへ戻る</button>
+                </div>
+                
+                <div className="overflow-y-auto custom-scrollbar flex-grow p-0">
+                    {loading ? (
+                        <div className="p-10 text-center text-gray-400">読み込み中...</div>
+                    ) : logs.length === 0 ? (
+                        <div className="p-10 text-center text-gray-400">履歴がありません</div>
+                    ) : (
+                        <table className="w-full text-sm text-left whitespace-nowrap">
+                            <thead className="bg-gray-100 text-gray-500 font-bold border-b text-xs uppercase sticky top-0 z-10 shadow-sm">
+                                <tr>
+                                    <th className="px-4 py-3 w-40">日時</th>
+                                    <th className="px-4 py-3 w-32">ユーザー</th>
+                                    <th className="px-4 py-3 w-32">操作</th>
+                                    <th className="px-4 py-3">詳細内容</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {logs.map(log => (
+                                    <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-4 py-3 font-mono text-xs text-gray-500">
+                                            {new Date(log.timestamp).toLocaleString()}
+                                        </td>
+                                        <td className="px-4 py-3 font-bold text-gray-700 flex items-center gap-2">
+                                            <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-gray-400">
+                                                <Icons.User size={12}/>
+                                            </div>
+                                            {log.userName}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white border border-gray-200 text-xs font-bold text-gray-600 shadow-sm">
+                                                {getActionIcon(log.action)} {log.action}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-gray-600 text-xs truncate max-w-xs md:max-w-md">
+                                            {log.detail}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- BoardView コンポーネント (運営掲示板) ---
+const BoardView = ({ setView, isAdmin, currentUser }) => {
+    const [posts, setPosts] = useState([]);
+    const [isWriting, setIsWriting] = useState(false);
+    const [newTitle, setNewTitle] = useState('');
+    const [newBody, setNewBody] = useState('');
+    const [importance, setImportance] = useState('normal'); // normal, important, update
+
+    // 読み込み
+    useEffect(() => {
+        const unsubscribe = db.collection('announcements')
+            .orderBy('timestamp', 'desc')
+            .limit(20)
+            .onSnapshot(snap => {
+                setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            });
+        return () => unsubscribe();
+    }, []);
+
+    // 投稿処理
+    const handlePost = async () => {
+        if (!newTitle || !newBody) return;
+        try {
+            await db.collection('announcements').add({
+                title: newTitle,
+                body: newBody,
+                importance: importance,
+                author: currentUser.displayName || '運営',
+                timestamp: new Date().toISOString()
+            });
+            setIsWriting(false);
+            setNewTitle('');
+            setNewBody('');
+            alert('投稿しました');
+        } catch (e) {
+            alert('エラー: ' + e.message);
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if(!window.confirm('削除しますか？')) return;
+        await db.collection('announcements').doc(id).delete();
+    };
+
+    const getBadge = (type) => {
+        switch(type) {
+            case 'important': return <span className="bg-red-100 text-red-600 border-red-200 border px-2 py-0.5 rounded text-[10px] font-bold">重要</span>;
+            case 'update': return <span className="bg-green-100 text-green-600 border-green-200 border px-2 py-0.5 rounded text-[10px] font-bold">アップデート</span>;
+            default: return <span className="bg-blue-100 text-blue-600 border-blue-200 border px-2 py-0.5 rounded text-[10px] font-bold">お知らせ</span>;
+        }
+    };
+
+    return (
+        <div className="min-h-[calc(100vh-120px)] flex flex-col gap-4 animate-fade-in pb-20">
+            <SectionHeader icon={Icons.MessageCircle} title="運営による掲示板" desc="運営チームからのお知らせ、更新情報、メンテナンス予定などを掲載します。" />
+
+            {isAdmin && (
+                <div className="bg-white p-4 rounded-lg shadow border border-yellow-200 bg-yellow-50 mb-4">
+                    {!isWriting ? (
+                        <button onClick={() => setIsWriting(true)} className="flex items-center gap-2 text-sm font-bold text-yellow-800 hover:text-yellow-600">
+                            <Icons.Plus size={18}/> 新しいお知らせを投稿する
+                        </button>
+                    ) : (
+                        <div className="space-y-3 animate-fade-in">
+                            <div className="flex gap-2">
+                                <select value={importance} onChange={e => setImportance(e.target.value)} className="p-2 border rounded text-sm font-bold">
+                                    <option value="normal">通常のお知らせ</option>
+                                    <option value="important">重要</option>
+                                    <option value="update">アップデート</option>
+                                </select>
+                                <input type="text" placeholder="タイトル" value={newTitle} onChange={e => setNewTitle(e.target.value)} className="flex-grow p-2 border rounded text-sm font-bold" />
+                            </div>
+                            <textarea placeholder="本文 (改行可)" value={newBody} onChange={e => setNewBody(e.target.value)} className="w-full p-2 border rounded text-sm h-24" />
+                            <div className="flex justify-end gap-2">
+                                <button onClick={() => setIsWriting(false)} className="px-3 py-1.5 text-xs text-gray-500">キャンセル</button>
+                                <button onClick={handlePost} className="px-4 py-1.5 bg-yellow-500 text-white rounded font-bold text-xs shadow hover:bg-yellow-600">投稿</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            <div className="space-y-4">
+                {posts.length === 0 ? (
+                    <div className="text-center py-10 text-gray-400 bg-white rounded border border-dashed border-gray-200">お知らせはありません</div>
+                ) : (
+                    posts.map(post => (
+                        <div key={post.id} className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 relative group">
+                            <div className="flex items-center gap-3 mb-2">
+                                {getBadge(post.importance)}
+                                <span className="text-xs text-gray-400 font-mono">{new Date(post.timestamp).toLocaleDateString()}</span>
+                                {isAdmin && (
+                                    <button onClick={() => handleDelete(post.id)} className="absolute top-4 right-4 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Icons.Trash2 size={16}/>
+                                    </button>
+                                )}
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-800 mb-3 border-b border-gray-100 pb-2">{post.title}</h3>
+                            <div className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{post.body}</div>
+                            <div className="mt-4 text-right text-[10px] text-gray-400 font-bold">By {post.author}</div>
+                        </div>
+                    ))
+                )}
+            </div>
+        </div>
+    );
+};
+
 // ★チャットウィジェット（修正済み）
 function ChatWidget({ user, db, userRole, glossary, onTermClick }) { 
     const [isOpen, setIsOpen] = React.useState(false);
@@ -5954,9 +6146,9 @@ function TimelineWiki() {
                              view === 'timeline' ? (<TimelineView entries={entries} nations={nations} stats={stats} onSelectEntry={(entry) => { setSelectedEntry(entry); setView('detail'); }}onEditEntry={(entry) => handleEditEntryTransition(entry, 'timeline')} isAuthorized={canEdit}/>) : 
                              view === 'admin_console' && isAdmin ? <AdminConsoleView setView={setView} allUsers={allUsers} activeUserCount={activeUserCount} /> :
                              view === 'detail' && selectedEntry ? (<DetailView isAuthorized={canEdit} entry={selectedEntry} onEdit={() => { setIsEditing(true); setView('edit'); }} onClose={() => { setView(lastView); setSelectedEntry(null); }} onDelete={(id) => { if(window.confirm('削除しますか？')) { const newEntries = entries.filter(e => e.id !== id); setEntries(newEntries); saveToCloud({ entries: newEntries }); setView('timeline'); setSelectedEntry(null); } }} nations={nations}backLabel={lastView === 'timeline' ? '年表に戻る' : lastView === 'genealogy' ? '系譜図に戻る' : lastView === 'nation_profile' ? '国家に戻る' : '戻る'}/>) :
-                             // ★追加: 新規追加した項目のプレースホルダー
-                             view === 'board' ? <div className="p-20 text-center bg-white rounded-lg shadow"><Icons.MessageCircle size={48} className="mx-auto text-orange-200 mb-4"/><h2 className="text-xl font-bold text-gray-500">運営による掲示板</h2><p className="text-gray-400 mt-2">現在準備中です。</p></div> :
-                             view === 'recent_updates' ? <div className="p-20 text-center bg-white rounded-lg shadow"><Icons.Activity size={48} className="mx-auto text-green-200 mb-4"/><h2 className="text-xl font-bold text-gray-500">最近更新されたコンテンツ</h2><p className="text-gray-400 mt-2">現在準備中です。</p></div> :
+                             // ★修正: 新機能コンポーネントへの接続
+                             view === 'board' ? <BoardView setView={setView} isAdmin={isAdmin} currentUser={currentUser} /> :
+                             view === 'recent_updates' ? <RecentUpdatesView setView={setView} /> :
                              null
                         }
                         </main>

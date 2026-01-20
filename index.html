@@ -309,7 +309,6 @@ const IconWrapper = ({ children, size = 24, className = "", ...props }) => (
     Terminal: p=><IconWrapper {...p}><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></IconWrapper>,
     MessageCircle: p=><IconWrapper {...p}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></IconWrapper>,
     Send: p=><IconWrapper {...p}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></IconWrapper>,
-    Login: p=><IconWrapper {...p}><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></IconWrapper>,
 };
 
 // レベルランク定義 (判定ロジック用)
@@ -4729,12 +4728,12 @@ const NationProfileView = ({ isAuthorized, setView, nation: initialNation, natio
     );
 };
 
-// --- MainMenu コンポーネント (修正版: glossaryData対応) ---
+// --- MainMenu コンポーネント (最新版) ---
 const MainMenu = ({ 
     setView, handleCreateNew, handleExport, fileInputRef, convertFileInputRef, 
     currentUser, isAuthorized, handleLogin, handleLogout, userRole,
-    // ★修正: glossaryData を受け取るように追加
-    entries = [], nations = [], characters = [], organizations = [], glossaryData = {},
+    // 追加: データと告知機能用プロップス
+    entries = [], nations = [], characters = [], organizations = [], 
     announcements = "", onSaveAnnouncements 
 }) => {
     
@@ -4751,20 +4750,15 @@ const MainMenu = ({
 
     // 最近作成された項目を抽出 (IDがタイムスタンプであることを利用して降順ソート)
     const recentItems = React.useMemo(() => {
-        // ★修正: 用語データを取り出す
-        const terms = glossaryData.terms || [];
-
         const all = [
             ...entries.map(e => ({ ...e, dataType: 'history', label: '歴史', icon: Icons.History, id: e.id || '0' })),
             ...nations.map(n => ({ ...n, dataType: 'nation', label: '国家', icon: Icons.Globe, id: n.id || '0' })),
             ...characters.map(c => ({ ...c, dataType: 'char', label: '人物', icon: Icons.User, id: c.id || '0' })),
-            ...organizations.map(o => ({ ...o, dataType: 'org', label: '組織', icon: Icons.Briefcase, id: o.id || '0' })),
-            // ★修正: 用語集を含める
-            ...terms.map(t => ({ ...t, dataType: 'term', label: '用語', icon: Icons.BookOpen, id: (t.id || '').replace('term_', '') || '0', title: t.name }))
+            ...organizations.map(o => ({ ...o, dataType: 'org', label: '組織', icon: Icons.Briefcase, id: o.id || '0' }))
         ];
         // ID(文字列)を数値変換して比較。変換できない場合は0扱い
         return all.sort((a, b) => (parseInt(b.id) || 0) - (parseInt(a.id) || 0)).slice(0, 6);
-    }, [entries, nations, characters, organizations, glossaryData]); // ★依存配列にglossaryDataを追加
+    }, [entries, nations, characters, organizations]);
 
     // 権限がない場合の無効化スタイル
     const disabledClass = !isAuthorized ? "opacity-40 grayscale pointer-events-none select-none" : "";
@@ -4874,15 +4868,8 @@ const MainMenu = ({
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {recentItems.length > 0 ? recentItems.map((item, idx) => (
-                                <button key={idx} onClick={() => {
-                                    // ★修正: クリック時の遷移ロジックを用語に対応
-                                    if(item.dataType === 'term') setView('glossary');
-                                    else if(item.dataType === 'history') setView('timeline');
-                                    else if(item.dataType === 'nation') setView('nation_list'); // 修正: nation_listへ
-                                    else if(item.dataType === 'char') setView('characters');
-                                    else if(item.dataType === 'org') setView('organizations');
-                                }} className="w-full flex items-center gap-3 p-2 rounded-lg bg-gray-50 border border-gray-100 hover:bg-white hover:shadow-md hover:border-blue-200 transition-all group text-left">
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${item.dataType === 'nation' ? 'bg-indigo-100 text-indigo-600' : item.dataType === 'char' ? 'bg-blue-100 text-blue-600' : item.dataType === 'org' ? 'bg-orange-100 text-orange-600' : item.dataType === 'term' ? 'bg-gray-100 text-gray-600' : 'bg-green-100 text-green-600'}`}>
+                                <div key={idx} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 border border-gray-100 hover:bg-white hover:shadow-md hover:border-blue-200 transition-all cursor-default group">
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${item.dataType === 'nation' ? 'bg-indigo-100 text-indigo-600' : item.dataType === 'char' ? 'bg-blue-100 text-blue-600' : item.dataType === 'org' ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>
                                         <item.icon size={14} />
                                     </div>
                                     <div className="overflow-hidden">
@@ -4895,7 +4882,7 @@ const MainMenu = ({
                                     </div>
                                     {/* 新着バッジ (最新2件のみ) */}
                                     {idx < 2 && <span className="ml-auto text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded animate-pulse">NEW</span>}
-                                </button>
+                                </div>
                             )) : (
                                 <div className="col-span-2 text-center text-gray-400 text-xs py-4">データがありません</div>
                             )}
@@ -4950,7 +4937,7 @@ const MainMenu = ({
 };
 
 // --- データ分割保存用の定数と関数 ---
-const CHUNK_SIZE = 300000; // Firestoreの制限対策 (約1MB)
+const CHUNK_SIZE = 800000; // Firestoreの制限対策 (約1MB)
 const chunkString = (str, length) => {
     const size = Math.ceil(str.length / length);
     const r = Array(size);
@@ -5306,30 +5293,27 @@ const TimelineView = ({
 
 // --- ▼▼▼ ここから追加コード (Step 1) ▼▼▼ ---
 
-// ログ記録関数（修正版）
-    const logActivity = (action, detail, user) => {
-        const timestamp = new Date().toLocaleTimeString();
-        const userName = user ? (user.displayName || 'User') : 'System';
-        
-        const newLog = {
-            id: Date.now() + Math.random(), // ユニークID
-            timestamp,
-            action,
-            detail,
-            user: userName
-        };
-
-        // コンソール（F12）にも出力して動作確認
-        console.log(`[Log] ${action}: ${detail}`);
-
-        // 画面上のログリストに追加
-        setActivityLog(prevLogs => [newLog, ...prevLogs].slice(0, 50)); // 最新50件のみ保持
-    };
-
+// ログ記録ヘルパー
+const logActivity = async (action, detail, currentUser) => {
+    try {
+        db.collection('audit_logs').add({
+            timestamp: new Date().toISOString(),
+            uid: currentUser ? currentUser.uid : 'guest',
+            userName: currentUser ? (currentUser.displayName || '名無し') : 'ゲスト',
+            action: action,
+            detail: detail
+        });
+    } catch (e) { console.error("Log error", e); }
+};
 
 // 管理者コンソール画面
-// 管理者コンソール画面 (修正版: ログ表示対応)
-const AdminConsoleView = ({ setView, allUsers, activeUserCount, activityLog = [] }) => {
+const AdminConsoleView = ({ setView, allUsers, activeUserCount }) => {
+    const [logs, setLogs] = useState([]);
+    useEffect(() => {
+        return db.collection('audit_logs').orderBy('timestamp', 'desc').limit(50).onSnapshot(snap => {
+            setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+    }, []);
     return (
         <div className="min-h-[calc(100vh-120px)] flex flex-col gap-4 pb-20 animate-fade-in">
             <SectionHeader icon={Icons.Terminal} title="管理者コンソール" desc="現在のアクティビティ状況" />
@@ -5343,26 +5327,17 @@ const AdminConsoleView = ({ setView, allUsers, activeUserCount, activityLog = []
                     <div className="text-3xl font-black text-blue-600">{allUsers.length} <span className="text-sm text-gray-400">accounts</span></div>
                 </div>
             </div>
-            
-            {/* ログ表示エリア */}
             <div className="bg-white rounded shadow overflow-hidden flex-grow flex flex-col max-h-[60vh]">
-                <div className="p-3 bg-gray-800 text-white font-bold text-sm flex justify-between items-center">
-                    <span><Icons.List size={14} className="inline mr-2"/>操作ログ (直近50件)</span>
-                    <span className="text-xs font-normal opacity-70">※リロードで消えます</span>
-                </div>
-                <div className="overflow-y-auto custom-scrollbar flex-grow bg-gray-900 p-4 space-y-1 font-mono text-xs">
-                    {activityLog.length === 0 ? (
-                        <div className="text-gray-500 text-center italic py-4">ログはありません</div>
-                    ) : (
-                        activityLog.map(log => (
-                            <div key={log.id} className="border-b border-gray-800 pb-1 mb-1 last:border-0">
-                                <span className="text-gray-500 mr-2">[{log.timestamp}]</span>
-                                <span className="text-yellow-500 mr-2">[{log.user}]</span>
-                                <span className="text-blue-400 font-bold mr-2">{log.action}:</span>
-                                <span className="text-gray-300">{log.detail}</span>
-                            </div>
-                        ))
-                    )}
+                <div className="p-3 bg-gray-800 text-white font-bold text-sm"><Icons.List size={14} className="inline mr-2"/>操作ログ</div>
+                <div className="overflow-y-auto custom-scrollbar flex-grow bg-gray-50 p-2 space-y-2">
+                    {logs.map(log => (
+                        <div key={log.id} className="text-xs bg-white p-2 border rounded flex gap-2 items-center">
+                            <span className="text-gray-400 font-mono">{new Date(log.timestamp).toLocaleString()}</span>
+                            <span className="font-bold text-blue-600 w-24 truncate">{log.userName}</span>
+                            <span className="font-bold bg-gray-100 px-1 rounded">{log.action}</span>
+                            <span className="text-gray-600 truncate flex-grow">{log.detail}</span>
+                        </div>
+                    ))}
                 </div>
             </div>
         </div>
@@ -5549,7 +5524,7 @@ function ChatWidget({ user, db, userRole, glossary, onTermClick }) {
     );
 }
 
-// --- TimelineWiki (Main App) - 修正完全版 ---
+// --- TimelineWiki (Main App) - ヘッダー修正完全版 ---
 function TimelineWiki() {
     // --- State Definitions ---
     const [entries, setEntries] = React.useState([]);
@@ -5570,16 +5545,15 @@ function TimelineWiki() {
     const [selectedEntry, setSelectedEntry] = React.useState(null);
     const [selectedProfileNation, setSelectedProfileNation] = React.useState(null);
     const [isEditing, setIsEditing] = React.useState(false);
-    const [editingNation, setEditingNation] = React.useState(null);
-    const [targetNation, setTargetNation] = React.useState(null);
+    const [editingNation, setEditingNation] = React.useState(null); // 追加: SettingsView用
+    const [targetNation, setTargetNation] = React.useState(null);   // 追加: Overview/Settings用
     const [showStatsInput, setShowStatsInput] = React.useState(false);
 
     // User & Auth
     const [currentUser, setCurrentUser] = React.useState(null);
     const [userRole, setUserRole] = React.useState('guest'); 
-    const [allUsers, setAllUsers] = React.useState([]); // 管理者用
+    const [allUsers, setAllUsers] = React.useState([]);
     const [activeUserCount, setActiveUserCount] = React.useState(0);
-    const [activityLog, setActivityLog] = React.useState([]);
     
     // History & Tasks
     const [lastView, setLastView] = React.useState('timeline'); 
@@ -5590,10 +5564,11 @@ function TimelineWiki() {
     const fileInputRef = React.useRef(null);
     const convertFileInputRef = React.useRef(null);
 
-    const ADMIN_EMAIL = 'anohitodayoanohito@gmail.com'; // 管理者メアド
+    const ADMIN_EMAIL = 'anohitodayoanohito@gmail.com';
     const canEdit = userRole === 'admin' || userRole === 'writer' || (currentUser && currentUser.email === ADMIN_EMAIL);
     const isAdmin = userRole === 'admin' || (currentUser && currentUser.email === ADMIN_EMAIL);
     
+    // 権限がない場合の無効化スタイル
     const disabledClass = !canEdit ? "opacity-30 grayscale pointer-events-none select-none" : "";
 
     // --- Helper Functions ---
@@ -5607,6 +5582,8 @@ function TimelineWiki() {
     // --- Effects: Load Data ---
     React.useEffect(() => {
         const unsubscribers = [];
+        
+        // Load Categories
         const categories = [
             { key: 'entries', label: '年表データ', setter: setEntries },
             { key: 'nations', label: '国家データ', setter: setNations },
@@ -5662,7 +5639,7 @@ function TimelineWiki() {
         return () => unsubscribers.forEach(u => u());
     }, []);
 
-    // --- Effects: Auth & Admin ---
+    // --- Effects: Auth ---
     React.useEffect(() => {
         const unsub = auth.onAuthStateChanged(async (u) => {
             setCurrentUser(u);
@@ -5685,16 +5662,6 @@ function TimelineWiki() {
         return () => unsub();
     }, []);
 
-    // ★追加: 管理者用ユーザーリスト取得
-    React.useEffect(() => {
-        if (!isAdmin) return;
-        const unsub = db.collection('users').onSnapshot(snap => {
-            const users = snap.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
-            setAllUsers(users);
-        }, err => console.error("Users load error:", err));
-        return () => unsub();
-    }, [isAdmin]);
-
     // --- Active User Count ---
     React.useEffect(() => {
         const sid = sessionStorage.getItem('sid') || Math.random().toString(36);
@@ -5709,59 +5676,6 @@ function TimelineWiki() {
     }, [currentUser]);
 
     // --- Actions ---
-    // ▼▼▼ 追加・修正コード ここから ▼▼▼
-
-    // 1. ユーザー一覧をデータベースから取得する (管理者のみ)
-    React.useEffect(() => {
-        if (!isAdmin) return;
-        // usersコレクションをリアルタイム監視
-        const unsubscribe = db.collection('users').onSnapshot(snapshot => {
-            const usersList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setAllUsers(usersList);
-        }, error => {
-            console.error("ユーザー取得エラー:", error);
-        });
-        return () => unsubscribe();
-    }, [isAdmin]);
-
-// 2. 権限を変更する関数（修正：ログ記録を追加）
-    const handleApproveUser = async (uid, newRole) => {
-        if (!isAdmin) return;
-        if (currentUser && currentUser.uid === uid && newRole !== 'admin') {
-            alert("自分自身の管理者権限を外すことはできません。");
-            return;
-        }
-        try {
-            await db.collection('users').doc(uid).update({ 
-                role: newRole,
-                updatedAt: new Date().toISOString()
-            });
-            
-            // ★修正: ログ記録を追加
-            logActivity('権限変更', `ユーザー(UID:${uid.slice(0,5)}...)を ${newRole} に変更しました`, currentUser);
-
-            alert(`ユーザー権限を【${newRole}】に変更しました。`);
-        } catch (error) {
-            console.error("権限変更エラー:", error);
-            alert("権限の変更に失敗しました: " + error.message);
-        }
-    };
-
-    // ★追加: アカウント申請（再申請など）
-    const handleApplyAccount = async () => {
-        if (!currentUser) return;
-        try {
-            await db.collection('users').doc(currentUser.uid).set({
-                email: currentUser.email,
-                role: 'pending',
-                appliedAt: new Date().toISOString()
-            }, { merge: true });
-            alert("編集権限を申請しました。管理者の承認をお待ちください。");
-        } catch (e) {
-            alert("申請エラー: " + e.message);
-        }
-    };
-
     // 告知保存
     const saveAnnouncements = (text) => {
         if (!canEdit) return;
@@ -5770,123 +5684,64 @@ function TimelineWiki() {
             .catch(e => alert("告知保存エラー: " + e.message));
     };
 
-// --- 修正版 saveToCloud 関数 ---
-
-    // クラウド保存
-    const CHUNK_SIZE = 200000; // 日本語データ用に20万文字に制限
+    // クラウド保存 (Chunking)
+    const CHUNK_SIZE = 800000;
     const chunkString = (str, len) => {
         const size = Math.ceil(str.length / len);
         const r = Array(size);
         let offset = 0;
-        for (let i = 0; i < size; i++) {
-            r[i] = str.substr(offset, len);
-            offset += len;
-        }
+        for (let i = 0; i < size; i++) { r[i] = str.substr(offset, len); offset += len; }
         return r;
     };
 
-
-    // データを保存する関数（修正：ログ記録を追加）
     const saveToCloud = async (newData = {}) => {
         if (!canEdit || isRemoteUpdate.current > 0) return;
+        const currentData = {
+            entries: newData.entries || entries,
+            nations: newData.nations || nations,
+            stats: newData.stats || stats,
+            characters: newData.characters || characters,
+            organizations: newData.organizations || organizations,
+            glossary: newData.glossary || glossaryData,
+            uiScale: newData.uiScale || uiScale,
+        };
 
-        // newDataが空オブジェクトの場合は自動保存、中身がある場合は手動更新とみなす
-        const isManualUpdate = Object.keys(newData).length > 0;
+        const saveCategory = async (key, label, dataObj) => {
+            if (!dataObj) return;
+            updateTask(key, { label: `保存中: ${label}`, current: 0, total: 100 });
+            try {
+                const jsonStr = JSON.stringify(dataObj);
+                const chunks = chunkString(jsonStr, CHUNK_SIZE);
+                const batch = db.batch();
+                batch.set(db.collection("wiki_data").doc(`meta_${key}`), { totalChunks: chunks.length, totalSize: jsonStr.length, lastUpdated: new Date().toISOString() });
+                chunks.forEach((chunk, i) => batch.set(db.collection("wiki_data").doc(`data_${key}_${i}`), { content: chunk, index: i }));
+                await batch.commit();
+            } catch (e) { console.error(e); } 
+            finally { updateTask(key, null); }
+        };
 
-        setIsSaving(true);
-        try {
-            // Firestoreの1MB制限を回避するため、データをチャンクに分割して保存
-            // 実際はもっと複雑な制御が必要だが、ここではコレクションを分けて保存する簡易実装とする
-            // 今回のアプリは単一ドキュメントまたは少数のドキュメントで管理する形式を想定しているが
-            // データ量が増えた場合はサブコレクション化が必要。
-            // ここでは簡易的に「data」コレクションの「main」ドキュメントに主要データを保存し、
-            // 大きくなりそうな配列は別ドキュメントに分けるアプローチをとる。
-
-            const batch = db.batch();
-            const mainRef = db.collection('data').doc('main');
-            
-            // 常に全データを構築（差分更新が理想だが整合性重視）
-            // newDataで渡されたものが優先される
-            const currentData = {
-                entries, nations, characters, organizations, glossaryData, announcements, // glossaryDataを追加
-                updatedAt: new Date().toISOString(),
-                ...newData
-            };
-
-            // メインデータ（軽量なもの）
-            batch.set(mainRef, {
-                announcements: currentData.announcements,
-                updatedAt: currentData.updatedAt,
-                // 一部メタデータ
-                entryCount: currentData.entries.length,
-                nationCount: currentData.nations.length
-            }, { merge: true });
-
-            // 各データカテゴリを別ドキュメントとして保存（サイズ対策）
-            batch.set(db.collection('data').doc('entries'), { values: currentData.entries });
-            batch.set(db.collection('data').doc('nations'), { values: currentData.nations });
-            batch.set(db.collection('data').doc('characters'), { values: currentData.characters });
-            batch.set(db.collection('data').doc('organizations'), { values: currentData.organizations });
-            // 用語集も保存
-            batch.set(db.collection('data').doc('glossary'), { values: currentData.glossaryData || { terms: [], categories: [] } });
-
-            await batch.commit();
-            console.log("Cloud save complete");
-
-            // ★修正: 手動更新（何らかのデータが渡された時）はログに残す
-            if (isManualUpdate) {
-                const keys = Object.keys(newData).join(', ');
-                let actionDetail = `カテゴリ[${keys}]が更新されました`;
-                
-                // もう少し詳細なログ
-                if (newData.entries) actionDetail = "年表データが更新・保存されました";
-                if (newData.nations) actionDetail = "国家データが更新・保存されました";
-                if (newData.glossaryData) actionDetail = "用語・組織データが更新・保存されました";
-
-                logActivity('データ保存', actionDetail, currentUser);
-            }
-
-        } catch (error) {
-            console.error("Save error:", error);
-            // 権限エラーなどの場合
-            if (error.code === 'permission-denied') {
-                alert("保存に失敗しました：権限がありません。");
-            }
-        } finally {
-            setTimeout(() => setIsSaving(false), 500);
-        }
+        const promises = [];
+        if(newData.entries) promises.push(saveCategory('entries', '年表', currentData.entries));
+        if(newData.nations) promises.push(saveCategory('nations', '国家', currentData.nations));
+        if(newData.stats) promises.push(saveCategory('stats', '統計', currentData.stats));
+        if(newData.characters) promises.push(saveCategory('characters', '人物', currentData.characters));
+        if(newData.organizations) promises.push(saveCategory('organizations', '組織', currentData.organizations));
+        if(newData.glossary) promises.push(saveCategory('glossary', '用語集', currentData.glossary));
+        if(newData.uiScale) db.collection("wiki_data").doc("db_config").set({ uiScale: currentData.uiScale }, { merge: true });
+        
+        await Promise.all(promises);
     };
 
-
-// =================================================================
-    // ★修正: 強制感度オートセーブ (Deep Watch)
-    // =================================================================
+    // Auto Save
     React.useEffect(() => {
-        // 1. 編集権限がない、またはロード直後(isRemoteUpdate > 0)は保存しない
         if (!canEdit || isRemoteUpdate.current > 0) return;
-
-        console.log("Change detected. Scheduling auto-save..."); // 動作確認用ログ
-
-        // 2. 変更から2秒後に保存 (Debounce)
         const timer = setTimeout(() => {
-            console.log("Executing auto-save...");
-            saveToCloud({}); // 保存実行
-        }, 2000);
-
+            if (entries.length > 0) saveToCloud();
+        }, 1000);
         return () => clearTimeout(timer);
+    }, [entries, nations, stats, characters, organizations, glossaryData, uiScale]);
 
-    // ★重要: JSON.stringifyを使うことで、中身の値が変わったら確実に発火させる
-    // (データ量が膨大な場合は重くなりますが、確実性は最強です)
-    }, [
-        JSON.stringify(entries), 
-        JSON.stringify(nations), 
-        JSON.stringify(characters), 
-        JSON.stringify(organizations), 
-        JSON.stringify(glossaryData), 
-        announcements
-    ]);
-
-    // Navigation & Auth Handlers
+    // Navigation Handlers
     const handleLogin = async () => { try { await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); } catch (e) { alert(e.message); } };
     const handleLogout = async () => { await auth.signOut(); setView('menu'); };
     const handleCreateNew = () => { if(!canEdit) return; setSelectedEntry({ id: Date.now().toString(), title: '', year: 2000 }); setIsEditing(true); setView('edit'); };
@@ -5928,28 +5783,27 @@ function TimelineWiki() {
                     nations={nations}
                     characters={characters}
                     organizations={organizations}
-                    glossaryData={glossaryData}
                     announcements={announcements}
                     onSaveAnnouncements={saveAnnouncements}
                 />
             ) : (
                 <div className="min-h-screen bg-[#f0f2f5] font-sans text-gray-800 flex flex-col h-screen overflow-hidden">
-                    {/* Header */}
+                    {/* ★★★ ヘッダー完全版 (アイコン群復活) ★★★ */}
                     <header className="bg-[#1a1a1a] text-white p-2 shadow-lg shrink-0 z-50 border-b-4 border-yellow-600">
                         <div className="max-w-7xl mx-auto flex justify-between items-center overflow-x-auto custom-scrollbar pb-1 gap-4">
-                            {/* 左側 */}
+                            {/* 左側: MENUとタイトル */}
                             <div className="flex items-center gap-4 shrink-0">
                                 <button onClick={() => setView('menu')} className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors border border-gray-600">
                                     <Icons.ArrowLeft size={16} /> MENU
                                 </button>
                                 <div className="h-8 w-px bg-gray-700 hidden sm:block"></div>
-                                <div className="flex items-center gap-2 cursor-pointer group hidden sm:flex" onClick={() => {setView('menu'); setSelectedEntry(null);}}>
+                                <div className="flex items-center gap-2 cursor-pointer group hidden sm:flex" onClick={() => {setView('timeline'); setSelectedEntry(null);}}>
                                     <div className="bg-yellow-600 p-1.5 rounded-md text-black shrink-0"><Icons.BookOpen size={18} /></div>
                                     <div><h1 className="text-base font-bold tracking-widest group-hover:text-yellow-500 transition-colors leading-none">英覇歴代記</h1></div>
                                 </div>
                             </div>
 
-                            {/* 右側: ツールバー */}
+                            {/* 右側: ツールバー群 */}
                             <div className="flex items-center gap-3 shrink-0">
                                 {/* ZOOM */}
                                 <div className="flex flex-col items-center gap-0.5">
@@ -5961,7 +5815,7 @@ function TimelineWiki() {
                                     </div>
                                 </div>
 
-                                {/* MANAGE */}
+                                {/* MANAGE (権限必要) */}
                                 <div className={`flex flex-col items-center gap-0.5 ${disabledClass}`}>
                                     <span className="text-[8px] text-yellow-600/80 font-bold uppercase tracking-widest">MANAGE</span>
                                     <div className="flex items-center bg-gray-800/80 p-1 rounded-xl border border-gray-700 gap-1">
@@ -5980,7 +5834,7 @@ function TimelineWiki() {
                                     </div>
                                 </div>
 
-                                {/* VIEW */}
+                                {/* VIEW (全員OK) */}
                                 <div className="flex flex-col items-center gap-0.5">
                                     <span className="text-[8px] text-blue-400/60 font-bold uppercase tracking-widest">VIEW</span>
                                     <div className="flex items-center bg-gray-800/80 p-1 rounded-xl border border-gray-700 gap-1">
@@ -6023,11 +5877,12 @@ function TimelineWiki() {
                         </div>
                     </header>
 
-                    {/* Main Content */}
+                    {/* メインコンテンツ */}
                     <div className="flex-grow overflow-auto bg-[#f0f2f5] relative w-full h-full">
                         <main className={(view === 'power_structure' || view === 'genealogy') ? "w-full h-full p-0 overflow-hidden" : "max-w-5xl mx-auto p-4 origin-top-left"} 
                               style={(view === 'power_structure' || view === 'genealogy') ? {} : { zoom: uiScale / 100 }}>
                              
+                             {/* 条件分岐: 各Viewの表示 */}
                              {view === 'settings' ? (canEdit ? <SettingsView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} setTargetNation={setTargetNation} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
                              view === 'nation_overview' ? (canEdit ? <NationOverviewView setView={setView} nations={nations} setNations={setNations} targetNation={targetNation} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
                              view === 'characters' ? (canEdit ? <CharacterManager setView={setView} nations={nations} characters={characters} setCharacters={setCharacters} organizations={organizations} setOrganizations={setOrganizations} /> : <div className="p-10 text-center font-bold text-gray-500">権限がありません</div>) : 
@@ -6044,7 +5899,7 @@ function TimelineWiki() {
                              view === 'edit' && selectedEntry ? <EditForm entry={selectedEntry} nations={nations} onSave={(newData) => { const newEntries = [...entries]; const idx = newEntries.findIndex(e => e.id === newData.id); if (idx >= 0) newEntries[idx] = newData; else newEntries.push(newData); setEntries(newEntries); saveToCloud({ entries: newEntries }); setIsEditing(false); if(lastView === 'nation_profile') { setView('nation_profile'); } else { setView('timeline'); setSelectedEntry(null); } }} onCancel={() => { setIsEditing(false); if (lastView === 'detail') { setView('detail'); } else if (lastView === 'nation_profile') { setView('nation_profile'); setSelectedEntry(null); } else { setView('timeline'); setSelectedEntry(null); } }} /> :
                              view === 'help' ? <HelpView setView={setView} /> : 
                              view === 'timeline' ? (<TimelineView entries={entries} nations={nations} stats={stats} onSelectEntry={(entry) => { setSelectedEntry(entry); setView('detail'); }} onEditEntry={(entry) => handleEditEntryTransition(entry, 'timeline')} isAuthorized={canEdit}/>) : 
-                             view === 'admin_console' && isAdmin ? <AdminConsoleView setView={setView} allUsers={allUsers} activeUserCount={activeUserCount} activityLog={activityLog} /> :
+                             view === 'admin_console' && isAdmin ? <AdminConsoleView setView={setView} allUsers={allUsers} activeUserCount={activeUserCount} /> :
                              view === 'detail' && selectedEntry ? (<DetailView isAuthorized={canEdit} entry={selectedEntry} onEdit={() => { setIsEditing(true); setView('edit'); }} onClose={() => { setView(lastView); setSelectedEntry(null); }} onDelete={(id) => { if(window.confirm('削除しますか？')) { const newEntries = entries.filter(e => e.id !== id); setEntries(newEntries); saveToCloud({ entries: newEntries }); setView('timeline'); setSelectedEntry(null); } }} nations={nations} backLabel={lastView === 'timeline' ? '年表に戻る' : lastView === 'genealogy' ? '系譜図に戻る' : lastView === 'nation_profile' ? '国家に戻る' : '戻る'}/>
                             ) : null
                         }

@@ -4729,235 +4729,214 @@ const NationProfileView = ({ isAuthorized, setView, nation: initialNation, natio
     );
 };
 
+// --- MainMenu コンポーネント (最新版) ---
 const MainMenu = ({ 
     setView, handleCreateNew, handleExport, fileInputRef, convertFileInputRef, 
     currentUser, isAuthorized, handleLogin, handleLogout, userRole,
-    entries = [], nations = [], characters = [], organizations = [], glossaryData = {}, 
+    // 追加: データと告知機能用プロップス
+    entries = [], nations = [], characters = [], organizations = [], 
     announcements = "", onSaveAnnouncements 
 }) => {
+    
+    // 告知編集用ステート
     const [isEditingAnnounce, setIsEditingAnnounce] = React.useState(false);
     const [announceText, setAnnounceText] = React.useState(announcements);
 
-    React.useEffect(() => {
-        setAnnounceText(announcements);
-    }, [announcements]);
+    React.useEffect(() => { setAnnounceText(announcements); }, [announcements]);
 
-    // 最近作成された項目を抽出（用語集を追加）
+    const handleSaveAnnounce = () => {
+        if(onSaveAnnouncements) onSaveAnnouncements(announceText);
+        setIsEditingAnnounce(false);
+    };
+
+    // 最近作成された項目を抽出 (IDがタイムスタンプであることを利用して降順ソート)
     const recentItems = React.useMemo(() => {
-        const terms = glossaryData.terms || []; // 用語集データ
-
         const all = [
             ...entries.map(e => ({ ...e, dataType: 'history', label: '歴史', icon: Icons.History, id: e.id || '0' })),
             ...nations.map(n => ({ ...n, dataType: 'nation', label: '国家', icon: Icons.Globe, id: n.id || '0' })),
             ...characters.map(c => ({ ...c, dataType: 'char', label: '人物', icon: Icons.User, id: c.id || '0' })),
-            ...organizations.map(o => ({ ...o, dataType: 'org', label: '組織', icon: Icons.Briefcase, id: o.id || '0' })),
-            ...terms.map(t => ({ ...t, dataType: 'term', label: '用語', icon: Icons.BookOpen, id: (t.id || '').replace('term_', '') || '0', title: t.name }))
+            ...organizations.map(o => ({ ...o, dataType: 'org', label: '組織', icon: Icons.Briefcase, id: o.id || '0' }))
         ];
+        // ID(文字列)を数値変換して比較。変換できない場合は0扱い
         return all.sort((a, b) => (parseInt(b.id) || 0) - (parseInt(a.id) || 0)).slice(0, 6);
-    }, [entries, nations, characters, organizations, glossaryData]);
+    }, [entries, nations, characters, organizations]);
 
-    const handleSaveAnnounce = () => {
-        onSaveAnnouncements(announceText);
-        setIsEditingAnnounce(false);
-    };
+    // 権限がない場合の無効化スタイル
+    const disabledClass = !isAuthorized ? "opacity-40 grayscale pointer-events-none select-none" : "";
+
+    const MenuBtn = ({ onClick, icon: Icon, label, subLabel, color, className="" }) => (
+        <button onClick={onClick} className={`group relative flex flex-col items-center justify-center p-4 bg-white border-2 border-gray-200 rounded-xl shadow-sm hover:shadow-lg hover:border-yellow-400 hover:-translate-y-1 transition-all duration-200 h-32 w-full ${className}`}>
+            <div className={`p-3 rounded-full mb-2 transition-colors ${color || 'bg-gray-100 text-gray-500 group-hover:bg-yellow-100 group-hover:text-yellow-700'}`}>
+                <Icon size={28} />
+            </div>
+            <span className="font-bold text-gray-700 group-hover:text-gray-900">{label}</span>
+            {subLabel && <span className="text-[10px] text-gray-400 mt-1">{subLabel}</span>}
+        </button>
+    );
+
+    const ActionBtn = ({ onClick, icon: Icon, label, className = "" }) => (
+        <button onClick={onClick} className={`flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors shadow-sm ${className}`}>
+            <Icon size={16}/> {label}
+        </button>
+    );
 
     return (
-        <div className="max-w-6xl mx-auto space-y-8 animate-fade-in">
-            {/* ウェルカムセクション */}
-            <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-100 text-center relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
-                <h1 className="text-4xl font-bold text-gray-800 mb-4 tracking-tight">
-                    Helmenaea Chronicle <span className="text-blue-600">Timeline Wiki</span>
-                </h1>
-                <p className="text-gray-500 max-w-2xl mx-auto mb-8">
-                    歴史、国家、人物、そして物語。すべてのデータを一元管理するアーカイブシステム。
-                </p>
-
-                {/* ログイン・ユーザー状態 */}
-                <div className="flex justify-center items-center gap-4 mb-8">
-                    {currentUser ? (
-                        <div className="flex items-center gap-4 bg-gray-50 px-6 py-3 rounded-full border">
-                            <div className="flex flex-col items-start">
-                                <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">Logged in as</span>
-                                <div className="flex items-center gap-2">
-                                    <span className="font-bold text-gray-700">{currentUser.displayName || 'No Name'}</span>
-                                    {userRole === 'admin' && <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded-full border border-red-200">Admin</span>}
-                                    {userRole === 'writer' && <span className="bg-blue-100 text-blue-600 text-xs px-2 py-0.5 rounded-full border border-blue-200">Writer</span>}
-                                    {userRole === 'guest' && <span className="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full border border-gray-200">Guest</span>}
-                                </div>
-                            </div>
-                            <button onClick={handleLogout} className="text-sm text-gray-400 hover:text-red-500 underline ml-2">ログアウト</button>
-                        </div>
-                    ) : (
-                        <button onClick={handleLogin} className="flex items-center gap-2 bg-gray-900 text-white px-6 py-3 rounded-full hover:bg-gray-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
-                            <Icons.Login size={18} />
-                            <span>Googleでログインして編集</span>
-                        </button>
-                    )}
+        <div className="min-h-screen bg-[#f0f2f5] flex flex-col items-center justify-center p-6 animate-fade-in">
+            {/* タイトルロゴ */}
+            <div className="text-center mb-8 scale-110">
+                <div className="inline-flex items-center justify-center p-4 bg-[#1a1a1a] rounded-2xl shadow-2xl mb-4 ring-4 ring-yellow-500/20">
+                    <Icons.BookOpen size={48} className="text-yellow-500" />
                 </div>
-
-                {/* メインナビゲーション */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
-                    <button onClick={() => setView('timeline')} className="p-6 bg-white border border-gray-200 rounded-xl hover:shadow-md hover:border-blue-300 transition-all group text-left">
-                        <div className="bg-blue-50 w-12 h-12 rounded-lg flex items-center justify-center text-blue-600 mb-4 group-hover:scale-110 transition-transform">
-                            <Icons.History size={24} />
-                        </div>
-                        <h3 className="font-bold text-gray-800 mb-1">年表閲覧</h3>
-                        <p className="text-xs text-gray-400">歴史イベントを時系列で確認</p>
-                    </button>
-                    <button onClick={() => setView('nations')} className="p-6 bg-white border border-gray-200 rounded-xl hover:shadow-md hover:border-green-300 transition-all group text-left">
-                        <div className="bg-green-50 w-12 h-12 rounded-lg flex items-center justify-center text-green-600 mb-4 group-hover:scale-110 transition-transform">
-                            <Icons.Globe size={24} />
-                        </div>
-                        <h3 className="font-bold text-gray-800 mb-1">国家データベース</h3>
-                        <p className="text-xs text-gray-400">国々の詳細データと変遷</p>
-                    </button>
-                    <button onClick={() => setView('characters')} className="p-6 bg-white border border-gray-200 rounded-xl hover:shadow-md hover:border-purple-300 transition-all group text-left">
-                        <div className="bg-purple-50 w-12 h-12 rounded-lg flex items-center justify-center text-purple-600 mb-4 group-hover:scale-110 transition-transform">
-                            <Icons.User size={24} />
-                        </div>
-                        <h3 className="font-bold text-gray-800 mb-1">人物名鑑</h3>
-                        <p className="text-xs text-gray-400">主要人物と能力パラメータ</p>
-                    </button>
-                    <button onClick={() => setView('glossary')} className="p-6 bg-white border border-gray-200 rounded-xl hover:shadow-md hover:border-orange-300 transition-all group text-left">
-                        <div className="bg-orange-50 w-12 h-12 rounded-lg flex items-center justify-center text-orange-600 mb-4 group-hover:scale-110 transition-transform">
-                            <Icons.BookOpen size={24} />
-                        </div>
-                        <h3 className="font-bold text-gray-800 mb-1">用語・組織</h3>
-                        <p className="text-xs text-gray-400">世界観を構成する要素</p>
-                    </button>
-                </div>
+                <h1 className="text-4xl font-black text-gray-800 tracking-[0.2em] mb-2" style={{textShadow: '2px 2px 0px white'}}>英覇歴代記</h1>
+                <p className="text-xs font-mono text-gray-400 tracking-[0.5em] uppercase">ヘルメネアの大地 設定集</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {/* 左カラム: お知らせ & クイックアクション */}
-                <div className="md:col-span-2 space-y-6">
-                    {/* お知らせボード */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                        <div className="bg-gray-50 px-6 py-4 border-b flex justify-between items-center">
-                            <h3 className="font-bold text-gray-700 flex items-center gap-2">
-                                <span className="text-yellow-500">📢</span> お知らせ・更新情報
-                            </h3>
-                            {isAuthorized && (
-                                <button 
-                                    onClick={() => isEditingAnnounce ? handleSaveAnnounce() : setIsEditingAnnounce(true)}
-                                    className="text-xs text-blue-600 hover:underline"
-                                >
-                                    {isEditingAnnounce ? '保存' : '編集'}
-                                </button>
-                            )}
-                        </div>
-                        <div className="p-6">
-                            {isEditingAnnounce ? (
-                                <textarea 
-                                    className="w-full h-32 p-3 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                    value={announceText}
-                                    onChange={(e) => setAnnounceText(e.target.value)}
-                                    placeholder="お知らせを入力..."
-                                />
-                            ) : (
-                                <div className="prose prose-sm max-w-none text-gray-600 whitespace-pre-wrap">
-                                    {announcements || "現在お知らせはありません。"}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* クイックアクション */}
-                    {isAuthorized && (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            <button onClick={() => handleCreateNew('history')} className="p-3 bg-white border border-dashed border-gray-300 rounded-lg text-gray-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all flex flex-col items-center gap-1">
-                                <Icons.Plus size={20} />
-                                <span className="text-xs font-bold">歴史追加</span>
-                            </button>
-                            <button onClick={() => handleCreateNew('nation')} className="p-3 bg-white border border-dashed border-gray-300 rounded-lg text-gray-500 hover:text-green-600 hover:border-green-300 hover:bg-green-50 transition-all flex flex-col items-center gap-1">
-                                <Icons.Plus size={20} />
-                                <span className="text-xs font-bold">国家追加</span>
-                            </button>
-                            <button onClick={() => handleCreateNew('char')} className="p-3 bg-white border border-dashed border-gray-300 rounded-lg text-gray-500 hover:text-purple-600 hover:border-purple-300 hover:bg-purple-50 transition-all flex flex-col items-center gap-1">
-                                <Icons.Plus size={20} />
-                                <span className="text-xs font-bold">人物追加</span>
-                            </button>
-                            <button onClick={() => handleCreateNew('org')} className="p-3 bg-white border border-dashed border-gray-300 rounded-lg text-gray-500 hover:text-orange-600 hover:border-orange-300 hover:bg-orange-50 transition-all flex flex-col items-center gap-1">
-                                <Icons.Plus size={20} />
-                                <span className="text-xs font-bold">組織・用語追加</span>
-                            </button>
+            <div className="w-full max-w-6xl space-y-6">
+                
+                {/* 上部アクションボタン群 */}
+                <div className="flex flex-wrap justify-center gap-4 items-center mb-4">
+                    {!currentUser ? (
+                        <ActionBtn onClick={handleLogin} icon={Icons.Users} label="ログイン" className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" />
+                    ) : (
+                        <div className="flex items-center gap-3">
+                            <div className="flex flex-col items-end">
+                                {userRole === 'pending' ? <span className="text-xs font-bold text-yellow-600 bg-yellow-100 px-2 py-0.5 rounded border border-yellow-200 animate-pulse">承認待ち</span> : 
+                                 isAuthorized ? <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">編集可能</span> : 
+                                 <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">ゲスト</span>}
+                                <span className="text-[10px] text-gray-400 mt-0.5">{currentUser.displayName || 'ユーザー'}</span>
+                            </div>
+                            <ActionBtn onClick={handleLogout} icon={Icons.X} label="ログアウト" className="bg-gray-100 text-gray-600 hover:bg-gray-200" />
                         </div>
                     )}
+                    <div className="h-8 w-px bg-gray-300 mx-2 hidden sm:block"></div>
+                    <ActionBtn onClick={() => setView('help')} icon={Icons.HelpCircle} label="使い方 (Help)" />
                 </div>
 
-                {/* 右カラム: 最近の更新 & 管理 */}
-                <div className="space-y-6">
-                    {/* 最近追加された項目 */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-                        <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Recently Added</h3>
-                        <div className="space-y-3">
+                {/* MANAGE セクション */}
+                <div className={`bg-gray-50/50 p-6 rounded-2xl border border-dashed border-gray-300 relative transition-all ${disabledClass}`}>
+                    {!isAuthorized && (
+                        <div className="absolute inset-0 z-10 flex items-center justify-center">
+                            <div className="bg-white/80 backdrop-blur-sm px-6 py-3 rounded-full border border-gray-200 shadow-sm font-bold text-gray-500 flex items-center gap-2">
+                                <Icons.Lock size={16}/> 編集機能はロックされています
+                            </div>
+                        </div>
+                    )}
+                    <div className="flex items-center gap-3 mb-4">
+                        <span className="bg-yellow-500 text-white text-xs font-bold px-3 py-1 rounded-full tracking-widest">MANAGE</span>
+                        <span className="text-sm text-gray-500 font-bold">情報の編集・記録</span>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        <button onClick={handleCreateNew} className="group relative flex flex-col items-center justify-center p-4 bg-yellow-500 border-2 border-yellow-600 rounded-xl shadow-md hover:shadow-xl hover:bg-yellow-400 hover:-translate-y-1 transition-all duration-200 h-32 w-full text-white">
+                            <div className="p-3 rounded-full mb-2 bg-yellow-700/20"><Icons.Edit2 size={28} /></div>
+                            <span className="font-black tracking-wider">歴史を刻む</span><span className="text-[10px] opacity-80 mt-1">年表に追加</span>
+                        </button>
+                        <MenuBtn onClick={() => setView('settings')} icon={Icons.Globe} label="国家編成" subLabel="基本設定・変遷" />
+                        <MenuBtn onClick={() => setView('characters')} icon={Icons.User} label="人物管理" subLabel="重要人物" />
+                        <MenuBtn onClick={() => setView('organizations')} icon={Icons.Briefcase} label="組織管理" subLabel="ギルド・結社" />
+                        <MenuBtn onClick={() => setView('statsEdit')} icon={Icons.BarChart2} label="統計編集" subLabel="人口・GDP" />
+                        <MenuBtn onClick={() => setView('power_structure')} icon={Icons.Structure} label="権力構造" subLabel="組織図" />
+                    </div>
+                </div>
+
+                {/* VIEW セクション (1行に統一) */}
+                <div className="bg-gray-50/50 p-6 rounded-2xl border border-dashed border-gray-300">
+                    <div className="flex items-center gap-3 mb-4">
+                        <span className="bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full tracking-widest">VIEW</span>
+                        <span className="text-sm text-gray-500 font-bold">情報の閲覧・分析</span>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        <button onClick={() => setView('timeline')} className="group relative flex flex-col items-center justify-center p-4 bg-blue-600 border-2 border-blue-700 rounded-xl shadow-md hover:shadow-xl hover:bg-blue-500 hover:-translate-y-1 transition-all duration-200 h-32 w-full text-white">
+                            <div className="p-3 rounded-full mb-2 bg-blue-800/30"><Icons.History size={28} /></div>
+                            <span className="font-black tracking-wider">年表閲覧</span><span className="text-[10px] opacity-80 mt-1">全歴史を確認</span>
+                        </button>
+                        
+                        <MenuBtn onClick={() => setView('nation_list')} icon={Icons.LayoutGrid} label="国家一覧" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
+                        <MenuBtn onClick={() => setView('genealogy')} icon={Icons.GitMerge} label="興亡系譜図" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
+                        <MenuBtn onClick={() => setView('graph')} icon={Icons.Activity} label="統計グラフ" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
+                        <MenuBtn onClick={() => setView('table')} icon={Icons.List} label="体制一覧表" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
+                        <MenuBtn onClick={() => setView('glossary')} icon={Icons.BookOpen} label="用語集" subLabel="百科事典" color="text-blue-500 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-600"/>
+                    </div>
+                </div>
+
+                {/* 新規追加: 下部インフォメーションエリア */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
+                    
+                    {/* 左側: 最近作成された設定 */}
+                    <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-5 overflow-hidden relative">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-gray-400 to-gray-200"></div>
+                        <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2 pb-2 border-b border-gray-100">
+                            <Icons.Clock size={20} className="text-gray-400"/> 最近追加された項目
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {recentItems.length > 0 ? recentItems.map((item, idx) => (
-                                <button key={idx} onClick={() => {
-                                    if(item.dataType === 'term') setView('glossary'); // 用語の場合
-                                    else if(item.dataType === 'history') setView('timeline');
-                                    else if(item.dataType === 'nation') setView('nations');
-                                    else if(item.dataType === 'char') setView('characters');
-                                    else if(item.dataType === 'org') setView('glossary');
-                                }} className="w-full flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors group text-left">
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                                        item.dataType === 'history' ? 'bg-blue-100 text-blue-600' :
-                                        item.dataType === 'nation' ? 'bg-green-100 text-green-600' :
-                                        item.dataType === 'char' ? 'bg-purple-100 text-purple-600' :
-                                        'bg-orange-100 text-orange-600'
-                                    }`}>
+                                <div key={idx} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 border border-gray-100 hover:bg-white hover:shadow-md hover:border-blue-200 transition-all cursor-default group">
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${item.dataType === 'nation' ? 'bg-indigo-100 text-indigo-600' : item.dataType === 'char' ? 'bg-blue-100 text-blue-600' : item.dataType === 'org' ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>
                                         <item.icon size={14} />
                                     </div>
                                     <div className="overflow-hidden">
-                                        <div className="text-sm font-bold text-gray-700 truncate group-hover:text-blue-600 transition-colors">
-                                            {item.title || item.name || item.fullName || "名称未設定"}
+                                        <div className="text-xs font-bold text-gray-400 flex items-center gap-1">
+                                            {item.label} <span className="opacity-50">#{typeof item.id === 'string' ? item.id.slice(-4) : item.id}</span>
                                         </div>
-                                        <div className="text-xs text-gray-400 flex items-center gap-1">
-                                            <span className="capitalize">{item.label}</span>
-                                            <span>•</span>
-                                            <span>ID: {item.id}</span>
+                                        <div className="font-bold text-gray-800 text-sm truncate group-hover:text-blue-700">
+                                            {item.title || item.name}
                                         </div>
                                     </div>
-                                </button>
+                                    {/* 新着バッジ (最新2件のみ) */}
+                                    {idx < 2 && <span className="ml-auto text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded animate-pulse">NEW</span>}
+                                </div>
                             )) : (
-                                <div className="text-center text-gray-400 text-xs py-4">データがありません</div>
+                                <div className="col-span-2 text-center text-gray-400 text-xs py-4">データがありません</div>
                             )}
                         </div>
                     </div>
 
-                    {/* 管理メニュー */}
-                    <div className="bg-gray-50 rounded-xl border border-gray-200 p-5">
-                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">System</h3>
-                        <div className="space-y-2">
-                            <button onClick={handleExport} className="w-full flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 p-2 hover:bg-gray-200 rounded transition-colors">
-                                <Icons.Download size={16} />
-                                <span>JSONエクスポート</span>
-                            </button>
-                            <button onClick={() => fileInputRef.current.click()} className="w-full flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 p-2 hover:bg-gray-200 rounded transition-colors">
-                                <Icons.Upload size={16} />
-                                <span>JSONインポート</span>
-                            </button>
-                            {/* 旧データ変換 */}
-                            <button onClick={() => convertFileInputRef.current.click()} className="w-full flex items-center gap-2 text-sm text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded transition-colors mt-2 border-t pt-3">
-                                <Icons.RefreshCw size={14} />
-                                <span>旧形式データ変換</span>
-                            </button>
-                            <input type="file" ref={fileInputRef} onChange={(e) => handleExport(e, true)} className="hidden" accept=".json" />
-                            <input type="file" ref={convertFileInputRef} className="hidden" accept=".json" />
-                        </div>
-                        {userRole === 'admin' && (
-                            <div className="mt-4 pt-4 border-t">
-                                <button onClick={() => setView('admin')} className="w-full bg-gray-800 text-white text-sm font-bold py-2 rounded shadow hover:bg-gray-700 transition-colors">
-                                    管理者コンソール
+                    {/* 右側: 告知ボード */}
+                    <div className="bg-yellow-50/50 rounded-xl shadow-sm border border-yellow-200 p-5 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-yellow-200/20 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+                        <div className="flex justify-between items-start mb-4 border-b border-yellow-100 pb-2">
+                            <h3 className="font-bold text-yellow-800 flex items-center gap-2">
+                                <Icons.Info size={20} /> 運営からのお知らせ
+                            </h3>
+                            {isAuthorized && !isEditingAnnounce && (
+                                <button onClick={() => setIsEditingAnnounce(true)} className="text-yellow-600 hover:bg-yellow-100 p-1.5 rounded transition-colors" title="編集">
+                                    <Icons.Edit2 size={16} />
                                 </button>
+                            )}
+                        </div>
+
+                        {isEditingAnnounce ? (
+                            <div className="animate-fade-in">
+                                <textarea 
+                                    value={announceText} 
+                                    onChange={(e) => setAnnounceText(e.target.value)} 
+                                    className="w-full h-32 p-2 border border-yellow-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 mb-2 bg-white"
+                                    placeholder="告知内容を入力..."
+                                />
+                                <div className="flex justify-end gap-2">
+                                    <button onClick={() => setIsEditingAnnounce(false)} className="px-3 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded">キャンセル</button>
+                                    <button onClick={handleSaveAnnounce} className="px-3 py-1 text-xs bg-yellow-500 text-white font-bold rounded shadow hover:bg-yellow-600">保存</button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="bg-white/60 p-3 rounded-lg border border-yellow-100 min-h-[100px] text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-medium relative z-10">
+                                {announceText || <span className="text-gray-400 italic">お知らせはありません。</span>}
                             </div>
                         )}
+                        <div className="mt-4 text-center">
+                            <span className="text-[10px] text-yellow-600/50 font-mono">SYSTEM NOTICE BOARD</span>
+                        </div>
                     </div>
                 </div>
+
+            </div>
+            
+            <div className="mt-12 text-center text-gray-400 text-xs font-mono">
+                <p>by HELMENEA PROJECT</p>
             </div>
         </div>
     );
 };
+
 
 // --- データ分割保存用の定数と関数 ---
 const CHUNK_SIZE = 300000; // Firestoreの制限対策 (約1MB)

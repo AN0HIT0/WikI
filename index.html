@@ -904,6 +904,7 @@ const NationListPanel = ({ nations, setNations, selectedNationId, onSelect }) =>
         if (!newNationName) return;
         const newNation = { id: Date.now().toString(), name: newNationName, color: newNationColor, flag: newNationFlag, eras: [], startYear: null, note: '', location: 'unknown', rank: 'minor_power' };
         setNations([...nations, newNation]);
+        logRecentUpdate('国家', newNationName);
         setNewNationName(''); setNewNationFlag(null);
         if(newFlagInputRef.current) newFlagInputRef.current.value = '';
         onSelect(newNation);
@@ -991,7 +992,7 @@ const SettingsView = ({ setView, nations, setNations, targetNation, setTargetNat
     
     const updateEraParam = (key, field, value) => { setEraParams(prev => ({ ...prev, [key]: { ...prev[key], [field]: value } })); };
     const toggleRelatedNationId = (id) => { setEraRelatedNationIds(prev => prev.includes(id) ? prev.filter(pid => pid !== id) : [...prev, id]); };
-    const saveEra = () => { if (!eraStartYear) return; let targetId = eraRelatedNationId; let targetIds = []; const multiTargetEvents = ['partitioned_by', 'dissolution', 'unification', 'annexation', 'partition']; if (multiTargetEvents.includes(eraEventType)) { targetIds = eraRelatedNationIds; targetId = null; } else if (eraRelatedNationId) { targetIds = [eraRelatedNationId]; } let type = 'default'; if (eraMode === 'collapse') type = 'collapse'; const newEraData = { startYear: parseInt(eraStartYear), name: eraName || (eraMode === 'collapse' ? '滅亡' : editingNation.name), color: eraColor, flag: eraFlag, params: eraParams, type: type, event: { type: eraEventType, targetId: targetId, targetIds: targetIds } }; let updatedEras; if (editingEraIndex !== null) { updatedEras = [...editingNation.eras]; updatedEras[editingEraIndex] = newEraData; } else { updatedEras = [ ...(editingNation.eras || []), newEraData]; } const updatedNation = { ...editingNation, eras: updatedEras }; let updatedNations = nations.map(n => n.id === editingNation.id ? updatedNation : n); setEditingNation(updatedNation); setNations(updatedNations); resetEraForm(); };
+    const saveEra = () => { if (!eraStartYear) return; let targetId = eraRelatedNationId; let targetIds = []; const multiTargetEvents = ['partitioned_by', 'dissolution', 'unification', 'annexation', 'partition']; if (multiTargetEvents.includes(eraEventType)) { targetIds = eraRelatedNationIds; targetId = null; } else if (eraRelatedNationId) { targetIds = [eraRelatedNationId]; } let type = 'default'; if (eraMode === 'collapse') type = 'collapse'; const newEraData = { startYear: parseInt(eraStartYear), name: eraName || (eraMode === 'collapse' ? '滅亡' : editingNation.name), color: eraColor, flag: eraFlag, params: eraParams, type: type, event: { type: eraEventType, targetId: targetId, targetIds: targetIds } }; let updatedEras; if (editingEraIndex !== null) { updatedEras = [...editingNation.eras]; updatedEras[editingEraIndex] = newEraData; } else { updatedEras = [ ...(editingNation.eras || []), newEraData]; } const updatedNation = { ...editingNation, eras: updatedEras }; let updatedNations = nations.map(n => n.id === editingNation.id ? updatedNation : n); setEditingNation(updatedNation); setNations(updatedNations); logRecentUpdate('国家(変遷)', eraName || editingNation.name); resetEraForm(); };
     const resetEraForm = () => { setEraStartYear(''); setEraName(''); setEraParams({}); setEraFlag(null); setEraColor('#000000'); setEraMode('normal'); setEraEventType('none'); setEraRelatedNationId(''); setEraRelatedNationIds([]); if(eraFlagInputRef.current) eraFlagInputRef.current.value = ''; setEditingEraIndex(null); };
     const startEditEra = (index) => { const era = editingNation.eras[index]; setEraStartYear(era.startYear); setEraName(era.name); setEraColor(era.color); setEraFlag(era.flag); setEraParams(era.params || {}); if (era.type === 'collapse') setEraMode('collapse'); else if (['foundation', 'independence', 'splinter', 'unification', 'foundation_puppet'].includes(era.event?.type)) setEraMode('birth'); else setEraMode('normal'); if (era.event) { setEraEventType(era.event.type || 'none'); setEraRelatedNationId(era.event.targetId || ''); setEraRelatedNationIds(era.event.targetIds || []); } else { setEraEventType('none'); setEraRelatedNationId(''); setEraRelatedNationIds([]); } setEditingEraIndex(index); };
     const deleteEra = (index) => { const updatedEras = editingNation.eras.filter((_, i) => i !== index); const updatedNation = { ...editingNation, eras: updatedEras }; setEditingNation(updatedNation); setNations(nations.map(n => n.id === editingNation.id ? updatedNation : n)); if (editingEraIndex === index) resetEraForm(); };
@@ -1244,6 +1245,7 @@ const CharacterManager = ({ setView, nations, characters, setCharacters, organiz
             });
             setOrganizations(updatedOrgs);
         }
+        logRecentUpdate('人物', name);
         resetForm();
     };
 
@@ -1519,6 +1521,7 @@ const OrganizationManager = ({ setView, nations, organizations, setOrganizations
             });
             setCharacters(updatedChars);
         }
+        logRecentUpdate('組織', name);
         resetForm();
     };
 
@@ -4728,112 +4731,180 @@ const NationProfileView = ({ isAuthorized, setView, nation: initialNation, natio
     );
 };
 
-// --- ダッシュボード用パーツ: 最近の更新パネル ---
+// ★置き換え: SCP風デザインの更新履歴パネル
 const RecentUpdatesPanel = () => {
-    const [logs, setLogs] = useState([]);
+    const [updates, setUpdates] = useState([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // 最新の5件だけ取得
-        const unsubscribe = db.collection('audit_logs')
-            .orderBy('timestamp', 'desc')
-            .limit(5)
-            .onSnapshot(snap => {
-                setLogs(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            }, err => console.log("Log load err:", err)); // 権限エラー時は静かに失敗
+        // 最新8件(2x4)を取得
+        const unsubscribe = db.collection('recent_updates')
+            .orderBy('createdAt', 'desc')
+            .limit(8)
+            .onSnapshot(snapshot => {
+                const data = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                setUpdates(data);
+                setLoading(false);
+            });
         return () => unsubscribe();
     }, []);
 
-    // アクション内容からアイコンと色を決定するヘルパー
-    const getLogStyle = (action, detail) => {
-        if (action.includes('人物') || detail.includes('人物')) return { icon: Icons.User, color: 'text-blue-600', bg: 'bg-blue-100', label: '人物' };
-        if (action.includes('組織') || detail.includes('組織')) return { icon: Icons.Briefcase, color: 'text-orange-600', bg: 'bg-orange-100', label: '組織' };
-        if (action.includes('国家') || detail.includes('国家')) return { icon: Icons.Globe, color: 'text-indigo-600', bg: 'bg-indigo-100', label: '国家' };
-        if (action.includes('年表') || detail.includes('年表') || action.includes('記録')) return { icon: Icons.History, color: 'text-green-600', bg: 'bg-green-100', label: '歴史' };
-        return { icon: Icons.Edit2, color: 'text-gray-600', bg: 'bg-gray-100', label: '編集' };
+    // 24時間以内のデータにNEWタグをつける判定
+    const isNew = (timestamp) => {
+        if (!timestamp) return true;
+        const now = new Date();
+        const date = timestamp.toDate();
+        return (now - date) < 24 * 60 * 60 * 1000;
     };
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 h-full">
-            <h3 className="font-bold text-gray-600 mb-4 flex items-center gap-2">
-                <Icons.Clock size={20} /> 最近追加・更新された項目
-            </h3>
-            <div className="space-y-3">
-                {logs.length === 0 ? (
-                    <div className="text-center text-gray-400 py-10 text-xs">更新履歴がありません</div>
-                ) : (
-                    logs.map(log => {
-                        const style = getLogStyle(log.action, log.detail);
-                        const isNew = (new Date() - new Date(log.timestamp)) < 24 * 60 * 60 * 1000; // 24時間以内ならNEW
-                        
-                        return (
-                            <div key={log.id} className="flex items-center gap-4 p-3 bg-gray-50 border border-gray-100 rounded-lg hover:shadow-md transition-all group">
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${style.bg} ${style.color}`}>
-                                    <style.icon size={20} />
-                                </div>
-                                <div className="flex-grow min-w-0">
-                                    <div className="flex items-center gap-2 mb-0.5">
-                                        <span className="text-[10px] font-bold text-gray-400">
-                                            {style.label} #{log.id.substr(0, 4)}
-                                        </span>
-                                        {isNew && <span className="text-[9px] bg-red-400 text-white px-1.5 py-0.5 rounded font-bold">NEW</span>}
-                                    </div>
-                                    <div className="font-bold text-gray-800 text-sm truncate group-hover:text-blue-600 transition-colors">
-                                        {log.detail}
-                                    </div>
-                                </div>
-                                <div className="text-[10px] text-gray-400 font-mono text-right shrink-0">
-                                    <div>{new Date(log.timestamp).toLocaleDateString()}</div>
-                                    <div>by {log.userName}</div>
-                                </div>
-                            </div>
-                        );
-                    })
-                )}
+        <div className="bg-gray-100 rounded-xl shadow-inner border border-gray-300 p-4 h-full overflow-hidden relative">
+            {/* 装飾ヘッダー */}
+            <div className="flex items-center gap-2 mb-4 border-l-4 border-red-600 pl-3">
+                <h3 className="font-black text-gray-700 font-mono tracking-tighter text-lg">RECENT ACCESS LOG</h3>
+                <span className="text-[10px] bg-gray-200 text-gray-500 px-1 rounded font-mono">MONITORING</span>
             </div>
+
+            {loading ? (
+                <div className="text-center py-10 text-gray-400 text-xs font-mono animate-pulse">Scanning Database...</div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 overflow-y-auto custom-scrollbar pr-1" style={{maxHeight: '280px'}}>
+                    {updates.length === 0 && <div className="col-span-2 text-center text-gray-400 text-xs py-4">NO DATA SIGNAL</div>}
+                    
+                    {updates.map((item) => (
+                        <div key={item.id} className="relative bg-white border-l-4 border-gray-700 p-2 shadow-sm hover:shadow-md transition-all group overflow-hidden">
+                            {/* NEWタグ */}
+                            {isNew(item.createdAt) && (
+                                <div className="absolute top-0 right-0">
+                                    <span className="bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 animate-pulse">NEW</span>
+                                </div>
+                            )}
+                            
+                            <div className="flex flex-col relative z-10">
+                                <span className="text-[10px] font-bold text-gray-400 font-mono mb-0.5">
+                                    [{item.createdAt ? item.createdAt.toDate().toLocaleDateString('ja-JP') : 'Now'}]
+                                    <span className="ml-2 bg-gray-100 text-gray-600 px-1 rounded">{item.type}</span>
+                                </span>
+                                <span className="text-sm font-black text-gray-800 truncate group-hover:text-red-700 transition-colors">
+                                    {item.name}
+                                </span>
+                            </div>
+                            
+                            {/* 背景装飾 */}
+                            <div className="absolute -right-1 -bottom-3 text-4xl font-black text-gray-100 opacity-50 z-0 pointer-events-none select-none">
+                                SCP
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 };
 
-// --- ダッシュボード用パーツ: 運営掲示板パネル ---
-const NoticeBoardPanel = ({ isAdmin }) => {
-    const [latestPost, setLatestPost] = useState(null);
+// ★置き換え: 運営用掲示板 (管理者は編集可能)
+const NoticeBoardPanel = ({ isAdmin, currentUser }) => {
+    const [messages, setMessages] = useState([]);
+    const [newMessage, setNewMessage] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // メッセージ監視
     useEffect(() => {
-        // 最新の1件だけ取得
-        const unsubscribe = db.collection('announcements')
-            .orderBy('timestamp', 'desc')
-            .limit(1)
-            .onSnapshot(snap => {
-                if (!snap.empty) setLatestPost({ id: snap.docs[0].id, ...snap.docs[0].data() });
-            }, err => console.log("Notice load err:", err));
+        const unsubscribe = db.collection('management_board')
+            .orderBy('createdAt', 'desc')
+            .limit(20)
+            .onSnapshot(snapshot => {
+                setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            });
         return () => unsubscribe();
     }, []);
 
+    // 投稿処理 (管理者のみ)
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!newMessage.trim() || !isAdmin) return;
+        setIsSubmitting(true);
+        try {
+            await db.collection('management_board').add({
+                text: newMessage,
+                author: currentUser?.displayName || '運営管理者',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            setNewMessage('');
+        } catch (error) {
+            alert("投稿失敗: " + error.message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    // 削除処理 (管理者のみ)
+    const handleDelete = async (id) => {
+        if (!isAdmin || !confirm('このお知らせを削除しますか？')) return;
+        await db.collection('management_board').doc(id).delete();
+    };
+
     return (
-        <div className="bg-[#fffbeb] rounded-xl shadow-sm border border-yellow-200 p-6 h-full flex flex-col relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-yellow-300 opacity-20 rounded-bl-full pointer-events-none"></div>
-            
-            <h3 className="font-bold text-yellow-800 mb-4 flex items-center gap-2 relative z-10">
-                <Icons.Info size={20} /> 運営からのお知らせ
-                {isAdmin && <Icons.Edit2 size={12} className="text-yellow-400 ml-auto opacity-50"/>}
-            </h3>
-            
-            <div className="flex-grow bg-white/60 rounded-lg p-4 border border-yellow-100 text-sm text-gray-700 leading-relaxed shadow-inner">
-                {latestPost ? (
-                    <>
-                        <div className="font-bold mb-2 text-yellow-900 border-b border-yellow-200 pb-1">{latestPost.title}</div>
-                        <div className="whitespace-pre-wrap text-xs text-gray-600">{latestPost.body}</div>
-                        <div className="mt-4 text-right text-[10px] text-gray-400">
-                            {new Date(latestPost.timestamp).toLocaleDateString()} 更新
-                        </div>
-                    </>
-                ) : (
-                    <div className="text-center text-gray-400 py-10">お知らせはありません</div>
-                )}
+        <div className="bg-white rounded-xl shadow-sm border border-yellow-200 h-full flex flex-col overflow-hidden relative">
+            {/* ヘッダー */}
+            <div className="bg-yellow-50 p-4 border-b border-yellow-100 flex justify-between items-center">
+                <h3 className="font-bold text-yellow-800 flex items-center gap-2">
+                    <Icons.MessageCircle size={18}/> 運営からのお知らせ
+                </h3>
+                {isAdmin && <span className="text-[10px] bg-red-500 text-white px-2 py-0.5 rounded font-bold">ADMIN</span>}
             </div>
-            
-            <div className="mt-4 text-center">
-                <span className="text-[10px] font-mono text-yellow-400 tracking-[0.3em] uppercase">System Notice Board</span>
+
+            <div className="flex-grow p-4 overflow-y-auto custom-scrollbar bg-[#fffbeb]">
+                {/* 投稿フォーム (管理者のみ表示) */}
+                {isAdmin && (
+                    <form onSubmit={handleSubmit} className="mb-4 bg-white p-2 rounded border border-yellow-300 shadow-sm">
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={newMessage}
+                                onChange={(e) => setNewMessage(e.target.value)}
+                                placeholder="お知らせを入力..."
+                                className="flex-1 text-sm p-2 border border-gray-200 rounded focus:outline-none focus:border-yellow-500"
+                            />
+                            <button type="submit" disabled={isSubmitting || !newMessage.trim()} className="bg-gray-800 text-white font-bold text-xs px-3 rounded hover:bg-gray-700">
+                                投稿
+                            </button>
+                        </div>
+                    </form>
+                )}
+
+                {/* メッセージ一覧 */}
+                <div className="space-y-3">
+                    {messages.length === 0 ? (
+                        <p className="text-center text-gray-400 text-xs py-4">お知らせはありません</p>
+                    ) : (
+                        messages.map(msg => (
+                            <div key={msg.id} className="group relative bg-white p-3 rounded-lg border border-yellow-100 shadow-sm hover:shadow-md transition-all">
+                                <div className="flex justify-between items-start mb-1">
+                                    <span className="font-bold text-xs text-gray-600">{msg.author}</span>
+                                    <span className="text-[10px] text-gray-400 font-mono">
+                                        {msg.createdAt ? msg.createdAt.toDate().toLocaleDateString('ja-JP') : '-'}
+                                    </span>
+                                </div>
+                                <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+                                
+                                {/* 削除ボタン (管理者のみホバーで出現) */}
+                                {isAdmin && (
+                                    <button
+                                        onClick={() => handleDelete(msg.id)}
+                                        className="absolute top-2 right-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        title="削除"
+                                    >
+                                        <Icons.X size={14} />
+                                    </button>
+                                )}
+                            </div>
+                        ))
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -4948,7 +5019,7 @@ const MainMenu = ({ setView, handleCreateNew, currentUser, isAuthorized, handleL
                     
                     {/* 右側：運営掲示板 (1カラム分) */}
                     <div className="lg:col-span-1 min-h-[300px]">
-                        <NoticeBoardPanel isAdmin={userRole === 'admin'} />
+                        <NoticeBoardPanel isAdmin={userRole === 'admin'} currentUser={currentUser} />
                     </div>
                 </div>
 
@@ -5312,7 +5383,19 @@ const TimelineView = ({
     );
 };
 
-// --- ▼▼▼ ここから追加コード (Step 1) ▼▼▼ ---
+// 【追加】更新履歴を保存するヘルパー関数
+const logRecentUpdate = async (type, name) => {
+    try {
+        // コンソール(audit_logs)ではなく、専用の表示用コレクションに保存
+        await db.collection('recent_updates').add({
+            type: type,
+            name: name,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    } catch (error) {
+        console.error("履歴追加エラー:", error);
+    }
+};
 
 // ログ記録ヘルパー（コンソール出力強化版）
 const logActivity = async (action, detail, currentUser) => {
@@ -6240,7 +6323,7 @@ function TimelineWiki() {
                              view === 'nation_list' ? <NationListView setView={setView} nations={nations} onSelectNation={(n) => { setSelectedProfileNation(n); setView('nation_profile'); }} /> : 
                              view === 'glossary' ? <GlossaryView setView={setView} nations={nations} entries={entries} characters={characters} organizations={organizations} glossaryData={glossaryData} setGlossaryData={setGlossaryData} isAuthorized={canEdit} /> :
                              view === 'nation_profile' && selectedProfileNation ? <NationProfileView isAuthorized={canEdit} nation={selectedProfileNation} entries={entries} stats={stats} nations={nations} characters={characters} organizations={organizations} onClose={() => { setView('nation_list'); setSelectedProfileNation(null); }} onEdit={() => { setEditingNation(selectedProfileNation); setView('settings'); }} onEditEntry={handleEditEntryTransition} onEditNation={() => { setTargetNation(selectedProfileNation); setView('settings'); }} onEditStats={() => { setTargetNation(selectedProfileNation); setView('statsEdit'); }} onEditOverview={() => { setTargetNation(selectedProfileNation); setView('nation_overview'); }} updateNation={(updated) => { const newNations = nations.map(n => n.id === updated.id ? updated : n); setNations(newNations); saveToCloud({ nations: newNations }); setSelectedProfileNation(updated); }} onOpenDetail={handleOpenDetail} /> :
-                             view === 'edit' && selectedEntry ? <EditForm entry={selectedEntry} nations={nations} onSave={(newData) => { const newEntries = [...entries]; const idx = newEntries.findIndex(e => e.id === newData.id); if (idx >= 0) newEntries[idx] = newData; else newEntries.push(newData); setEntries(newEntries); saveToCloud({ entries: newEntries }); setIsEditing(false); if(lastView === 'nation_profile') { setView('nation_profile'); } else { setView('timeline'); setSelectedEntry(null); } }} onCancel={() => { setIsEditing(false); if (lastView === 'detail') { setView('detail'); } else if (lastView === 'nation_profile') { setView('nation_profile'); setSelectedEntry(null); } else { setView('timeline'); setSelectedEntry(null); } }} /> :
+                             view === 'edit' && selectedEntry ? <EditForm entry={selectedEntry} nations={nations} onSave={(newData) => { const newEntries = [...entries]; const idx = newEntries.findIndex(e => e.id === newData.id); if (idx >= 0) newEntries[idx] = newData; else newEntries.push(newData); setEntries(newEntries); logRecentUpdate('出来事', newData.title); saveToCloud({ entries: newEntries }); setIsEditing(false); if(lastView === 'nation_profile') { setView('nation_profile'); } else { setView('timeline'); setSelectedEntry(null); } }} onCancel={() => { setIsEditing(false); if (lastView === 'detail') { setView('detail'); } else if (lastView === 'nation_profile') { setView('nation_profile'); setSelectedEntry(null); } else { setView('timeline'); setSelectedEntry(null); } }} /> :
                              view === 'help' ? <HelpView setView={setView} /> : 
                              view === 'timeline' ? (<TimelineView entries={entries} nations={nations} stats={stats} onSelectEntry={(entry) => { setSelectedEntry(entry); setView('detail'); }}onEditEntry={(entry) => handleEditEntryTransition(entry, 'timeline')} isAuthorized={canEdit}/>) : 
                              view === 'admin_console' && isAdmin ? <AdminConsoleView setView={setView} allUsers={allUsers} activeUserCount={activeUserCount} /> :

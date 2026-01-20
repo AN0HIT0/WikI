@@ -5649,6 +5649,31 @@ function TimelineWiki() {
         return () => unsubscribeAuth();
     }, []);
 
+    // --- 追加: 認証関連の関数 ---
+
+    // ログイン処理
+    const login = () => {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        auth.signInWithPopup(provider).catch((error) => {
+            console.error("Login failed:", error);
+            logActivity('ログインエラー', error.message, null);
+            alert("ログインに失敗しました: " + error.message);
+        });
+    };
+
+    // ログアウト処理
+    const logout = () => {
+        auth.signOut().then(() => {
+            logActivity('ログアウト', 'ログアウトしました', currentUser);
+            // ログアウト時は権限やユーザー情報をリセット
+            setCurrentUser(null);
+            setIsAuthorized(false);
+            setUserRole('guest');
+        }).catch((error) => {
+            console.error("Logout failed:", error);
+        });
+    };
+
     // --- ▼▼▼ ここから追加コード (Step 2) ▼▼▼ ---
     const [activeUserCount, setActiveUserCount] = useState(0); 
 

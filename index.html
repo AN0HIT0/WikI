@@ -4937,7 +4937,7 @@ const MainMenu = ({
 };
 
 // --- データ分割保存用の定数と関数 ---
-const CHUNK_SIZE = 800000; // Firestoreの制限対策 (約1MB)
+const CHUNK_SIZE = 300000; // Firestoreの制限対策 (約1MB)
 const chunkString = (str, length) => {
     const size = Math.ceil(str.length / length);
     const r = Array(size);
@@ -5746,7 +5746,7 @@ function TimelineWiki() {
     };
 
     // クラウド保存
-    const CHUNK_SIZE = 800000;
+    const CHUNK_SIZE = 300000;
     const chunkString = (str, len) => {
         const size = Math.ceil(str.length / len);
         const r = Array(size);

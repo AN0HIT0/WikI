@@ -5812,6 +5812,55 @@ function TimelineWiki() {
         saveToCloud({ announcements: text });
     };
 
+    // データのエクスポート（バックアップ保存）
+    const exportData = () => {
+        const dataStr = JSON.stringify({ 
+            entries, 
+            nations, 
+            characters, 
+            organizations, 
+            glossaryData, 
+            announcements 
+        }, null, 2);
+        
+        const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+        const exportFileDefaultName = `helmenaea_backup_${new Date().toISOString().slice(0,10)}.json`;
+
+        const linkElement = document.createElement('a');
+        linkElement.setAttribute('href', dataUri);
+        linkElement.setAttribute('download', exportFileDefaultName);
+        linkElement.click();
+        
+        logActivity('データエクスポート', 'ローカルバックアップを作成しました', currentUser);
+    };
+
+    // データのインポート（読み込み）
+    const importData = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const json = JSON.parse(e.target.result);
+                if (json.entries) setEntries(json.entries);
+                if (json.nations) setNations(json.nations);
+                if (json.characters) setCharacters(json.characters);
+                if (json.organizations) setOrganizations(json.organizations);
+                if (json.glossaryData) setGlossaryData(json.glossaryData);
+                if (json.announcements) setAnnouncements(json.announcements);
+                
+                logActivity('データインポート', 'バックアップファイルを読み込みました', currentUser);
+                alert('データを読み込みました。');
+            } catch (error) {
+                console.error("Import Error:", error);
+                alert('ファイルの読み込みに失敗しました。形式が正しいか確認してください。');
+            }
+        };
+        reader.readAsText(file);
+        event.target.value = ''; // Reset input
+    };
+
     // --- Auto Save ---
     useEffect(() => {
         if (!canEdit) return;

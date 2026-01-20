@@ -5745,18 +5745,29 @@ function TimelineWiki() {
             .catch(e => alert("告知保存エラー: " + e.message));
     };
 
+// --- 修正版 saveToCloud 関数 ---
+
     // クラウド保存
-    const CHUNK_SIZE = 300000;
+    const CHUNK_SIZE = 200000; // 日本語データ用に20万文字に制限
     const chunkString = (str, len) => {
         const size = Math.ceil(str.length / len);
         const r = Array(size);
         let offset = 0;
-        for (let i = 0; i < size; i++) { r[i] = str.substr(offset, len); offset += len; }
+        for (let i = 0; i < size; i++) {
+            r[i] = str.substr(offset, len);
+            offset += len;
+        }
         return r;
     };
 
     const saveToCloud = async (newData = {}) => {
+        // 編集不可モードや、リモート更新中の場合は保存しない
         if (!canEdit || isRemoteUpdate.current > 0) return;
+
+        // ★改良点: 引数が空（自動保存）の場合は「全データ保存モード」とみなす
+        const isAutoSave = Object.keys(newData).length === 0;
+
+        // 現在の最新データをまとめる
         const currentData = {
             entries: newData.entries || entries,
             nations: newData.nations || nations,
@@ -5769,29 +5780,55 @@ function TimelineWiki() {
 
         const saveCategory = async (key, label, dataObj) => {
             if (!dataObj) return;
+            // 自動保存の時は通知をうるさく出さないようにする（右下のトーストのみ更新）
             updateTask(key, { label: `保存中: ${label}`, current: 0, total: 100 });
+            
             try {
                 const jsonStr = JSON.stringify(dataObj);
                 const chunks = chunkString(jsonStr, CHUNK_SIZE);
                 const batch = db.batch();
-                batch.set(db.collection("wiki_data").doc(`meta_${key}`), { totalChunks: chunks.length, totalSize: jsonStr.length, lastUpdated: new Date().toISOString() });
-                chunks.forEach((chunk, i) => batch.set(db.collection("wiki_data").doc(`data_${key}_${i}`), { content: chunk, index: i }));
+                
+                // メタデータの保存
+                batch.set(db.collection("wiki_data").doc(`meta_${key}`), { 
+                    totalChunks: chunks.length, 
+                    totalSize: jsonStr.length, 
+                    lastUpdated: new Date().toISOString() 
+                });
+                
+                // チャンクデータの保存
+                chunks.forEach((chunk, i) => {
+                    batch.set(db.collection("wiki_data").doc(`data_${key}_${i}`), { content: chunk, index: i });
+                });
+                
                 await batch.commit();
+                
             } catch (e) { 
-        console.error(e);
-        alert("データの保存に失敗しました。\n\n・権限がない(Guest/Pending)\n・通信エラー\n・データベースのルール設定\n\nなどが原因の可能性があります。\nエラー詳細: " + e.message);
-    } 
-            finally { updateTask(key, null); }
+                console.error(e);
+                // 自動保存の時は作業を邪魔しないよう、コンソールにだけエラーを出す
+                if (!isAutoSave) {
+                    alert(`【保存エラー】\n${label}の保存に失敗しました。\n\n${e.message}`);
+                }
+            } 
+            finally { 
+                // 保存完了後の処理
+                updateTask(key, null); 
+            }
         };
 
         const promises = [];
-        if(newData.entries) promises.push(saveCategory('entries', '年表', currentData.entries));
-        if(newData.nations) promises.push(saveCategory('nations', '国家', currentData.nations));
-        if(newData.stats) promises.push(saveCategory('stats', '統計', currentData.stats));
-        if(newData.characters) promises.push(saveCategory('characters', '人物', currentData.characters));
-        if(newData.organizations) promises.push(saveCategory('organizations', '組織', currentData.organizations));
-        if(newData.glossary) promises.push(saveCategory('glossary', '用語集', currentData.glossary));
-        if(newData.uiScale) db.collection("wiki_data").doc("db_config").set({ uiScale: currentData.uiScale }, { merge: true });
+        
+        // ★改良点: 指定されたデータがある場合、または「自動保存(isAutoSave)」の場合に保存を実行する
+        if(newData.entries || isAutoSave) promises.push(saveCategory('entries', '年表', currentData.entries));
+        if(newData.nations || isAutoSave) promises.push(saveCategory('nations', '国家', currentData.nations));
+        if(newData.stats || isAutoSave) promises.push(saveCategory('stats', '統計', currentData.stats));
+        if(newData.characters || isAutoSave) promises.push(saveCategory('characters', '人物', currentData.characters));
+        if(newData.organizations || isAutoSave) promises.push(saveCategory('organizations', '組織', currentData.organizations));
+        if(newData.glossary || isAutoSave) promises.push(saveCategory('glossary', '用語集', currentData.glossary));
+        
+        // 設定データも同様に
+        if(newData.uiScale || isAutoSave) {
+            db.collection("wiki_data").doc("db_config").set({ uiScale: currentData.uiScale }, { merge: true });
+        }
         
         await Promise.all(promises);
     };

@@ -5403,7 +5403,7 @@ const RecentUpdatesView = ({ setView }) => {
         return () => unsubscribe();
     }, []);
 
-    // 管理者向けログ（権限変更など）を除外するフィルタ
+    // ★重要: 管理者向けログ（権限変更など）を除外するフィルタ
     const visibleLogs = logs.filter(log => {
         const action = log.action || '';
         // 「権限変更」「ユーザー」を含むログは表示しない
@@ -5454,6 +5454,7 @@ const RecentUpdatesView = ({ setView }) => {
                                 <tr>
                                     <th className="px-6 py-3 w-48">日時</th>
                                     <th className="px-6 py-3 w-40">タイプ</th>
+                                    {/* ユーザー列を削除し、更新項目列を拡張 */}
                                     <th className="px-6 py-3">更新された項目</th>
                                 </tr>
                             </thead>
